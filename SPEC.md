@@ -136,6 +136,12 @@ GATEWAY ONLINE 2026-10-06: on the HELIX droplet 142.93.168.190 (ssh -i ~/.ssh/he
 
 APP PAGE 2026-10-06: two new sections, "Tip a brownie" (select a helper from the vault, approve + tip) and "Skills" (list of proposals with yes/no/bar, vote and settle buttons, a propose form). ABI for the registry added to common.js with plain error sentences. Checked by smoke/eth-site-check.sh (anvil fork of Ethereum, the real launch flow, four helpers, one proposal): 7 of 7. The old site-stack.sh is Robinhood-based and does not work any more; the Ethereum stack for the full browser flow is still to be rebuilt on eth-launch.
 
+KEEPER ON ETHEREUM 2026-10-06: gateway/chain.mjs now does the keeper's three duties every CLAIM_EVERY_SECONDS (300): ledger.claimCreator() on Programmable's fee ledger once CLAIM_MIN_ETH (0.05) of creator fee waits, harvester.claim() once that much fresh WETH sits in the harvester or a swap waits or the main wallet is owed, TeamVault.release() once a day when the budget is worth RELEASE_MIN_SUGAR (1). Every call is simulated first; a failing simulation is logged once an hour and skipped; under KEEPER_FLOOR_ETH (0.01) nothing is sent and the log asks for a refill. Settings LEDGER_ADDRESS and TEAM_VAULT_ADDRESS join the env (empty until launch). Tests: gateway/test/keeper.test.mjs (8, fake contracts; 17 gateway tests in all) and smoke/eth-keeper-check.sh (mainnet fork, the real launch flow, fees traded and claimed, four helpers; 17 checks: the first release hands out one thirtieth to the four keys, a fresh 0.1 ETH fee pays exactly 40% to the main wallet and funds the stakers in USDC, nothing is sent when nothing is due). /api/protocol/stats now reports creatorUnclaimedWei, freshWei, pendingRestWei, mainOwedWei, programOn and the vault's next release.
+
+POST-LAUNCH TOOLING 2026-10-06: eth-launch/add-helpers.mjs (plan | fork | broadcast --i-am-the-owner, LAUNCH_IT=1) puts the four brownies on the TeamVault payroll with key = bytes32 of the helper wallet (the gateway's beneficiary id), weight from <NAME>_WEIGHT (1), skips wallets already there, refuses a second helper with the same name, simulates from the owner first; tried on a fork (plan, add four, re-run adds nothing, broadcast refused without the gate). eth-launch/verify.sh publishes the seven contracts' sources on Sourcify (always) and Etherscan (when helix-secrets/etherscan.env has a key), constructor arguments written out from web/deployments/1.json because six of the seven were created inside BrownieCore's constructor; DRY=1 prints the commands with the key hidden.
+
+API ONLINE 2026-10-06: https://api.feedthebrownies.com answers with a Let's Encrypt certificate. Two things had blocked it: the registry still lists Porkbun's nameservers (the switch to Vercel's did not take), so DNS is served by Porkbun's zone (A api -> 142.93.168.190, A apex -> 76.76.21.21, CNAME www -> cname.vercel-dns.com; the same records exist at Vercel for when the nameservers move), and the droplet's ufw only allowed port 22 (80 and 443 opened). feedthebrownies.com, www and api all answer.
+
 NOT BUILT YET:
 - The helpers themselves (off chain): the runtime that runs each brownie on a schedule and on big claims, posting
   to X, the code pipeline (small changes go live alone, the rest is reviewed by the other brownies and then by the
@@ -143,10 +149,9 @@ NOT BUILT YET:
   from the owner: an X account with API keys, a Telegram bot for alerts and votes, a GitHub repository.
 - A tip button in the app. The home page says anyone can tip a brownie; today that is only a contract call.
 - Checked 2026-10-05 (the owner asked what is left on the tech side): the app has no page to propose or vote on a
-  skill either; the keeper only calls harvester.claim(), nothing calls TeamVault.release() once a day; there is no
-  Sourcify verify script; the contracts have had tests but no review round (HELIX had several before launch); each
-  brownie needs its own wallet (its key in the vault is that wallet as a beneficiary) and a script to add the four
-  to the vault after launch. deploy.sh dry run with the funded key passes after the rename (about 0.0006 ETH of gas).
+  skill either (built 2026-10-06, see APP PAGE); the keeper only called harvester.claim() (fixed 2026-10-06, see KEEPER
+  ON ETHEREUM); the verify script and the add-helpers script are done (see POST-LAUNCH TOOLING); the contracts had
+  their review round (see REVIEW). Still open from that list: nothing.
 - Social accounts. Owner wish 2026-10-05: the brownies get the project Gmail and X, and open more accounts
   (LinkedIn, Snapchat, Instagram, TikTok) to post videos and news. Decided position: the brownies do NOT sign up by
   robot (the platforms forbid it, check for it, and ban the handle). A brownie asks for an account with the name, bio
@@ -155,9 +160,11 @@ NOT BUILT YET:
 - Short videos for TikTok, Instagram and X made from the brownie animations (needs a video encoder on the server).
 - A way to spend SUGAR without code (a chat page), so the reward is useful to buyers who are not developers.
 
-Still needed before launch: the domain and https for the gateway, the site online, logo URL + description + socials
-in synapse.env, a Sourcify verify script, a keeper wallet, the four helpers added to the team vault. Owner decisions
-open: first buy, smallest stake.
+Still needed before launch (2026-10-06): the brownies runtime on the server (in progress), the deploy wallet funded with
+about 0.05 ETH (owner), a test coin launched the same way first (owner's wish), then "launch it"; after the launch:
+verify.sh, add-helpers.mjs broadcast, the four addresses + START_BLOCK into the gateway env and restart, Programmable
+indexes the coin by hand. The domain, https, site, keeper wallet are done. Owner decisions open: first buy (none, by
+the plan), smallest stake (10,000 BROWNIE in brownies.json).
 
 ## 0. One paragraph
 

@@ -20,7 +20,7 @@ if [ ! -f "$S/brownies-gateway.env" ]; then
       "# The Brownies gateway on Ethereum, settings made 2026-10-06. Never copy values into chat or into OneDrive.",
       "PORT=8790", "RPC_URL=https://ethereum-rpc.publicnode.com", "CHAIN_ID=1",
       "SUGAR_ADDRESS=", "HARVESTER_ADDRESS=", "LEDGER_ADDRESS=", "TEAM_VAULT_ADDRESS=", "START_BLOCK=0",
-      "DB_PATH=/var/lib/brownies/gateway.sqlite", "CLAIM_EVERY_SECONDS=300", "PRICE_MULTIPLIER=1",
+      "DB_PATH=/var/lib/brownies/gateway.sqlite", "CLAIM_EVERY_SECONDS=300", "CLAIM_MIN_ETH=0.05", "KEEPER_FLOOR_ETH=0.01", "RELEASE_MIN_SUGAR=1", "PRICE_MULTIPLIER=1",
       "OPENROUTER_API_KEY=" + pick(process.argv[1] + "/synapse-gateway.env", "OPENROUTER_API_KEY"),
       "KEEPER_PRIVATE_KEY=" + pick(process.argv[1] + "/brownies-wallets.env", "KEEPER_PRIVATE_KEY"),
       "TEAM_LOG_KEY=" + crypto.randomBytes(24).toString("hex"), ""];

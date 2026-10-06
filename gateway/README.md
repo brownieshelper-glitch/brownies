@@ -29,6 +29,16 @@ Routes: `GET /v1/models`, `GET /v1/key`, `POST /v1/key/rotate`, `POST /v1/chat/c
 Use it from any OpenAI SDK: base URL `http://host:8790/v1`, API key `sk-brownie-...`. A 401 is a bad or rotated key, a
 402 is not enough balance, a 400 `unknown_model` means pick an id from `/v1/models`.
 
-With `KEEPER_PRIVATE_KEY` set, the service also calls `harvester.claim()` every `CLAIM_EVERY_SECONDS` when Pons owes
-the harvester anything or enough ETH waits to be swapped. Anyone may call that function; the keeper just makes sure
-somebody does.
+With `KEEPER_PRIVATE_KEY` set, the service is also the keeper. Every `CLAIM_EVERY_SECONDS` it does three duties that
+anyone may do; the keeper just makes sure somebody does:
+
+1. `ledger.claimCreator()` on Programmable's fee ledger, once at least `CLAIM_MIN_ETH` of creator fee waits there.
+   The WETH lands in the harvester.
+2. `harvester.claim()`, once that much fresh WETH sits in the harvester, or a swap is waiting, or the main wallet is
+   owed. The harvester books 40% for the main wallet, swaps the rest to USDC, funds the staking and the TeamVault.
+3. `vault.release()`, once a day, when the brownies' budget (one thirtieth of the vault) is worth at least
+   `RELEASE_MIN_SUGAR`.
+
+Every transaction is simulated first; a failing simulation is logged once an hour and skipped. Under
+`KEEPER_FLOOR_ETH` of balance the keeper sends nothing and asks for a refill in the log. Tests: `test/keeper.test.mjs`
+(fake contracts) and `bash smoke/eth-keeper-check.sh` (a mainnet fork with the coin launched the real way).

@@ -40,7 +40,13 @@ const cfg = {
   chainId: Number(process.env.CHAIN_ID || 1),
   sugarAddress: process.env.SUGAR_ADDRESS,
   harvesterAddress: process.env.HARVESTER_ADDRESS || "",
+  ledgerAddress: process.env.LEDGER_ADDRESS || "", // Programmable's fee ledger for the coin
+  teamVaultAddress: process.env.TEAM_VAULT_ADDRESS || "",
   startBlock: Number(process.env.START_BLOCK || 0),
+  // the keeper's floors: claim once this much WETH waits, keep this much ETH for gas, release once the day's budget is worth this
+  claimMinEth: Number(process.env.CLAIM_MIN_ETH || 0.05),
+  keeperFloorEth: Number(process.env.KEEPER_FLOOR_ETH || 0.01),
+  releaseMinSugar: Number(process.env.RELEASE_MIN_SUGAR || 1),
   openrouterKey: process.env.OPENROUTER_API_KEY || "",
   openrouterUrl: (process.env.OPENROUTER_URL || "https://openrouter.ai/api/v1").replace(/\/$/, ""),
   dbPath: process.env.DB_PATH || "./data/gateway.sqlite",

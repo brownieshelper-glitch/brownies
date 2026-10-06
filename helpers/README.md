@@ -98,6 +98,18 @@ first standing task from `brownies.json` (a `notes/README.md`), opens a pull req
 it, then the next standing task on its next round. Each helper stops for the day at its `dailyCapUsd`, and the owner
 is told once.
 
+## The control room
+
+`web/admin.html` is the owner's page. It shows nothing until a login: type `/admin` to the bot on Telegram and it
+answers with a six-digit code (ten minutes, one use), or connect one of the `ADMIN_WALLETS` and sign the login
+message. A session lasts a day. The page then lists every brownie, hidden ones too, with its job, model, spend
+against the cap, last job and next runs, and offers per brownie: run now, pause and switch on, change the daily cap,
+and an instruction (Fudge posts on that topic, Crumb announces it in the group, Nib writes a focused note, Chip files
+it as an issue and takes it; the hidden ones draft or make what was asked). Pending approvals can be decided there,
+the daily summary sent, and the last lines of the log read. The API is `lib/admin.mjs`, served by the helpers'
+own server at `/admin/*` and reached through the gateway's domain (Caddy routes `/admin/*` to port 8791).
+A pause is remembered in the store; `HELPERS_OFF` in the env file still wins.
+
 ## Add a fifth brownie
 
 1. Give it a wallet (any new key; keep it in the env file as `NAME_PRIVATE_KEY`) and, after launch, add its address

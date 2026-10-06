@@ -54,11 +54,17 @@ export class Nib extends Helper {
     }
   }
 
-  /// Today's note. Returns { date, text, url } or null (already written today, or no budget).
-  async note() {
+  /// The owner's instruction (the control room, or /nib on Telegram): a note on that question, now.
+  async onRequest(text) {
+    return this.guard("note", () => this.note({ focus: String(text || "").trim() }));
+  }
+
+  /// Today's note. Returns { date, text, url } or null (already written today, or no budget). With a `focus` it is a
+  /// second, focused note (notes/YYYY-MM-DD-focus-*.md) and the daily one is left alone.
+  async note({ focus = "" } = {}) {
     const now = this.clock.now();
     const date = this.store.dayKey(now);
-    if (this.store.seen("nib-note", date)) { this.log(`[nib] the note for ${date} exists`); return null; }
+    if (!focus && this.store.seen("nib-note", date)) { this.log(`[nib] the note for ${date} exists`); return null; }
     if (!(await this.ready())) return null;
     await this.status("Reading the chain, the site and the competitors");
     const [stats, summary] = await Promise.all([this.gateway.stats(), this.gateway.summary()]);
@@ -75,14 +81,15 @@ export class Nib extends Helper {
       pages.length ? `COMPETITORS:\n${pages.join("\n\n")}` : "COMPETITORS: none configured.",
       launches,
       prev ? `PREVIOUS NOTE (${prev.date}):\n${cut(prev.text, 2500)}` : "PREVIOUS NOTE: none, this is the first.",
+      focus ? `THE OWNER ASKED FOR A NOTE ON THIS, so "What changed" answers it first: ${cut(focus, 500)}` : "",
       "Write today's note now.",
     ].join("\n\n");
     await this.status("Writing today's research note");
     const r = await this.think({ system: this.system(RULES), prompt, maxTokens: 1200, temperature: 0.4 });
     const text = tidy(r.text);
     if (!text) { await this.status("The research note came back empty"); return null; }
-    const md = `# Research note ${date}\n\nWritten by Nib, the research brownie, from the gateway's figures, the site and the competitors' pages.\n\n${text}\n`;
-    const path = `notes/${date}.md`;
+    const md = `# Research note ${date}${focus ? ": " + cut(focus, 60) : ""}\n\nWritten by Nib, the research brownie, from the gateway's figures, the site and the competitors' pages.${focus ? " Asked for by the owner." : ""}\n\n${text}\n`;
+    const path = focus ? `notes/${date}-focus-${Date.now().toString(36)}.md` : `notes/${date}.md`;
     let url = null;
     if (this.github?.configured) {
       const branch = await this.github.defaultBranch();
@@ -90,8 +97,7 @@ export class Nib extends Helper {
       await this.github.putFile(path, md, `Nib: research note ${date}`, { branch, sha: existing?.sha || null });
       url = this.github.fileUrl(path, branch);
     } else this.log("[nib] GitHub is not configured, the note stays in the store only");
-    this.store.latestNote = { date, text, url, at: now };
-    this.store.markSeen("nib-note", date, now);
+    if (!focus) { this.store.latestNote = { date, text, url, at: now }; this.store.markSeen("nib-note", date, now); }
     const issues = await this.fileChipIssues(text, date, url).catch((e) => { this.log(`[nib] could not file Chip's issues: ${e.message}`); return []; });
     const first = text.split("\n").find((l) => l.trim() && !l.startsWith("#")) || "";
     await this.report("research", `Research note ${date}: ${cut(first, 120)}`, { body: cut(text, 1000), url, place: "github", cost_micro: r.costMicro });

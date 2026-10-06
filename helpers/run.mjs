@@ -26,13 +26,16 @@ import { GitHub } from "./lib/github.mjs";
 import { Alerts } from "./lib/alerts.mjs";
 import { loadFacts, HELPERS } from "./lib/facts.mjs";
 import { sendSummary } from "./lib/summary.mjs";
+import { Admin } from "./lib/admin.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
 import { Nib } from "./helpers/nib.mjs";
 import { Chip } from "./helpers/chip.mjs";
 
-const log = (...a) => console.log(new Date().toISOString(), ...a);
+// every log line also goes into a ring the control room can read
+export const RING = [];
+const log = (...a) => { const line = [new Date().toISOString(), ...a.map((x) => (typeof x === "string" ? x : JSON.stringify(x)))].join(" "); console.log(line); RING.push(line); if (RING.length > 400) RING.shift(); };
 
 /// The contract addresses, from a file or a URL, as a block for the facts. "" when there is no deployment yet.
 async function addressesBlock(src) {
@@ -81,6 +84,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const hidden = names.filter((n) => all[n].hidden);
   // the owner's private commands: /glaze <what> asks the hidden helper for a draft; /summary sends today's summary now
   crumb.onOwnerCommand = async (cmd, text) => {
+    if (cmd === "admin") { const code = W.admin?.newCode(); return code ? `Your control room code: ${code}\nIt works for ten minutes at ${S.siteUrl}/admin.html` : "The control room is not ready yet."; }
     if (cmd === "summary") { await sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }); return true; }
     if (all[cmd]?.onRequest) { if (!text) return `Tell ${cmd} what to draft: /${cmd} <what>`; const r = await all[cmd].onRequest(text); return r ? true : `${cmd} could not write that one now (budget or an error). Check the log.`; }
     return undefined; // not a command of ours: Crumb answers it like any message
@@ -90,7 +94,13 @@ export async function build({ env = process.env, configFile = null } = {}) {
   // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
   const off = offList(env);
   for (const h of Object.values(all)) if (!off.includes(h.name)) for (const j of h.jobs()) scheduler.add(j);
-  return { S, config, clock, store, gateway, telegram, alerts, brain, x, github, helpers: all, scheduler, off, hidden };
+  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, helpers: all, scheduler, off, hidden, startedAt: Date.now() };
+  // the control room: the owner's page talks to it through /admin/*; a paused helper skips its scheduled runs
+  const summaryNow = () => sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log });
+  const origins = [S.siteUrl, "https://feedthebrownies.com", "https://www.feedthebrownies.com", /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/, ...S.adminOrigins];
+  W.admin = new Admin({ W, ring: RING, log, wallets: S.adminWallets, origins, sendSummary: summaryNow });
+  scheduler.isOff = (name) => W.admin.isPaused(name);
+  return W;
 }
 
 async function main() {
@@ -108,6 +118,7 @@ async function main() {
 
   const started = Date.now();
   const health = createServer((req, res) => {
+    if (req.url.startsWith("/admin/")) return W.admin.handle(req, res);
     const now = Date.now();
     const body = {
       ok: true, mode: S.mode, uptimeSeconds: Math.round((now - started) / 1000), reports: gateway.reports, thoughts: brain.calls,
@@ -122,7 +133,7 @@ async function main() {
 
   await alerts.restarted();
   scheduler.start();
-  if (!W.off.includes("crumb")) await helpers.crumb.start();
+  if (!W.off.includes("crumb") && !W.admin.isPaused("crumb")) await helpers.crumb.start();
   log("[helpers] running");
 
   let stopping = false;

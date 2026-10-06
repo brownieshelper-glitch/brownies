@@ -46,6 +46,13 @@ export class Scheduler {
   /// A promise that resolves when every running job is done (for a clean shutdown and for tests).
   idle() { return Promise.all([...this.chains.values()]); }
 
+  /// Runs a job now, by hand (the owner's control room), behind the helper's running job as always.
+  runNow(id) {
+    const j = this.jobs.find((x) => x.id === id);
+    if (!j) return Promise.reject(new Error(`no job ${id}`));
+    return this._run(j, { at: this.clock.now(), manual: true, nth: 1 });
+  }
+
   _arm() {
     if (this.stopped) return;
     const now = this.clock.now();
@@ -81,8 +88,10 @@ export class Scheduler {
     return this._run(j, { ...slot, nth: slot.index + 1, dayKey });
   }
 
-  /// Runs behind the helper's previous job, never beside it.
+  /// Runs behind the helper's previous job, never beside it. A paused helper (isOff) skips its scheduled runs; a
+  /// run the owner asked for by hand goes through.
   _run(j, info) {
+    if (!info?.manual && typeof this.isOff === "function" && this.isOff(j.helper)) { this.log(`[${j.helper}] paused, ${j.id} skipped`); return Promise.resolve(); }
     const prev = this.chains.get(j.helper) || Promise.resolve();
     const p = prev.then(async () => {
       j.runs++;

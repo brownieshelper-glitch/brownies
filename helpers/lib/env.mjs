@@ -11,7 +11,7 @@ export const NAMES = [
   "X_CLIENT_ID", "X_CLIENT_SECRET", "X_ACCESS_TOKEN", "X_REFRESH_TOKEN", "X_TOKEN_FILE", "X_USERNAME",
   "GITHUB_TOKEN", "GITHUB_REPO",
   "FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY", "GLAZE_PRIVATE_KEY", "SWIRL_PRIVATE_KEY", "SPRINKLE_PRIVATE_KEY", "VIDEOS_DIR", "FFMPEG_PATH",
-  "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF",
+  "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF", "ADMIN_WALLETS", "ADMIN_ORIGINS",
 ];
 
 /// The helpers switched off for now, from HELPERS_OFF="fudge,chip" (names, any case, spaces allowed). A helper
@@ -66,6 +66,8 @@ export function settings(env = process.env) {
     deploymentJson: env.DEPLOYMENT_JSON || (env.SITE_URL || "https://feedthebrownies.com").replace(/\/$/, "") + "/deployments/1.json",
     port: Number(env.HELPERS_PORT || 8791),
     configFile: env.HELPERS_CONFIG || "", // another brownies.json, for example one kept outside the code folder
+    adminWallets: String(env.ADMIN_WALLETS || "").split(/[\s,]+/).filter(Boolean), // wallets that may log into the control room with a signature
+    adminOrigins: String(env.ADMIN_ORIGINS || "").split(/[\s,]+/).filter(Boolean), // extra page origins allowed to call /admin (the site's own is always allowed)
   };
   if (mode === "prelaunch") need(env, "OPENROUTER_API_KEY");
   if (mode === "live") for (const k of ["FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY"]) need(env, k);

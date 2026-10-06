@@ -77,7 +77,7 @@ export class Fudge extends Helper {
     const nth = slot.nth || made + 1;
     await this.status(`Writing today's ${ordinal(nth)} post`);
     const recent = [...this.store.recentPosts("fudge", "x", "post", 12), ...this.store.recentPosts("fudge", "site", "post", 12)].slice(0, 12);
-    const topic = this.pickTopic(now, made);
+    const topic = slot.topic || this.pickTopic(now, made);
     const work = await this.todaysWork();
     let text = null, cost = 0, lastProblems = [];
     for (let attempt = 0; attempt < 3 && !text; attempt++) {
@@ -117,6 +117,11 @@ export class Fudge extends Helper {
     this.store.addPost({ at: now, helper: "fudge", place, kind: "post", text, externalId: posted?.id || null, url });
     await this.report("post", cut(text, 160), { body: text.length > 160 ? text : null, url, place, cost_micro: cost });
     return { id: posted?.id || null, url, text, place };
+  }
+
+  /// The owner's instruction (the control room, or /fudge on Telegram): one post on that topic, now, within the caps.
+  async onRequest(text) {
+    return this.guard("post", () => this.post({ topic: String(text || "").trim() }));
   }
 
   /// What the brownies did today, from the gateway's team summary, as a block for the prompt ("" when unreachable).

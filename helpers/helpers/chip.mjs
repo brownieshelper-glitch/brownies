@@ -50,6 +50,16 @@ export class Chip extends Helper {
     return [{ id: "chip-tasks", helper: "chip", every: (this.config.checkEveryMinutes || 30) * 60_000, run: () => this.guard("tasks", () => this.work()) }];
   }
 
+  /// The owner's instruction (the control room, or /chip on Telegram): filed as an issue labelled chip and taken at once.
+  async onRequest(text) {
+    const t = String(text || "").trim();
+    if (!t || !this.github?.configured) return null;
+    const issue = await this.github.createIssue({ title: cut(t.split(/\n/)[0], 100), body: `${t}\n\nFiled by the owner from the control room.`, labels: ["chip"] });
+    this.log(`[chip] issue #${issue.number} filed by the owner`);
+    const r = await this.guard("tasks", () => this.work());
+    return { title: `#${issue.number} ${cut(t, 80)}`, url: issue.url, worked: Boolean(r) };
+  }
+
   /// One round: the next task, if any, while no pull request of Chip's waits for the owner.
   async work() {
     if (!this.github?.configured) { this.log("[chip] GitHub is not configured, no tasks"); return null; }

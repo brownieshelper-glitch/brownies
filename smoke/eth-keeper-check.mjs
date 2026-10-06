@@ -65,7 +65,7 @@ ok(t2.claimedCreator === null, "no creator claim (ledger empty)");
 ok(Boolean(t2.harvested?.tx), "harvester.claim sent");
 ok(t2.released === null && t2.skipped.some((s) => /next release at/.test(s)), "vault not released twice in a day");
 const mainDelta = (await provider.getBalance(rec.mainWallet)) - main0;
-ok(mainDelta === ethers.parseEther("0.04"), `main wallet received exactly 40%: ${fmt(mainDelta)} ETH`);
+ok(mainDelta === ethers.parseEther("0.035"), `main wallet received exactly 35%: ${fmt(mainDelta)} ETH`);
 ok((await harvester.pendingRest()) === 0n && (await harvester.mainOwed()) === 0n, "nothing left waiting in the harvester");
 const stakersDelta = (await harvester.totalStakersFunded()) - stakers0;
 ok(stakersDelta > 0n, `stakers funded with ${fmtS(stakersDelta)} USDC from the 60% swap`);

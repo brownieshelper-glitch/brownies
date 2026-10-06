@@ -75,4 +75,10 @@ export class GitHub {
   closeIssue(number) { return this.api("PATCH", this.R(`/issues/${number}`), { state: "closed" }); }
 
   fileUrl(path, branch) { return `https://github.com/${this.repo}/blob/${branch}/${path}`; }
+
+  /// Opens an issue. Returns { number, url }.
+  async createIssue({ title, body = "", labels = [] }) {
+    const j = await this.api("POST", this.R("/issues"), { title: String(title).slice(0, 200), body, labels });
+    return { number: j.number, url: j.html_url };
+  }
 }

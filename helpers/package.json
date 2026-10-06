@@ -8,8 +8,11 @@
     "start": "node run.mjs",
     "test": "node --test \"test/**/*.test.mjs\""
   },
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "ethers": "^6.13.0"
   }
 }

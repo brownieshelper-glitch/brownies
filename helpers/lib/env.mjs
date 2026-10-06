@@ -10,7 +10,7 @@ export const NAMES = [
   "TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_CHAT_ID", "TELEGRAM_GROUP_CHAT_ID",
   "X_CLIENT_ID", "X_CLIENT_SECRET", "X_ACCESS_TOKEN", "X_REFRESH_TOKEN", "X_TOKEN_FILE", "X_USERNAME",
   "GITHUB_TOKEN", "GITHUB_REPO",
-  "FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY",
+  "FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY", "GLAZE_PRIVATE_KEY",
   "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF",
 ];
 
@@ -59,7 +59,7 @@ export function settings(env = process.env) {
       username: env.X_USERNAME || "Feedthebrownies",
     },
     github: { token: env.GITHUB_TOKEN || "", repo: env.GITHUB_REPO || "" },
-    keys: { fudge: env.FUDGE_PRIVATE_KEY || "", crumb: env.CRUMB_PRIVATE_KEY || "", nib: env.NIB_PRIVATE_KEY || "", chip: env.CHIP_PRIVATE_KEY || "" },
+    keys: { fudge: env.FUDGE_PRIVATE_KEY || "", crumb: env.CRUMB_PRIVATE_KEY || "", nib: env.NIB_PRIVATE_KEY || "", chip: env.CHIP_PRIVATE_KEY || "", glaze: env.GLAZE_PRIVATE_KEY || "" },
     siteUrl: (env.SITE_URL || "https://feedthebrownies.com").replace(/\/$/, ""),
     dbPath: env.DB_PATH || "/var/lib/brownies/helpers.sqlite",
     rpcUrl: env.RPC_URL || "https://ethereum-rpc.publicnode.com",

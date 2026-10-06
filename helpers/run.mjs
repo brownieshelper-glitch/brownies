@@ -25,6 +25,8 @@ import { Telegram } from "./lib/telegram.mjs";
 import { GitHub } from "./lib/github.mjs";
 import { Alerts } from "./lib/alerts.mjs";
 import { loadFacts, HELPERS } from "./lib/facts.mjs";
+import { sendSummary } from "./lib/summary.mjs";
+import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
 import { Nib } from "./helpers/nib.mjs";
@@ -49,6 +51,10 @@ async function addressesBlock(src) {
 export async function build({ env = process.env, configFile = null } = {}) {
   const S = settings(env);
   const config = JSON.parse(readFileSync(configFile || S.configFile || new URL("./brownies.json", import.meta.url), "utf8"));
+  // helpers that are not public yet live in private.json (gitignored): same shape, plus "module" and "hidden"
+  const privateFile = S.privateFile || new URL("./private.json", import.meta.url);
+  const priv = existsSync(privateFile) ? JSON.parse(readFileSync(privateFile, "utf8")) : { helpers: {} };
+  for (const [name, c] of Object.entries(priv.helpers || {})) config.helpers[name] = c;
   const clock = new RealClock();
   const store = new Store(S.dbPath, { tz: config.timezone || "UTC" });
   const gateway = new Gateway({ url: S.gatewayUrl, teamKey: S.teamLogKey, log });
@@ -63,11 +69,28 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const fudge = new Fudge({ ...deps("fudge"), x, siteUrl: S.siteUrl });
   const crumb = new Crumb({ ...deps("crumb"), telegram, github, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => chip.decide(id, d, ctx), onNote: (id, t) => chip.addNote(id, t) });
   const nib = new Nib({ ...deps("nib"), github, siteUrl: S.siteUrl, rpcUrl: S.rpcUrl });
+  // the private helpers, by module
+  const extra = {};
+  for (const [name, c] of Object.entries(priv.helpers || {})) {
+    const mod = await import(new URL(c.module, import.meta.url));
+    const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
+    extra[name] = new Cls({ ...deps(name), telegram, github, ownerChatId: S.telegram.ownerChatId });
+  }
+  const all = { fudge, crumb, nib, chip, ...extra };
+  const names = Object.keys(all);
+  const hidden = names.filter((n) => all[n].hidden);
+  // the owner's private commands: /glaze <what> asks the hidden helper for a draft; /summary sends today's summary now
+  crumb.onOwnerCommand = async (cmd, text) => {
+    if (cmd === "summary") { await sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }); return true; }
+    if (all[cmd]?.onRequest) { if (!text) return `Tell ${cmd} what to draft: /${cmd} <what>`; const r = await all[cmd].onRequest(text); return r ? true : `${cmd} could not write that one now (budget or an error). Check the log.`; }
+    return undefined; // not a command of ours: Crumb answers it like any message
+  };
   const scheduler = new Scheduler({ clock, tz: config.timezone || "UTC", flags: store, log });
+  scheduler.add({ id: "team-summary", helper: "team", daily: { hours: [config.summaryHour ?? 22], minute: 0 }, run: () => sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }).catch((e) => log(`[summary] failed: ${e.message}`)) });
   // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
   const off = offList(env);
-  for (const h of [fudge, crumb, nib, chip]) if (!off.includes(h.name)) for (const j of h.jobs()) scheduler.add(j);
-  return { S, config, clock, store, gateway, telegram, alerts, brain, x, github, helpers: { fudge, crumb, nib, chip }, scheduler, off };
+  for (const h of Object.values(all)) if (!off.includes(h.name)) for (const j of h.jobs()) scheduler.add(j);
+  return { S, config, clock, store, gateway, telegram, alerts, brain, x, github, helpers: all, scheduler, off, hidden };
 }
 
 async function main() {
@@ -76,7 +99,8 @@ async function main() {
   const { S, store, gateway, brain, scheduler, helpers, alerts } = W;
   log(`[helpers] MODE=${S.mode}, gateway ${S.gatewayUrl}, db ${S.dbPath}`);
   log(`[helpers] settings: ${describe()}`);
-  if (S.mode === "live") for (const h of HELPERS) log(`[helpers] ${h} wallet ${brain.address(h)} (add it to the team vault)`);
+  if (S.mode === "live") for (const h of Object.keys(W.helpers)) if (brain.keys[h]) log(`[helpers] ${h} wallet ${brain.address(h)} (add it to the team vault)`);
+  if (W.hidden.length) log(`[helpers] hidden (not announced): ${W.hidden.join(", ")}`);
   if (!W.x.configured) log("[helpers] X is not configured: Fudge will not post");
   if (!W.telegram.configured) log("[helpers] Telegram is not configured: Crumb will not listen and no alerts go out");
   if (!W.github.configured) log("[helpers] GitHub is not configured: Nib keeps its notes in the store, Chip has no tasks");
@@ -87,7 +111,7 @@ async function main() {
     const now = Date.now();
     const body = {
       ok: true, mode: S.mode, uptimeSeconds: Math.round((now - started) / 1000), reports: gateway.reports, thoughts: brain.calls,
-      helpers: Object.fromEntries(HELPERS.map((h) => [h, { spentTodayUsd: (store.spentToday(h, now).micro / 1e6).toFixed(4), capUsd: (brain.capMicro(h) / 1e6).toFixed(2), lastJob: store.lastJob(h) }])),
+      helpers: Object.fromEntries(Object.keys(W.helpers).map((h) => [h, { spentTodayUsd: (store.spentToday(h, now).micro / 1e6).toFixed(4), capUsd: (brain.capMicro(h) / 1e6).toFixed(2), lastJob: store.lastJob(h), hidden: W.helpers[h].hidden || undefined }])),
       pendingApprovals: store.pendingApprovals().length,
       off: W.off,
     };

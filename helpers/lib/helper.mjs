@@ -14,6 +14,7 @@ export class Helper {
     this.Name = cap(name);
     this.config = deps.config || {};
     this.role = this.config.role || "";
+    this.hidden = Boolean(this.config.hidden); // not announced yet: no status, no report to the Kitchen, only the store and the owner
     Object.assign(this, { brain: deps.brain, gateway: deps.gateway, store: deps.store, clock: deps.clock, alerts: deps.alerts || null, facts: deps.facts || "", log: deps.log || (() => {}) });
   }
 
@@ -30,11 +31,12 @@ export class Helper {
   think(opts) { return this.brain.chat(this.name, opts); }
 
   /// "Writing today's second post": what the Kitchen shows as the task of the moment.
-  status(title) { return this.gateway.report({ helper: this.name, kind: "status", title }); }
+  status(title) { if (this.hidden) { this.log(`[${this.name}] ${title}`); return Promise.resolve(null); } return this.gateway.report({ helper: this.name, kind: "status", title }); }
 
   /// A job done. Counted in the store too, so the helper knows what it did today after a restart.
   async report(kind, title, { body = null, url = null, place = null, cost_micro = 0 } = {}) {
-    const row = await this.gateway.report({ helper: this.name, kind, title, body, url, place, cost_micro });
+    const row = this.hidden ? null : await this.gateway.report({ helper: this.name, kind, title, body, url, place, cost_micro });
+    if (this.hidden) this.log(`[${this.name}] ${kind}: ${title}`);
     this.store.jobDone({ at: this.clock.now(), helper: this.name, job: kind, ok: true, costMicro: cost_micro, note: title });
     return row;
   }

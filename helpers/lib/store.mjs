@@ -37,6 +37,7 @@ export class Store {
       addJob: p("INSERT INTO jobs(at, helper, job, ok, cost_micro, note) VALUES(?, ?, ?, ?, ?, ?)"),
       jobsSince: p("SELECT COUNT(*) AS n FROM jobs WHERE helper = ? AND job = ? AND at >= ? AND ok = 1"),
       lastJob: p("SELECT at, job, ok, note FROM jobs WHERE helper = ? ORDER BY id DESC LIMIT 1"),
+      jobsOf: p("SELECT at, job, ok, cost_micro, note FROM jobs WHERE helper = ? AND at >= ? ORDER BY id"),
       hasPost: p("SELECT 1 FROM posts WHERE place = ? AND key = ?"),
       addPost: p("INSERT INTO posts(at, helper, place, kind, key, text, external_id, url) VALUES(?, ?, ?, ?, ?, ?, ?, ?)"),
       postsSince: p("SELECT COUNT(*) AS n FROM posts WHERE helper = ? AND place = ? AND kind = ? AND at >= ?"),
@@ -79,6 +80,8 @@ export class Store {
   jobDone({ at, helper, job, ok = true, costMicro = 0, note = null }) { this.q.addJob.run(at, helper, job, ok ? 1 : 0, Math.round(costMicro), note); }
   jobsToday(helper, job, now) { return Number(this.q.jobsSince.get(helper, job, this.dayStart(now)).n); }
   lastJob(helper) { return this.q.lastJob.get(helper) || null; }
+  /// Every job of a helper since `at`, oldest first (for the owner's daily summary).
+  jobsSince(helper, at) { return this.q.jobsOf.all(helper, at).map((r) => ({ helper, at: Number(r.at), job: r.job, ok: Boolean(r.ok), costMicro: Number(r.cost_micro), note: r.note })); }
 
   // ---- posts: never the same text twice in the same place. A reply is keyed with what it answers (`ref`). ----
   hasPost(place, text, ref = "") { return Boolean(this.q.hasPost.get(place, textKey(ref ? `${text}|${ref}` : text))); }

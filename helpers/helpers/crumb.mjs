@@ -19,6 +19,33 @@ const RULES = `Your task now: answer a message in a Telegram chat.
 
 const FALLBACK = "I do not have a good answer for that one. The docs have the details: https://feedthebrownies.com/docs.html";
 
+const money = (micro) => `$${(Number(micro || 0) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+const num = (n) => Number(n || 0).toLocaleString("en-US");
+
+/// The /stats answer. Pre-launch: the Kitchen only. Live: the coin's numbers from the gateway's ledger and chain reads.
+export function statsText(stats, summary) {
+  const lines = [];
+  const on = stats?.onchain && !stats.onchain.error ? stats.onchain : null;
+  if (!stats || !on) {
+    lines.push("BROWNIE is not launched yet, so there are no coin numbers to show.");
+  } else {
+    lines.push("BROWNIE, live numbers:");
+    if (on.sugarActivatedMicro != null) lines.push(`- SUGAR turned into AI so far: ${money(on.sugarActivatedMicro)}`);
+    if (on.totalStakersFundedMicro != null) lines.push(`- paid to stakers so far: ${money(on.totalStakersFundedMicro)}`);
+    if (on.totalTeamFundedMicro != null) lines.push(`- fed to the brownies so far: ${money(on.totalTeamFundedMicro)}`);
+    if (on.totalMainPaidWei != null) lines.push(`- to the team wallet so far: ${(Number(on.totalMainPaidWei) / 1e18).toFixed(4)} ETH`);
+    if (on.programOn === false) lines.push("- the program is switched OFF right now");
+    if (on.vaultDailyBudgetMicro != null) lines.push(`- the brownies' next daily budget: ${money(on.vaultDailyBudgetMicro)}`);
+  }
+  if (stats?.ledger) lines.push(`- AI requests served by the gateway: ${num(stats.ledger.requests)}, ${money(stats.ledger.spentMicro)} spent`);
+  if (summary?.helpers?.length) {
+    const today = summary.helpers.map((h) => `${h.helper} ${num(h.today)}`).join(", ");
+    lines.push(`- the brownies today: ${today} job${summary.total === 1 ? "" : "s"} (${num(summary.total)} in all)`);
+  }
+  lines.push("", "Kitchen: https://feedthebrownies.com/team.html");
+  return lines.join("\n");
+}
+
 export class Crumb extends Helper {
   constructor(deps) {
     super("crumb", deps);
@@ -29,6 +56,8 @@ export class Crumb extends Helper {
     this.questionsHour = this.config.questionsHour ?? 20;
     this.onDecision = deps.onDecision || null;   // (approvalId, "approve" | "reject", { chatId, messageId })
     this.onNote = deps.onNote || null;           // (approvalId, text)
+    this.onOwnerCommand = deps.onOwnerCommand || null; // (command, text) -> true (done), a reply string, or nothing (not a command: answered as a message)
+    this.statsAt = new Map(); // chat -> time of the last /stats answer (one a minute per chat, no model call)
     this.live = { at: 0, text: "" };
     this.running = false;
     this.answered = 0;
@@ -89,6 +118,14 @@ export class Crumb extends Helper {
       const a = this.store.approvalByMessage(chatId, m.reply_to_message.message_id);
       if (a && a.state === "rejected" && this.onNote) { await this.onNote(a.id, m.text.trim()); await this.tg.sendMessage(chatId, "Added your note to the pull request.", { replyTo: m.message_id }); return "note"; }
     }
+    // /stats works everywhere, costs nothing, and never goes through a model
+    if (/^\/stats(@\w+)?(\s|$)/i.test(m.text.trim())) return this.stats(m);
+    if (isOwner && /^\/\w+/.test(m.text.trim()) && this.onOwnerCommand) {
+      const [, cmd, rest = ""] = m.text.trim().match(/^\/(\w+)(?:@\w+)?\s*([\s\S]*)$/) || [];
+      const reply = await this.onOwnerCommand(cmd.toLowerCase(), rest.trim());
+      if (reply === true) return "command";
+      if (typeof reply === "string" && reply) { await this.tg.sendMessage(chatId, reply, { replyTo: m.message_id }); return "command"; }
+    }
     if (m.chat.type === "private" || isOwner) return this.answer(m);
     if (chatId === this.groupChatId) {
       const me = await this.tg.me().catch(() => null);
@@ -148,6 +185,19 @@ export class Crumb extends Helper {
     this.store.countAnswer(chat, now);
     this.store.setMeta(`tg:batchcost:${chat}`, Number(this.store.getMeta(`tg:batchcost:${chat}`, 0)) + r.costMicro);
     this.answered++;
+    return text;
+  }
+
+  /// /stats: the live numbers as plain text, from the gateway only. One answer a minute per chat.
+  async stats(m) {
+    const chat = String(m.chat.id);
+    const now = this.clock.now();
+    if (now - (this.statsAt.get(chat) || 0) < 60_000) return null;
+    this.statsAt.set(chat, now);
+    const [st, su] = await Promise.all([this.gateway.stats(), this.gateway.summary()]);
+    const text = statsText(st.ok ? st.body : null, su.ok ? su.body : null);
+    await this.tg.sendMessage(chat, text, { replyTo: m.message_id });
+    this.store.countAnswer(chat, now);
     return text;
   }
 

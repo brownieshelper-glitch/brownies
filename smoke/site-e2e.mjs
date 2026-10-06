@@ -425,7 +425,7 @@ async function pages() {
 
 async function shots() {
   const p = await openPage(false);
-  const list = [["home", `/${QS}`], ["app", `/app.html${QS}`], ["docs", `/docs.html${QS}`], ["team", `/team.html${QS}`], ["progress", `/progress.html${QS}`], ["posts", `/posts.html${QS}`]];
+  const list = [["home", `/${QS}`], ["app", `/app.html${QS}`], ["docs", `/docs.html${QS}`], ["team", `/team.html${QS}`], ["progress", `/progress.html${QS}`], ["posts", `/posts.html${QS}`], ["chat", `/chat.html${QS}`]];
   for (const [name, path] of list) {
     for (const w of [1440, 1024, 768, 375]) {
       await p.size(w, w === 375 ? 812 : 900, w === 375);

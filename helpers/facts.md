@@ -110,6 +110,8 @@ the contracts.
 ## Links
 
 - Site https://feedthebrownies.com, docs https://feedthebrownies.com/docs.html, app https://feedthebrownies.com/app.html
+- Chat https://feedthebrownies.com/chat.html: talk to any model with SUGAR, no code needed (a wallet signs once, the signature is the key; the page opens with the launch)
+- In Telegram, /stats gives the live numbers at any time
 - Kitchen https://feedthebrownies.com/team.html, Progress https://feedthebrownies.com/progress.html
 - For programs: https://feedthebrownies.com/llms.txt and https://feedthebrownies.com/agents.md
 - Code: https://github.com/brownieshelper-glitch/brownies

@@ -503,3 +503,32 @@ textarea.prompt:focus { border-color: var(--bone); }
 @media (max-width: 640px) {
   .posts .what { font-size: 18px; }
 }
+
+/* ---- the chat page: a key bar, the conversation, the form. Same type and lines as the app. ---- */
+.chat-page { padding-bottom: 88px; }
+.chat-bar { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr); gap: 20px 28px; align-items: start; padding: 24px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.chat-key .hint { margin-top: 10px; }
+.chat-balance { display: flex; gap: 28px; margin: 0; }
+.chat-balance dt { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.chat-balance dd { margin: 4px 0 0; font-family: "JetBrains Mono", monospace; font-size: 20px; }
+.chat-model { display: flex; flex-direction: column; gap: 8px; }
+.chat-model span { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.chat-model select { min-height: 48px; width: 100%; max-width: 100%; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bone); color: var(--ink); font: inherit; font-size: 15px; }
+.chat-box { margin-top: 28px; }
+.chat-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
+.chat-log .msg { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 14px; align-items: start; }
+.chat-log .who { font-size: 13px; color: var(--muted); padding-top: 8px; }
+.chat-log .who.face { width: 48px; height: 48px; border-radius: 12px; background: var(--bone); overflow: hidden; padding: 0; }
+.chat-log .who.face svg { display: block; width: 100%; height: 100%; }
+.chat-log .text { margin: 0; padding: 14px 18px; border-radius: 14px; font-size: 17px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-log .you .text { background: var(--bone); color: var(--ink); }
+.chat-log .bot .text { border: 1px solid var(--line); color: var(--bone); }
+.chat-log .bot.err .text { border-color: var(--orange); color: var(--orange); }
+.chat-log .typing:empty::after { content: "..."; color: var(--muted); }
+.chat-form { margin-top: 22px; }
+.chat-form textarea { width: 100%; min-height: 96px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: transparent; color: var(--bone); font: inherit; font-size: 17px; line-height: 1.5; resize: vertical; }
+.chat-form textarea:disabled { opacity: 0.5; }
+.chat-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .chat-bar { grid-template-columns: 1fr; }
+}

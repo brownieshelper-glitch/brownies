@@ -539,7 +539,7 @@ textarea.prompt:focus { border-color: var(--bone); }
 .admin-login-card h2 { font-size: 28px; margin-bottom: 10px; }
 .admin-login-card p { color: var(--muted); }
 .admin-code-form { display: flex; gap: 12px; margin: 18px 0 14px; flex-wrap: wrap; }
-.admin-code-form input { flex: 1 1 180px; min-height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--bone); font-family: var(--mono); font-size: 22px; letter-spacing: 0.2em; }
+.admin-code-form input { flex: 1 1 180px; min-width: 0; width: 100%; min-height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--bone); font-family: var(--mono); font-size: 22px; letter-spacing: 0.2em; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--bone); text-decoration: underline; text-underline-offset: 3px; font: inherit; cursor: pointer; min-height: 44px; }
 .link-btn:hover { color: var(--orange); }
 .admin-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 18px 28px; padding: 22px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }

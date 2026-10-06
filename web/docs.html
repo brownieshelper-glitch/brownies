@@ -173,6 +173,7 @@ console.log(reply.choices[0].message.content);</code></pre>
             <tr><td><code>POST /v1/chat/completions</code></td><td>A chat reply. Streaming works. Charged to your key.</td></tr>
             <tr><td><code>GET /v1/key</code></td><td>Your balance, what you have spent, and your epoch.</td></tr>
             <tr><td><code>POST /v1/key/rotate</code></td><td>Replaces your key. Returns the new message to sign.</td></tr>
+            <tr><td><code>POST /v1/grants</code></td><td>Lets another wallet spend from your balance, up to a daily cap. It adds the header <code>X-Brownies-Pay-From</code> with your wallet. <code>GET /v1/grants</code> lists them, <code>POST /v1/grants/revoke</code> ends one.</td></tr>
             <tr><td><code>GET /api/protocol/account/{wallet}</code></td><td>Any wallet's balance and recent activity. No key needed.</td></tr>
             <tr><td><code>GET /api/protocol/stats</code></td><td>Totals for the whole protocol. No key needed.</td></tr>
           </tbody>

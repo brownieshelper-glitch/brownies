@@ -37,7 +37,9 @@ export class Dough extends Helper {
     return [{ id: "dough-review", helper: "dough", daily: { hours: [this.hour], minute: 0 }, run: () => this.guard("review", () => this.review()) }];
   }
 
-  poolUsed() { return this.recruitsFn().reduce((n, r) => n + (r.spec?.dailyCapUsd || 0), 0); }
+  /// The recruits Dough is responsible for: the team's, not the holders' baked brownies (lib/bakery.mjs).
+  teamRecruits() { return this.recruitsFn().filter((r) => !r.spec?.baked); }
+  poolUsed() { return this.teamRecruits().reduce((n, r) => n + (r.spec?.dailyCapUsd || 0), 0); }
 
   /// The daily round: retire what failed its trial, then think about one hire.
   async review() {
@@ -50,7 +52,7 @@ export class Dough extends Helper {
   async trials() {
     const now = this.clock.now();
     const out = [];
-    for (const r of this.recruitsFn()) {
+    for (const r of this.teamRecruits()) {
       const spec = r.spec;
       if (!spec?.hiredAt || now - spec.hiredAt < this.trialDays * 86_400_000) continue;
       const outputs = Number(this.store.getMeta(`recruit:${spec.name}:outputs`, 0));
@@ -64,7 +66,7 @@ export class Dough extends Helper {
 
   /// Think about one hire from what the team shows today. Returns the recruit or null.
   async consider(request = "") {
-    const recruits = this.recruitsFn();
+    const recruits = this.teamRecruits();
     if (recruits.length >= this.maxRecruits) { this.log(`[dough] ${recruits.length} recruits already, the ceiling`); return null; }
     if (!(await this.ready())) return null;
     const now = this.clock.now();

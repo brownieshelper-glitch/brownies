@@ -4,6 +4,12 @@
 //   GET  /v1/key                        the key's balance: { balance: { currency, available, used }, wallet, epoch }
 //   POST /v1/key/rotate                 bump the epoch: every older key dies on its next request
 //   POST /v1/chat/completions           chat, streaming or not, charged after the call at OpenRouter's stated cost
+//   GET  /v1/grants                     the grants this wallet gave and received, with today's room
+//   POST /v1/grants                     { grantee, daily_usd } let another wallet spend from this balance, so much a day
+//   POST /v1/grants/revoke              { grantee } end that grant
+//   A grantee pays from a grant by adding the header X-Brownies-Pay-From: <granter wallet> to /v1/key and
+//   /v1/chat/completions: the charge lands on the granter, within the grant's daily cap (the Bakery's holders fund
+//   their brownies this way).
 //   GET  /api/protocol/stats            public totals: activations, spend, requests, on-chain harvester figures
 //   GET  /api/protocol/account/:wallet  public: that wallet's balance and recent activity
 //   POST /api/protocol/index-tx         { tx } credit an activation the indexer has not reached yet
@@ -22,7 +28,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { Ledger } from "./ledger.mjs";
 import { Chain } from "./chain.mjs";
 import { TeamLog, clean as cleanEntry, isHelperName, KINDS } from "./teamlog.mjs";
-import { verifyKey, err, keyMessage, beneficiaryToWallet, walletToBeneficiary } from "./auth.mjs";
+import { verifyKey, err, keyMessage, beneficiaryToWallet, walletToBeneficiary, parseWallet } from "./auth.mjs";
 
 // ---- config ----
 // The secrets file lives outside the project folder (which syncs to OneDrive): BROWNIES_GATEWAY_ENV names it.
@@ -90,6 +96,18 @@ function authed(req) {
   return { ...k, bal };
 }
 
+const PAY_FROM = "x-brownies-pay-from";
+/// Who pays for this request: the key's own balance, or the grant a granter named in the header gave this wallet.
+function payer(req, who) {
+  const from = parseWallet(req.headers[PAY_FROM], "X-Brownies-Pay-From");
+  if (!from) return { beneficiary: who.beneficiary, availableMicro: who.bal.availableMicro, grant: null };
+  const granter = walletToBeneficiary(from);
+  const room = ledger.grantRoom(granter, who.wallet);
+  if (!room) throw err(403, "no_grant", `${from} has not granted ${who.wallet} any spending.`);
+  return { beneficiary: granter, availableMicro: room.roomMicro, grant: { from, ...room } };
+}
+const grantView = (g) => ({ granter: beneficiaryToWallet(g.granter), grantee: g.grantee, daily_usd: dollars(g.dailyMicro), spent_today_usd: dollars(g.spentMicro), room_today_usd: dollars(g.roomMicro), calls_today: g.calls, day: g.day, created: g.created });
+
 // ---- models cache ----
 let modelsCache = { at: 0, body: null, byId: new Map() };
 async function models() {
@@ -118,17 +136,18 @@ function worstCaseMicro(model, body) {
 async function chatCompletions(req, res) {
   if (!cfg.openrouterKey) throw err(503, "upstream_unconfigured", "The gateway has no upstream key yet.");
   const who = authed(req);
+  const pay = payer(req, who);
   const raw = await readBody(req);
   let body;
   try { body = JSON.parse(raw); } catch { throw err(400, "bad_json", "Body is not JSON."); }
   if (!body.model || !Array.isArray(body.messages)) throw err(400, "bad_request", "model and messages are required.");
-  if (who.bal.availableMicro < cfg.minBalanceMicro) throw err(402, "insufficient_balance", `Balance ${dollars(who.bal.availableMicro)} USD. Activate SUGAR to this wallet.`);
+  if (pay.availableMicro < cfg.minBalanceMicro) throw err(402, "insufficient_balance", pay.grant ? `The grant from ${pay.grant.from} has ${dollars(pay.availableMicro)} USD left today.` : `Balance ${dollars(pay.availableMicro)} USD. Activate SUGAR to this wallet.`);
   const { byId } = await models();
   const model = byId.get(body.model);
   if (!model) throw err(400, "unknown_model", `Unknown model ${body.model}. See GET /v1/models.`);
   if (!body.max_tokens && !body.max_completion_tokens) body.max_tokens = 1024;
   const worst = worstCaseMicro(model, body);
-  if (worst > who.bal.availableMicro) throw err(402, "insufficient_balance", `This request could cost up to ${dollars(worst)} USD and the balance is ${dollars(who.bal.availableMicro)} USD. Lower max_tokens or activate more SUGAR.`);
+  if (worst > pay.availableMicro) throw err(402, "insufficient_balance", `This request could cost up to ${dollars(worst)} USD and ${pay.grant ? "the grant's room today" : "the balance"} is ${dollars(pay.availableMicro)} USD. Lower max_tokens${pay.grant ? "" : " or activate more SUGAR"}.`);
 
   body.usage = { include: true }; // OpenRouter returns usage.cost (dollars) in the final chunk or the body
   const upstream = await fetch(`${cfg.openrouterUrl}/chat/completions`, {
@@ -145,7 +164,8 @@ async function chatCompletions(req, res) {
   const charge = (usage, upstreamId) => {
     if (!usage) return 0;
     const micro = Math.ceil(Number(usage.cost || 0) * 1e6 * cfg.priceMultiplier);
-    if (micro > 0) ledger.charge(who.beneficiary, micro, { model: body.model, upstreamId, promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens });
+    const info = { model: body.model, upstreamId, promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens };
+    if (micro > 0) { if (pay.grant) ledger.chargeVia(pay.beneficiary, who.wallet, micro, info); else ledger.charge(who.beneficiary, micro, info); }
     return micro;
   };
 
@@ -175,7 +195,8 @@ async function chatCompletions(req, res) {
   }
   const j = await upstream.json();
   const micro = charge(j.usage, j.id);
-  j.brownies = { charged_usd: dollars(micro), balance_usd: dollars(ledger.balance(who.beneficiary).availableMicro) };
+  j.brownies = { charged_usd: dollars(micro), balance_usd: dollars(pay.grant ? (ledger.grantRoom(pay.beneficiary, who.wallet)?.roomMicro ?? 0) : ledger.balance(who.beneficiary).availableMicro) };
+  if (pay.grant) j.brownies.paid_by = pay.grant.from;
   json(res, 200, j);
 }
 
@@ -183,18 +204,42 @@ async function chatCompletions(req, res) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   try {
-    if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, OPTIONS" }); return res.end(); }
+    if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, x-brownies-pay-from", "access-control-allow-methods": "GET, POST, OPTIONS" }); return res.end(); }
     if (url.pathname === "/health") return json(res, 200, { ok: true, live: cfg.live, chainId: cfg.chainId, sugar: cfg.sugarAddress || null, lastBlock: ledger.lastBlock, upstream: Boolean(cfg.openrouterKey) });
     if ((url.pathname.startsWith("/v1/") || url.pathname === "/api/protocol/index-tx") && !cfg.live) throw err(503, "not_launched", "The coin is not launched yet.");
     if (url.pathname === "/v1/models" && req.method === "GET") { const m = await models(); return json(res, 200, m.body); }
     if (url.pathname === "/v1/key" && req.method === "GET") {
       const who = authed(req);
+      const pay = payer(req, who);
+      if (pay.grant) return json(res, 200, { object: "key", wallet: who.wallet, beneficiary: who.beneficiary, epoch: who.epoch, message: keyMessage(cfg.chainId, who.epoch), paid_by: pay.grant.from, grant: grantView(pay.grant), balance: { currency: "USD", available: dollars(pay.availableMicro), used: dollars(pay.grant.spentMicro), credited: dollars(pay.grant.dailyMicro) } });
       return json(res, 200, { object: "key", wallet: who.wallet, beneficiary: who.beneficiary, epoch: who.epoch, message: keyMessage(cfg.chainId, who.epoch), balance: { currency: "USD", available: dollars(who.bal.availableMicro), used: dollars(who.bal.spentMicro), credited: dollars(who.bal.creditedMicro) } });
     }
     if (url.pathname === "/v1/key/rotate" && req.method === "POST") {
       const who = authed(req);
       const epoch = ledger.bumpEpoch(who.beneficiary);
       return json(res, 200, { object: "key", wallet: who.wallet, epoch, message: keyMessage(cfg.chainId, epoch), note: "Sign the new message to get the new key. Every older key is refused from now on." });
+    }
+    if (url.pathname === "/v1/grants" && req.method === "GET") {
+      const who = authed(req);
+      return json(res, 200, { object: "grants", wallet: who.wallet, given: ledger.grantsBy(who.beneficiary).map(grantView), received: ledger.grantsTo(who.wallet).map(grantView) });
+    }
+    if (url.pathname === "/v1/grants" && req.method === "POST") {
+      const who = authed(req);
+      let body; try { body = JSON.parse(await readBody(req, 4096)); } catch { throw err(400, "bad_json", "Body is not JSON."); }
+      const grantee = parseWallet(body.grantee, "grantee");
+      if (!grantee) throw err(400, "bad_wallet", "grantee must be an address.");
+      if (grantee === who.wallet) throw err(400, "bad_grantee", "A wallet needs no grant to itself.");
+      const daily = Number(body.daily_usd ?? body.dailyUsd);
+      if (!Number.isFinite(daily) || daily < 0.01 || daily > 1000) throw err(400, "bad_amount", "daily_usd must be between 0.01 and 1000.");
+      ledger.setGrant(who.beneficiary, grantee, Math.round(daily * 1e6));
+      return json(res, 200, { object: "grant", ...grantView(ledger.grantRoom(who.beneficiary, grantee)), note: `${grantee} may now spend up to ${dollars(Math.round(daily * 1e6))} USD a day from ${who.wallet}'s balance, by sending the header X-Brownies-Pay-From: ${who.wallet}.` });
+    }
+    if (url.pathname === "/v1/grants/revoke" && req.method === "POST") {
+      const who = authed(req);
+      let body; try { body = JSON.parse(await readBody(req, 4096)); } catch { throw err(400, "bad_json", "Body is not JSON."); }
+      const grantee = parseWallet(body.grantee, "grantee");
+      if (!grantee) throw err(400, "bad_wallet", "grantee must be an address.");
+      return json(res, 200, { object: "grant", grantee, revoked: ledger.revokeGrant(who.beneficiary, grantee) });
     }
     if (url.pathname === "/v1/chat/completions" && req.method === "POST") return await chatCompletions(req, res);
     if (url.pathname === "/api/protocol/stats" && req.method === "GET") {

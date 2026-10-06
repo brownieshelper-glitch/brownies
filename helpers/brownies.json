@@ -2,6 +2,17 @@
   "_comment": "The four brownies. Hours are local to the timezone. dailyCapUsd is the most a helper may spend on AI in a day; in MODE=live its gateway balance (SUGAR from the vault and tips) is the other limit. Models are OpenRouter ids.",
   "timezone": "Europe/Rome",
   "chainId": 1,
+  "bakery": {
+    "_comment": "Home-baked brownies (lib/bakery.mjs): a holder with at least minHold BROWNIE held or staked bakes one brownie of their own, paid by a grant on their own SUGAR. Before the launch only the admin wallets may bake, to test it.",
+    "on": true,
+    "minHold": 10000,
+    "maxPerWallet": 1,
+    "maxTotal": 50,
+    "maxCapUsd": 1,
+    "defaultCapUsd": 0.5,
+    "asksPerDay": 3,
+    "models": ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-5.5"]
+  },
   "helpers": {
     "fudge": {
       "role": "marketing. You write the posts for X and answer the mentions that ask something",

@@ -166,6 +166,11 @@ ROUND 4, 2026-10-06 night (owner: "Sprinkle for sure", before launch, hidden; pl
 - SPRINKLE DEPLOYED 2026-10-06 18:32 UTC. The first render was KILLED BY THE OOM GUARD (node at 810 MB on the 1 GB droplet: the rasteriser's pixels live outside the JS heap, so the collector never ran). Fix: the render runs in a child process (helpers/video/render-child.mjs, spawned by renderVideoInChild with --expose-gc --max-old-space-size=192, gc every 15 frames); a crash or a kill ends the child, never the service; the job file and frames folder are removed either way. 83 runtime tests (one renders a real 1-second clip through the child with the local static ffmpeg).
 - Research-to-code loop: every "Chip: ..." line in Nib's note becomes a GitHub issue labelled chip (at most 2 a day, never the same twice; nib.chipIssues=false switches it off). github.mjs createIssue. 67 runtime tests.
 
+VIDEOS, 2026-10-06 night (owner: "make sprinkle already working at 2 videos at least": an introduction of the whole project and episode 1 of the cartoon):
+- New kind "pilot" (50-80 s, one scene per brownie at its job, a mishap, all four together) with a finished fallback script "A day in the life"; the explainer may run to 60 s; pickKind: introduction words win over "their jobs". helpers/video/request.mjs asks Sprinkle by hand on the server (same code path as /sprinkle).
+- Finding: on the long script prompt Sonnet 5.5 spent ALL 3800 tokens thinking and returned nothing (the fallback script was used). OpenRouter refuses reasoning.enabled=false but accepts reasoning.effort "low", measured at zero thinking tokens with the full answer: it is now the brain's default for every call (lib/brain.mjs DEFAULT_REASONING; a call may override). Sprinkle's script call gets 4500 tokens.
+- Video 2 "Meet the Brownies" (explainer, model-written, 12 shots, 56 s, every caption a fact) sent to the owner in both formats; video 3 = episode 1 (pilot) followed. 86 runtime tests.
+
 NOT BUILT YET:
 - (Built 2026-10-06, see THE BROWNIES RUNTIME.) Still open there: the Telegram group (Crumb answers private chats
   only until TELEGRAM_GROUP_CHAT_ID is set), Fudge's first post (HELPERS_OFF=fudge until the owner says so),

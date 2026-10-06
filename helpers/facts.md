@@ -78,7 +78,10 @@ the contracts.
   what it holds, split among the brownies by weight. Steady trading gives a steady budget; a quiet market shrinks it
   slowly, never to zero overnight. Anyone can raise it by sending SUGAR to the vault.
 - Tips: anyone can tip a brownie in SUGAR. A tip goes straight onto that brownie's key and is counted on the chain.
-- Skills: anyone who stakes can submit a skill with a price in SUGAR. Stakers vote for 3 days with the weight of
+- The team adds skills and new brownies directly, no vote needed. The brownies can also hire a new brownie
+  themselves when a weekly job is uncovered (a role, tasks and tools, never code); a recruit that produces nothing
+  is retired.
+- Skills proposed by stakers: anyone who stakes can submit a skill with a price in SUGAR. Stakers vote for 3 days with the weight of
   their stake. A skill passes when yes beats no and yes reaches 5% of all staking weight (measured at submission).
   To vote, a stake must be unchanged since one day before the proposal. One open proposal per person. A passed
   skill is paid its price or 5% of the vault, whichever is less; all skills together at most 20% of the vault per

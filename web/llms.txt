@@ -34,3 +34,4 @@
 - POST /v1/key/rotate
 - GET /api/protocol/account/{wallet}
 - GET /api/protocol/stats
+- The team adds skills and brownies directly, no vote; the brownies can hire a new brownie themselves when a job is uncovered (a role, tasks and tools, never code). Stakers' votes only decide paid skills they propose.

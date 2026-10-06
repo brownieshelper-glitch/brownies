@@ -33,3 +33,9 @@ eth-launch/programmable/*/lib/
 helpers/private.json
 helpers/helpers/glaze.mjs
 helpers/test/glaze.test.mjs
+helpers/helpers/swirl.mjs
+helpers/test/swirl.test.mjs
+helpers/helpers/sprinkle.mjs
+helpers/test/sprinkle.test.mjs
+helpers/test/video.test.mjs
+helpers/video/

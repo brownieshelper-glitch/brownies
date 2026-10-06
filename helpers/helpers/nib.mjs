@@ -92,8 +92,33 @@ export class Nib extends Helper {
     } else this.log("[nib] GitHub is not configured, the note stays in the store only");
     this.store.latestNote = { date, text, url, at: now };
     this.store.markSeen("nib-note", date, now);
+    const issues = await this.fileChipIssues(text, date, url).catch((e) => { this.log(`[nib] could not file Chip's issues: ${e.message}`); return []; });
     const first = text.split("\n").find((l) => l.trim() && !l.startsWith("#")) || "";
     await this.report("research", `Research note ${date}: ${cut(first, 120)}`, { body: cut(text, 1000), url, place: "github", cost_micro: r.costMicro });
-    return { date, text, url };
+    return { date, text, url, issues };
+  }
+
+  /// The research-to-code loop: every "Chip: ..." line under "What to do" becomes a GitHub issue labelled "chip",
+  /// so Chip picks it up on its next round. Small changes merge after the three reviews, bigger ones go to the
+  /// owner, as always. At most `maxIssuesPerNote` a day; a suggestion already filed (same words) is not filed twice.
+  async fileChipIssues(text, date, noteUrl) {
+    if (!this.github?.configured || this.config.chipIssues === false) return [];
+    const max = this.config.maxIssuesPerNote ?? 2;
+    const lines = String(text).split("\n").map((l) => l.match(/^\s*(?:-\s*)?Chip:\s*(.+)$/i)?.[1]?.trim()).filter(Boolean);
+    const out = [];
+    for (const task of lines) {
+      if (out.length >= max) break;
+      const key = task.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+      if (!key || this.store.seen("nib-chip-issue", key)) continue;
+      const issue = await this.github.createIssue({
+        title: cut(task.replace(/[.\s]+$/, ""), 100),
+        body: `From Nib's research note of ${date}${noteUrl ? ` (${noteUrl})` : ""}:\n\n> Chip: ${task}\n\nFiled by Nib, the research brownie. Do the smallest change that does this; if it needs src/, eth-launch/, gateway/auth or keys, refuse with the reason.`,
+        labels: ["chip"],
+      });
+      this.store.markSeen("nib-chip-issue", key, this.clock.now());
+      out.push({ ...issue, task });
+      this.log(`[nib] filed issue #${issue.number} for Chip: ${cut(task, 80)}`);
+    }
+    return out;
   }
 }

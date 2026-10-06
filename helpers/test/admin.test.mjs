@@ -112,7 +112,7 @@ test("commands: pause skips scheduled runs but not a run by hand, resume, cap, a
     assert.equal(summaries(), 1);
     // a decision on a pending approval
     const id = W.store.addApproval({ at: W.clock.now(), helper: "chip", kind: "pr", ref: 100, title: "A change", url: "https://github.com/x/y/pull/100" });
-    W.ghm.prs.push({ number: 100, state: "open", merged: false, html_url: "https://github.com/x/y/pull/100", title: "A change", head: "chip/a", base: "main" });
+    W.ghm.prs.push({ number: 100, state: "open", merged: false, html_url: "https://github.com/x/y/pull/100", title: "A change", head: { ref: "chip/a", sha: "sha-a" }, base: "main" });
     W.ghm.branches["chip/a"] = "sha-a"; W.ghm.files["chip/a"] = { ...W.ghm.files.main };
     const st = await call("GET", "/admin/state", null, token);
     assert.equal(st.body.approvals.length, 1);

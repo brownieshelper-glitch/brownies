@@ -29,7 +29,7 @@ test("a small change: branch, commits, pull request, three yes reviews, merged a
   assert.equal(r.changed, 1);
   assert.equal(W.ghm.prs.length, 1);
   const pr = W.ghm.prs[0];
-  assert.match(pr.head, /^chip\/list-helpers-in-the-readme-table-2026-10-07$/);
+  assert.match(pr.head.ref, /^chip\/list-helpers-in-the-readme-table-2026-10-07$/);
   assert.equal(pr.base, "main");
   assert.match(pr.body, /Standing task: readme-row\./);
   assert.match(pr.body, /Small change: it merges itself/);

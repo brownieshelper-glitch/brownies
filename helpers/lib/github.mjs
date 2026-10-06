@@ -76,6 +76,12 @@ export class GitHub {
 
   fileUrl(path, branch) { return `https://github.com/${this.repo}/blob/${branch}/${path}`; }
 
+  /// The check runs (CI) on a commit: [{ name, status, conclusion }]. Empty when the repository has no checks.
+  async checkRuns(sha) {
+    const j = await this.api("GET", this.R(`/commits/${sha}/check-runs?per_page=50`));
+    return (j.check_runs || []).map((c) => ({ name: c.name, status: c.status, conclusion: c.conclusion }));
+  }
+
   /// Opens an issue. Returns { number, url }.
   async createIssue({ title, body = "", labels = [] }) {
     const j = await this.api("POST", this.R("/issues"), { title: String(title).slice(0, 200), body, labels });

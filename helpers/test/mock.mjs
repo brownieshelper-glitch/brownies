@@ -159,7 +159,7 @@ export function mockX(fetch, { access = "access-old", refresh = "refresh-old", v
 // ---- GitHub ----
 const hash = (s) => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h.toString(16); };
 export function mockGitHub(fetch, { repo = "brownieshelper-glitch/brownies", files = {}, issues = [], defaultBranch = "main" } = {}) {
-  const gh = { repo, defaultBranch, branches: { [defaultBranch]: "sha-main-0" }, files: { [defaultBranch]: { ...files } }, prs: [], comments: [], merged: [], closed: [], commits: [], issues: [...issues] };
+  const gh = { repo, defaultBranch, branches: { [defaultBranch]: "sha-main-0" }, files: { [defaultBranch]: { ...files } }, prs: [], comments: [], merged: [], closed: [], commits: [], issues: [...issues], checks: {} };
   const R = `https://api.github.com/repos/${repo}`;
   const esc = R.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const blobSha = (p, content) => "blob-" + hash(p + "\0" + content);
@@ -188,13 +188,15 @@ export function mockGitHub(fetch, { repo = "brownieshelper-glitch/brownies", fil
   fetch.on("GET", new RegExp(`^${esc}/git/trees/([^?]+)`), (c, m) => { const b = branchOf(decodeURIComponent(m[1])); return { json: { sha: gh.branches[b], tree: Object.entries(gh.files[b]).map(([path, content]) => ({ path, type: "blob", size: content.length })) } }; });
   fetch.on("GET", new RegExp(`^${esc}/issues\\?`), () => ({ json: gh.issues.map((i) => ({ number: i.number, title: i.title, body: i.body || "", html_url: `https://github.com/${repo}/issues/${i.number}`, labels: (i.labels || ["chip"]).map((name) => ({ name })), state: "open", ...(i.pull_request ? { pull_request: {} } : {}) })) }));
   fetch.on("POST", new RegExp(`^${esc}/issues$`), (c) => { const number = 200 + gh.issues.length; const i = { number, title: c.body.title, body: c.body.body || "", labels: c.body.labels || [], state: "open" }; gh.issues.push(i); return { status: 201, json: { number, title: i.title, html_url: `https://github.com/${repo}/issues/${number}` } }; });
-  fetch.on("POST", `${R}/pulls`, (c) => { const number = 100 + gh.prs.length; const pr = { number, title: c.body.title, body: c.body.body, head: c.body.head, base: c.body.base, state: "open", merged: false, html_url: `https://github.com/${repo}/pull/${number}` }; gh.prs.push(pr); return { status: 201, json: pr }; });
+  fetch.on("POST", `${R}/pulls`, (c) => { const number = 100 + gh.prs.length; const pr = { number, title: c.body.title, body: c.body.body, head: { ref: c.body.head, sha: gh.branches[c.body.head] || "sha-" + c.body.head }, base: c.body.base, state: "open", merged: false, html_url: `https://github.com/${repo}/pull/${number}` }; gh.prs.push(pr); return { status: 201, json: pr }; });
+  // the checks (CI) on a commit: gh.checks[sha] = [{ name, status, conclusion }]; none by default
+  fetch.on("GET", new RegExp(`^${esc}/commits/(.+)/check-runs`), (c, m) => { gh.checkCalls = (gh.checkCalls || 0) + 1; return { json: { check_runs: gh.checksFn ? gh.checksFn(m[1], gh.checkCalls) : (gh.checks[m[1]] || []) } }; });
   fetch.on("GET", new RegExp(`^${esc}/pulls/(\\d+)$`), (c, m) => { const pr = gh.prs.find((p) => p.number === Number(m[1])); return pr ? { json: pr } : notFound; });
   fetch.on("PUT", new RegExp(`^${esc}/pulls/(\\d+)/merge$`), (c, m) => {
     const pr = gh.prs.find((p) => p.number === Number(m[1]));
     if (!pr || pr.state !== "open") return { status: 405, json: { message: "Pull Request is not mergeable" } };
     pr.merged = true; pr.state = "closed"; gh.merged.push(pr.number);
-    Object.assign(gh.files[pr.base], gh.files[pr.head]); gh.branches[pr.base] = `sha-${pr.base}-m${gh.merged.length}`;
+    Object.assign(gh.files[pr.base], gh.files[pr.head.ref]); gh.branches[pr.base] = `sha-${pr.base}-m${gh.merged.length}`;
     return { json: { merged: true, sha: gh.branches[pr.base], message: "Pull Request successfully merged" } };
   });
   fetch.on("PATCH", new RegExp(`^${esc}/pulls/(\\d+)$`), (c, m) => { const pr = gh.prs.find((p) => p.number === Number(m[1])); if (!pr) return notFound; pr.state = c.body.state || pr.state; if (pr.state === "closed" && !pr.merged) gh.closed.push(pr.number); return { json: pr }; });

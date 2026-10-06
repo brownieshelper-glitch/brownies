@@ -1,7 +1,7 @@
 // What the four brownies share: a name, a role, a budget check, a system prompt built from the facts and Nib's
 // latest note, and the two ways to talk to the Kitchen (a "status" when a job starts, a report when it is done).
 import { systemPrompt } from "./voice.mjs";
-import { latestNoteText, cap } from "./facts.mjs";
+import { latestNoteText, latestCriticText, cap } from "./facts.mjs";
 import { BudgetError } from "./brain.mjs";
 
 export const ORDINAL = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"];
@@ -19,7 +19,7 @@ export class Helper {
   }
 
   /// The system prompt: the voice, the facts, Nib's latest note and this helper's own rules.
-  system(extra = "") { return systemPrompt({ name: this.Name, role: this.role, facts: this.facts, note: latestNoteText(this.store), extra }); }
+  system(extra = "") { return systemPrompt({ name: this.Name, role: this.role, facts: this.facts, note: latestNoteText(this.store), feedback: latestCriticText(this.store, this.name), extra }); }
 
   /// False (and an alert, at most once an hour) when the helper cannot pay for a thought right now.
   async ready() {

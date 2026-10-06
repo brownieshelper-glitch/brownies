@@ -116,6 +116,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
     all[name] = new Cls({ ...deps(name), telegram, github, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
   }
+  if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   const names = Object.keys(all);
   const hidden = names.filter((n) => all[n].hidden);
   W.hidden = hidden;

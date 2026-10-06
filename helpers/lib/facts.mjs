@@ -12,6 +12,15 @@ export function loadFacts(file = new URL("../facts.md", import.meta.url), max = 
   return t.length > max ? t.slice(0, max) : t;
 }
 
+/// Critic's latest feedback for a brownie (and for everyone), as text for its prompt, or "" when there is none.
+export function latestCriticText(store, helper, max = 700) {
+  const raw = store.getMeta("critic:latest");
+  if (!raw) return "";
+  let c; try { c = JSON.parse(raw); } catch { return ""; }
+  const items = (c.items || []).filter((i) => i.helper === helper || i.helper === "team").map((i) => `- ${i.fix}`);
+  return items.length ? `${c.date}: ${items.join("\n").slice(0, max)}` : "";
+}
+
 /// Nib's latest note, as text for a prompt, or "" when there is none yet.
 export function latestNoteText(store, max = 2500) {
   const n = store.latestNote;

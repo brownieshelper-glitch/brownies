@@ -47,13 +47,14 @@ export const RULES = `How you write:
 - Do not sign your messages and do not add a title unless asked.`;
 
 /// The system prompt every brownie starts from. `extra` is the helper's own instructions.
-export function systemPrompt({ name, role, facts = "", note = "", extra = "" }) {
+export function systemPrompt({ name, role, facts = "", note = "", feedback = "", extra = "" }) {
   return [
-    `You are ${name}, one of the four brownies: the AI helpers that work for the BROWNIE coin on Ethereum. Your job: ${role}.`,
+    `You are ${name}, one of the brownies: the AI helpers that work for the BROWNIE coin on Ethereum. Your job: ${role}.`,
     `The site is https://feedthebrownies.com and the gateway is https://api.feedthebrownies.com.`,
     RULES,
     facts ? `FACTS (the only source of numbers and claims)\n${facts}` : "",
     note ? `LATEST RESEARCH NOTE, written by Nib\n${note}` : "",
+    feedback ? `FEEDBACK FROM CRITIC, from reading yesterday's work. Follow it.\n${feedback}` : "",
     extra,
   ].filter(Boolean).join("\n\n");
 }

@@ -41,6 +41,7 @@ export class Chip extends Helper {
     this.github = deps.github;
     this.tg = deps.telegram || null;
     this.ownerChatId = String(deps.ownerChatId || "");
+    this.patch = deps.patch || null; // the quality brownie: waits for the checks before a merge (set by run.mjs)
     this.smallMaxLines = this.config.smallMaxLines ?? 60;
     this.reviewers = this.config.reviewers || ["fudge", "crumb", "nib"];
     this.standing = this.config.standingTasks || [];
@@ -141,14 +142,15 @@ export class Chip extends Helper {
     await this.github.comment(pr.number, "Reviews by the other brownies:\n" + reviews.map((r) => `- ${cap(r.by)}: ${r.yes ? "yes" : "no"}. ${r.text}`).join("\n")).catch(() => {});
     const allYes = reviews.length === this.reviewers.length && reviews.every((r) => r.yes);
 
-    // 5. merge alone, or ask the owner
-    if (small && allYes) {
+    // 5. the tests (Patch waits for the repository's checks), then merge alone, or ask the owner
+    const tests = small && allYes && this.patch ? await this.patch.verify(pr) : { state: "none" };
+    if (small && allYes && tests.state !== "failed") {
       await this.github.mergePR(pr.number, { title });
       await this.report("build", title, { body: plan.description || null, url: pr.url, place: "github", cost_micro: cost });
-      return { done: true, merged: true, pr, changed, small };
+      return { done: true, merged: true, pr, changed, small, tests: tests.state };
     }
     const id = this.store.addApproval({ at: now, helper: "chip", kind: "pr", ref: pr.number, title, url: pr.url });
-    const why = !allYes ? "A reviewer said no" : "A bigger change";
+    const why = tests.state === "failed" ? "The tests failed" : !allYes ? "A reviewer said no" : "A bigger change";
     const text = `${why}: ${title}\n${pr.url}\n\n${plan.description || ""}\n\nReviews: ${reviews.map((r) => `${cap(r.by)} ${r.yes ? "yes" : "no"}`).join(", ")}.\n${changed} changed line${changed === 1 ? "" : "s"} in ${n} file${n === 1 ? "" : "s"}.`;
     if (this.tg?.configured && this.ownerChatId) {
       const msg = await this.tg.sendMessage(this.ownerChatId, text, { buttons: [[{ text: "Approve", data: `approve:${id}` }, { text: "Reject", data: `reject:${id}` }]] });
@@ -208,6 +210,16 @@ export class Chip extends Helper {
     const now = this.clock.now();
     const n = Number(a.ref);
     if (decision === "approve") {
+      // even the owner's yes waits for the tests: a red check is told, not merged
+      const tests = this.patch ? await this.patch.verify({ number: n, url: a.url, html_url: a.url }) : { state: "none" };
+      if (tests.state === "failed") {
+        if (ctx?.messageId && this.tg) await this.tg.editMessageText(ctx.chatId, ctx.messageId, `Not merged: the tests fail on ${a.title}
+${a.url}
+Fix them (or ask Chip to) and press Approve again.`).catch(() => {});
+        else if (this.tg?.configured && this.ownerChatId) await this.tg.sendMessage(this.ownerChatId, `Not merged: the tests fail on ${a.title}
+${a.url}`);
+        return false;
+      }
       this.store.decide(id, "approved", null, now);
       await this.github.mergePR(n, { title: a.title });
       await this.report("build", a.title, { body: "Approved by the owner.", url: a.url, place: "github" });

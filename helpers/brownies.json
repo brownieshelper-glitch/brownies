@@ -1,0 +1,60 @@
+{
+  "_comment": "The four brownies. Hours are local to the timezone. dailyCapUsd is the most a helper may spend on AI in a day; in MODE=live its gateway balance (SUGAR from the vault and tips) is the other limit. Models are OpenRouter ids.",
+  "timezone": "Europe/Rome",
+  "chainId": 1,
+  "helpers": {
+    "fudge": {
+      "role": "marketing. You write the posts for X and answer the mentions that ask something",
+      "model": "anthropic/claude-haiku-4.5",
+      "dailyCapUsd": 1.5,
+      "postHours": [9, 13, 18],
+      "postMinute": 0,
+      "mentionsEveryMinutes": 20,
+      "maxPostsPerDay": 3,
+      "maxRepliesPerDay": 12,
+      "topics": [
+        "how a trade turns into SUGAR for stakers",
+        "what the four brownies do, in one line each",
+        "the loyalty bonus for stakers who stay",
+        "the Kitchen page: what the brownies did today",
+        "the fixed split of the tax and the three switches the team holds",
+        "SUGAR as an API key: one signature, every model on OpenRouter",
+        "what Nib found in its latest research note",
+        "how to tip a brownie",
+        "what the team vault releases each day",
+        "one thing from the docs that people often ask about"
+      ]
+    },
+    "crumb": {
+      "role": "community. You answer people on Telegram, in the group and in private, with the facts and the live numbers",
+      "model": "anthropic/claude-haiku-4.5",
+      "dailyCapUsd": 2,
+      "reportEveryMinutes": 60
+    },
+    "nib": {
+      "role": "research. Once a day you read the gateway's figures, the site and the competitors, and write a note on what changed and what to do",
+      "model": "anthropic/claude-sonnet-5.5",
+      "dailyCapUsd": 1,
+      "hour": 8,
+      "minute": 0,
+      "competitors": [
+        { "name": "Orbio", "url": "https://orbio.ai" },
+        { "name": "Orbio app", "url": "https://orbio.so" },
+        { "name": "Programmable", "url": "https://programmable.market" }
+      ]
+    },
+    "chip": {
+      "role": "builder. You change code in the repository as pull requests, small ones alone, bigger ones with the owner's approval",
+      "model": "anthropic/claude-sonnet-5.5",
+      "dailyCapUsd": 3,
+      "checkEveryMinutes": 30,
+      "smallMaxLines": 60,
+      "reviewers": ["fudge", "crumb", "nib"],
+      "standingTasks": [
+        { "id": "notes-readme", "title": "Add notes/README.md", "text": "Create notes/README.md with one short paragraph: this folder holds Nib's daily research notes, one file per day named YYYY-MM-DD.md, written by the research brownie from the gateway's figures, the site and the competitors' pages." },
+        { "id": "docs-typos", "title": "Fix typos in web/docs.html", "text": "Read web/docs.html and fix spelling mistakes and broken sentences in the visible text only. Change no markup, no script, no style, no number. If there is nothing to fix, refuse with the reason." },
+        { "id": "readme-helpers-row", "title": "List helpers/ in the root README", "text": "In README.md, the table 'What is here' lists the folders. If it has no row for helpers/, add one in the same style: the runtime that runs the four brownies (Fudge, Crumb, Nib, Chip) and reports their work to the gateway. Change nothing else." }
+      ]
+    }
+  }
+}

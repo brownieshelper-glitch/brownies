@@ -39,3 +39,4 @@ helpers/helpers/sprinkle.mjs
 helpers/test/sprinkle.test.mjs
 helpers/test/video.test.mjs
 helpers/video/
+helpers/test/renderchild.test.mjs

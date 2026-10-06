@@ -4,6 +4,7 @@
 import { Helper } from "../lib/helper.mjs";
 import { tidy } from "../lib/voice.mjs";
 import { htmlToText, cut } from "../lib/text.mjs";
+import { recentLaunches, launchesBlock } from "../lib/launches.mjs";
 
 const RULES = `Your task now: write today's research note.
 - About 300 words. Two headings, exactly these: "What changed" and "What to do".
@@ -19,6 +20,8 @@ export class Nib extends Helper {
     this.fetch = deps.fetch || globalThis.fetch;
     this.siteUrl = String(deps.siteUrl || "https://feedthebrownies.com").replace(/\/$/, "");
     this.competitors = this.config.competitors || [];
+    this.rpcUrl = deps.rpcUrl || "";
+    this.launches = this.config.launches || null; // { hours, max }: Programmable launches on Ethereum, from the chain
   }
 
   jobs() {
@@ -39,6 +42,18 @@ export class Nib extends Helper {
     }
   }
 
+  /// The coins launched through Programmable on Ethereum in the last day, read from the chain. "" when off or unreachable.
+  async programmableLaunches() {
+    if (!this.launches || (!this.rpcUrl && !this.launches.rpcUrls?.length)) return "";
+    try {
+      const list = await recentLaunches({ rpcUrls: this.launches.rpcUrls || [this.rpcUrl], hours: this.launches.hours || 24, fetch: this.fetch });
+      return launchesBlock(list, { hours: this.launches.hours || 24, max: this.launches.max || 15 });
+    } catch (e) {
+      this.log(`[nib] could not read the Programmable launches: ${String(e.message).slice(0, 80)}`);
+      return "PROGRAMMABLE LAUNCHES (Ethereum, last day): [the chain could not be read today]";
+    }
+  }
+
   /// Today's note. Returns { date, text, url } or null (already written today, or no budget).
   async note() {
     const now = this.clock.now();
@@ -50,6 +65,7 @@ export class Nib extends Helper {
     const site = await this.page(`${this.siteUrl}/llms.txt`, 3000);
     const pages = [];
     for (const c of this.competitors) pages.push(`### ${c.name} (${c.url})\n${await this.page(c.url, c.max || 3500)}`);
+    const launches = await this.programmableLaunches();
     const prev = this.store.latestNote;
     const prompt = [
       `Today is ${date}.`,
@@ -57,6 +73,7 @@ export class Nib extends Helper {
       `TEAM SUMMARY (JSON): ${summary.ok ? cut(JSON.stringify(summary.body), 1500) : "[the gateway did not answer]"}`,
       `OUR SITE (llms.txt):\n${site}`,
       pages.length ? `COMPETITORS:\n${pages.join("\n\n")}` : "COMPETITORS: none configured.",
+      launches,
       prev ? `PREVIOUS NOTE (${prev.date}):\n${cut(prev.text, 2500)}` : "PREVIOUS NOTE: none, this is the first.",
       "Write today's note now.",
     ].join("\n\n");

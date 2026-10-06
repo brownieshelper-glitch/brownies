@@ -1,6 +1,10 @@
-// Fudge, marketing. Writes posts for X in the project's voice, at fixed hours, and answers the mentions that ask
+// Fudge, marketing. Writes posts in the project's voice at fixed hours, and answers the mentions on X that ask
 // something. Never the same post twice, never past its daily cap of posts or dollars. Facts come from facts.md
 // and Nib's latest note, nothing else.
+//
+// Every post goes to two places at once: X and the website (the "posts" reports the site reads from the gateway).
+// When X refuses (a banned or shadow-banned account, a dead token) or X is not configured, the post still goes
+// out on the site and the owner is told once an hour; so the account can be taken down, the words cannot.
 import { Helper, ordinal } from "../lib/helper.mjs";
 import { tidy, problems } from "../lib/voice.mjs";
 import { cut, oneLine } from "../lib/text.mjs";
@@ -38,6 +42,7 @@ export class Fudge extends Helper {
   constructor(deps) {
     super("fudge", deps);
     this.x = deps.x;
+    this.siteUrl = String(deps.siteUrl || "https://feedthebrownies.com").replace(/\/$/, "");
     this.topics = this.config.topics?.length ? this.config.topics : DEFAULT_TOPICS;
     this.maxPosts = this.config.maxPostsPerDay ?? 3;
     this.maxReplies = this.config.maxRepliesPerDay ?? 12;
@@ -57,22 +62,29 @@ export class Fudge extends Helper {
     return list[(day * 3 + n) % list.length];
   }
 
-  /// One post. Returns { id, url, text } or null when nothing was posted (cap, budget, or no clean text).
+  /// Posts made today, on X and on the site together (a post that only reached the site still counts).
+  postsToday(now) { return this.store.postsToday("fudge", "x", "post", now) + this.store.postsToday("fudge", "site", "post", now); }
+  /// The same text, wherever it went.
+  hasPost(text) { return this.store.hasPost("x", text) || this.store.hasPost("site", text); }
+
+  /// One post, to X and to the site. Returns { id, url, text, place } or null when nothing was posted (cap,
+  /// budget, or no clean text). `place` is "x" when X took it, "site" when only the site did.
   async post(slot = {}) {
-    if (!this.x?.configured) { this.log("[fudge] X is not configured, no post"); return null; }
     const now = this.clock.now();
-    const made = this.store.postsToday("fudge", "x", "post", now);
+    const made = this.postsToday(now);
     if (made >= this.maxPosts) { this.log(`[fudge] already ${made} posts today`); return null; }
     if (!(await this.ready())) return null;
     const nth = slot.nth || made + 1;
     await this.status(`Writing today's ${ordinal(nth)} post`);
-    const recent = this.store.recentPosts("fudge", "x", "post", 12);
+    const recent = [...this.store.recentPosts("fudge", "x", "post", 12), ...this.store.recentPosts("fudge", "site", "post", 12)].slice(0, 12);
     const topic = this.pickTopic(now, made);
+    const work = await this.todaysWork();
     let text = null, cost = 0, lastProblems = [];
     for (let attempt = 0; attempt < 3 && !text; attempt++) {
       const prompt = [
         `Topic: ${topic}.`,
         recent.length ? `Earlier posts, do not repeat them:\n${recent.map((p) => "- " + oneLine(p)).join("\n")}` : "",
+        work,
         attempt ? `The last try was refused (${lastProblems.join(", ")}). Write it again with different words.` : "",
         "Write the post now.",
       ].filter(Boolean).join("\n\n");
@@ -80,7 +92,7 @@ export class Fudge extends Helper {
       cost += r.costMicro;
       const t = tidy(r.text).replace(/\n+/g, " ");
       lastProblems = problems(t, { maxLen: 270, maxHashtags: 1 });
-      if (this.store.hasPost("x", t)) lastProblems.push("same as an earlier post");
+      if (this.hasPost(t)) lastProblems.push("same as an earlier post");
       if (!lastProblems.length) text = t;
       else this.log(`[fudge] draft refused: ${lastProblems.join(", ")}`);
     }
@@ -89,10 +101,32 @@ export class Fudge extends Helper {
       this.store.jobDone({ at: now, helper: "fudge", job: "post", ok: false, costMicro: cost, note: lastProblems.join(", ") });
       return null;
     }
-    const posted = await this.x.post(text);
-    this.store.addPost({ at: now, helper: "fudge", place: "x", kind: "post", text, externalId: posted.id, url: posted.url });
-    await this.report("post", cut(text, 160), { body: text.length > 160 ? text : null, url: posted.url, place: "x", cost_micro: cost });
-    return { ...posted, text };
+    // X first, the site always. A refusal by X is not the end of the post.
+    let posted = null;
+    if (this.x?.configured) {
+      try { posted = await this.x.post(text); }
+      catch (e) {
+        if (e.budget) throw e;
+        this.log(`[fudge] X refused the post (${cut(e.message, 100)}); it goes out on the site only`);
+        if (e.credentials) await this.alerts?.credentials("x", e.message);
+        else await this.alerts?.failure("fudge", "post on X", cut(e.message, 200));
+      }
+    } else this.log("[fudge] X is not configured: the post goes out on the site only");
+    const place = posted ? "x" : "site";
+    const url = posted ? posted.url : `${this.siteUrl}/posts.html`;
+    this.store.addPost({ at: now, helper: "fudge", place, kind: "post", text, externalId: posted?.id || null, url });
+    await this.report("post", cut(text, 160), { body: text.length > 160 ? text : null, url, place, cost_micro: cost });
+    return { id: posted?.id || null, url, text, place };
+  }
+
+  /// What the brownies did today, from the gateway's team summary, as a block for the prompt ("" when unreachable).
+  /// So a post about the Kitchen says what really happened, and never invents a job.
+  async todaysWork() {
+    const r = await this.gateway.summary();
+    if (!r.ok || !r.body) return "";
+    const rows = (r.body.helpers || []).map((h) => `- ${h.helper}: ${h.today ?? 0} job${h.today === 1 ? "" : "s"} today, ${h.total ?? 0} in all${h.status?.title ? `, now: ${oneLine(h.status.title)}` : ""}`);
+    if (!rows.length) return "";
+    return `TODAY'S WORK, read from the Kitchen just now (quote only what is here, never a job that is not listed):\n${rows.join("\n")}`;
   }
 
   /// Reads new mentions and answers the ones that ask something. Returns how many were answered.

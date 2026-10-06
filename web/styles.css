@@ -491,3 +491,15 @@ textarea.prompt:focus { border-color: var(--bone); }
   .btn, .chip > button, .field button.max { transition: none; }
   .btn:active, .chip > button:active { transform: none; }
 }
+
+/* ---- Fudge's posts: the home band and posts.html. The list reuses the Kitchen feed; a post is its own text. ---- */
+.posts-band { border-top: 1px solid var(--line); }
+.posts-band .feed { margin-top: 8px; }
+.posts-band .cta { margin-top: 28px; }
+.posts .what { font-weight: 500; font-size: 20px; line-height: 1.45; }
+.posts .meta a { color: var(--bone); text-decoration: underline; text-underline-offset: 3px; }
+.posts .meta a:hover { color: var(--orange); }
+.posts-wrap .feed { margin-top: 0; }
+@media (max-width: 640px) {
+  .posts .what { font-size: 18px; }
+}

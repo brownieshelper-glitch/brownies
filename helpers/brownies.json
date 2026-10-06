@@ -7,7 +7,11 @@
       "role": "marketing. You write the posts for X and answer the mentions that ask something",
       "model": "anthropic/claude-haiku-4.5",
       "dailyCapUsd": 1.5,
-      "postHours": [9, 13, 18],
+      "postHours": [
+        9,
+        13,
+        18
+      ],
       "postMinute": 0,
       "mentionsEveryMinutes": 20,
       "maxPostsPerDay": 3,
@@ -29,7 +33,9 @@
       "role": "community. You answer people on Telegram, in the group and in private, with the facts and the live numbers",
       "model": "anthropic/claude-haiku-4.5",
       "dailyCapUsd": 2,
-      "reportEveryMinutes": 60
+      "reportEveryMinutes": 60,
+      "questionsHour": 20,
+      "_questions": "Once a day at questionsHour Crumb writes what people asked into notes/questions/YYYY-MM-DD.md, a short answer each, for the team and for Chip's FAQ page."
     },
     "nib": {
       "role": "research. Once a day you read the gateway's figures, the site and the competitors, and write a note on what changed and what to do",
@@ -38,10 +44,28 @@
       "hour": 8,
       "minute": 0,
       "competitors": [
-        { "name": "Orbio", "url": "https://orbio.ai" },
-        { "name": "Orbio app", "url": "https://orbio.so" },
-        { "name": "Programmable", "url": "https://programmable.market" }
-      ]
+        {
+          "name": "Orbio",
+          "url": "https://orbio.ai"
+        },
+        {
+          "name": "Orbio app",
+          "url": "https://orbio.so"
+        },
+        {
+          "name": "Programmable",
+          "url": "https://programmable.market"
+        }
+      ],
+      "launches": {
+        "hours": 24,
+        "max": 15,
+        "_comment": "Programmable launches on Ethereum in the last N hours, read from the chain (FoundationLaunchedV3 events) and listed in the note",
+        "rpcUrls": [
+          "https://rpc.mevblocker.io",
+          "https://ethereum-rpc.publicnode.com"
+        ]
+      }
     },
     "chip": {
       "role": "builder. You change code in the repository as pull requests, small ones alone, bigger ones with the owner's approval",
@@ -49,11 +73,27 @@
       "dailyCapUsd": 3,
       "checkEveryMinutes": 30,
       "smallMaxLines": 60,
-      "reviewers": ["fudge", "crumb", "nib"],
+      "reviewers": [
+        "fudge",
+        "crumb",
+        "nib"
+      ],
       "standingTasks": [
-        { "id": "notes-readme", "title": "Add notes/README.md", "text": "Create notes/README.md with one short paragraph: this folder holds Nib's daily research notes, one file per day named YYYY-MM-DD.md, written by the research brownie from the gateway's figures, the site and the competitors' pages." },
-        { "id": "docs-typos", "title": "Fix typos in web/docs.html", "text": "Read web/docs.html and fix spelling mistakes and broken sentences in the visible text only. Change no markup, no script, no style, no number. If there is nothing to fix, refuse with the reason." },
-        { "id": "readme-helpers-row", "title": "List helpers/ in the root README", "text": "In README.md, the table 'What is here' lists the folders. If it has no row for helpers/, add one in the same style: the runtime that runs the four brownies (Fudge, Crumb, Nib, Chip) and reports their work to the gateway. Change nothing else." }
+        {
+          "id": "notes-readme",
+          "title": "Add notes/README.md",
+          "text": "Create notes/README.md with one short paragraph: this folder holds Nib's daily research notes, one file per day named YYYY-MM-DD.md, written by the research brownie from the gateway's figures, the site and the competitors' pages."
+        },
+        {
+          "id": "docs-typos",
+          "title": "Fix typos in web/docs.html",
+          "text": "Read web/docs.html and fix spelling mistakes and broken sentences in the visible text only. Change no markup, no script, no style, no number. If there is nothing to fix, refuse with the reason."
+        },
+        {
+          "id": "readme-helpers-row",
+          "title": "List helpers/ in the root README",
+          "text": "In README.md, the table 'What is here' lists the folders. If it has no row for helpers/, add one in the same style: the runtime that runs the four brownies (Fudge, Crumb, Nib, Chip) and reports their work to the gateway. Change nothing else."
+        }
       ]
     }
   }

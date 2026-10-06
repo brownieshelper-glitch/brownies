@@ -68,7 +68,9 @@ the contracts.
 
 ## The brownies
 
-- Fudge does marketing: writes and posts about the coin on X (@Feedthebrownies).
+- Fudge does marketing: writes and posts about the coin on X (@Feedthebrownies) and on the site's Posts page
+  (https://feedthebrownies.com/posts.html) at the same time. If X ever takes the account down, the posts go on at
+  the site.
 - Crumb looks after the community: answers people on Telegram.
 - Nib does research: watches the market and the competition, writes one note a day.
 - Chip builds: changes code in the public repository, github.com/brownieshelper-glitch/brownies.

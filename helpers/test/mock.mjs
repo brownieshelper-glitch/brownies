@@ -231,7 +231,7 @@ export function makeWorld({ mode = "prelaunch", clock = new FakeClock(), tz = "U
   const deps = (name) => ({ config: helpersCfg[name], brain, gateway, store, clock, alerts, facts: FACTS, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: "999" });
   const fudge = new Fudge({ ...deps("fudge"), x });
-  const crumb = new Crumb({ ...deps("crumb"), telegram, groupChatId: "-100", ownerChatId: "999", onDecision: (id, d, ctx) => chip.decide(id, d, ctx), onNote: (id, t) => chip.addNote(id, t) });
+  const crumb = new Crumb({ ...deps("crumb"), telegram, github, groupChatId: "-100", ownerChatId: "999", onDecision: (id, d, ctx) => chip.decide(id, d, ctx), onNote: (id, t) => chip.addNote(id, t) });
   const nib = new Nib({ ...deps("nib"), github, siteUrl: "https://site.test", fetch });
   fetch.on("GET", "https://site.test/llms.txt", () => ({ text: "# Brownies\n\n> Inference credits on Ethereum (chain id 1).", headers: { "content-type": "text/plain" } }));
   fetch.on("GET", "https://orbio.test/", () => ({ text: "<html><head><style>.a{}</style></head><body><h1>Orbio</h1><p>Agents on chain. The protocol takes 10% of fees.</p><script>secretScript()</script></body></html>", headers: { "content-type": "text/html" } }));

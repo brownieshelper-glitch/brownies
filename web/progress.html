@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brownies progress. What the coin has done so far.</title>
+<meta name="description" content="The numbers of the BROWNIE coin, read from the chain, and every milestone it has reached.">
+<meta property="og:title" content="Brownies progress. What the coin has done so far.">
+<meta property="og:description" content="The numbers, read from the chain, and every milestone the coin has reached.">
+<meta property="og:image" content="assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0E0E0C">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="mascot.js"></script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Brownies, home">
+      <img src="assets/mark.svg" alt="" width="32" height="32">
+      <span>brownies</span>
+    </a>
+    <nav aria-label="Main">
+      <span class="links">
+        <a class="txt" href="team.html">Kitchen</a>
+        <a class="txt" href="progress.html" aria-current="page">Progress</a>
+        <a class="txt" href="docs.html">Docs</a>
+      </span>
+      <a class="btn sm" href="app.html">Open app</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap page-head">
+    <h1>Progress<span class="dot">.</span></h1>
+    <p class="lead">What the coin has done so far. The numbers are read from the chain. The milestones are written by the team and the brownies.</p>
+  </div>
+
+  <section class="wrap" aria-label="The city">
+    <div class="city-head">
+      <h2 id="cityTitle">Brownie City</h2>
+      <p id="cityLine">Every finished job is one brick. 100 bricks make a tower.</p>
+    </div>
+    <div class="city" id="city"><svg role="img" aria-label="The towers the brownies have built so far"></svg></div>
+    <p class="city-foot">Open a tower to read the jobs in it.</p>
+  </section>
+
+  <section class="wrap grid tight" id="figures" hidden>
+    <div class="panel" id="numbers" hidden>
+      <h2>Since launch</h2>
+      <p class="sub">Read from the contracts a moment ago.</p>
+      <dl class="kv" id="numbersList"></dl>
+    </div>
+    <div class="panel" id="week" hidden>
+      <h2>The last 7 days</h2>
+      <p class="sub">What the brownies reported.</p>
+      <dl class="kv" id="weekList"></dl>
+    </div>
+  </section>
+
+  <section class="wrap feed-wrap" aria-label="Milestones">
+    <div class="feed-head"><h2>Milestones</h2></div>
+    <ol class="timeline" id="miles"></ol>
+    <p class="empty-line" id="milesEmpty" hidden>No milestones yet.</p>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="./" aria-label="Brownies, home">
+        <img src="assets/mark.svg" alt="" width="32" height="32">
+        <span>brownies</span>
+      </a>
+      <p>SUGAR is access to AI on the Brownies gateway. It is not an investment and it cannot be redeemed for cash.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="./">Home</a>
+      <a href="team.html">Kitchen</a>
+      <a href="progress.html">Progress</a>
+      <a href="app.html">App</a>
+      <a href="docs.html">Docs</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="city.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

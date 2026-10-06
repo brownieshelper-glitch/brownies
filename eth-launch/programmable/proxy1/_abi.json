@@ -1,0 +1,62 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "target",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "expectedCodeHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "launchWallet",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "InvalidImplementation",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "type": "fallback",
+  "stateMutability": "payable"
+ },
+ {
+  "name": "implementation",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "implementationCodeHash",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "receive",
+  "stateMutability": "payable"
+ }
+]

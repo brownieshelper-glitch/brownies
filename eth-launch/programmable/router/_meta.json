@@ -1,0 +1,62 @@
+{
+ "match": "match",
+ "creationMatch": "match",
+ "runtimeMatch": "match",
+ "verifiedAt": "2026-08-25T05:58:09Z",
+ "compilation": {
+  "language": "Solidity",
+  "compiler": "solc",
+  "compilerVersion": "0.8.26+commit.8a97fa7a",
+  "compilerSettings": {
+   "viaIR": false,
+   "metadata": {
+    "appendCBOR": false,
+    "bytecodeHash": "none"
+   },
+   "optimizer": {
+    "runs": 1000,
+    "enabled": true
+   },
+   "evmVersion": "cancun",
+   "remappings": [
+    "@ensdomains/=lib/v4-core/node_modules/@ensdomains/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/uniswap-hooks/=lib/openzeppelin-uniswap-hooks/",
+    "@optimism/=lib/uerc20-factory/lib/optimism/packages/contracts-bedrock/",
+    "@solady/=lib/solady/",
+    "@uniswap/blocknumberish/=lib/blocknumberish/",
+    "@uniswap/liquidity-launcher/=lib/liquidity-launcher/",
+    "@uniswap/uerc20-factory/=lib/uerc20-factory/",
+    "@uniswap/v4-core/=lib/v4-core/",
+    "@uniswap/v4-periphery/=lib/v4-periphery/",
+    "blocknumberish/=lib/blocknumberish/",
+    "ds-test/=lib/v4-core/lib/forge-std/lib/ds-test/src/",
+    "forge-std/=lib/forge-std/src/",
+    "hardhat/=lib/v4-core/node_modules/hardhat/",
+    "liquidity-launcher/=lib/liquidity-launcher/",
+    "merkle-distributor/=lib/liquidity-launcher/lib/merkle-distributor/",
+    "openzeppelin-contracts/=lib/openzeppelin-contracts/",
+    "openzeppelin-uniswap-hooks/=lib/openzeppelin-uniswap-hooks/src/",
+    "permit2/=lib/permit2/",
+    "solady/=lib/solady/src/",
+    "solmate/=lib/solmate/",
+    "uerc20-factory/=lib/uerc20-factory/src/",
+    "v4-core/=lib/v4-core/src/",
+    "v4-periphery/=lib/v4-periphery/"
+   ]
+  },
+  "name": "ProgrammableLaunchStampRouterV1",
+  "fullyQualifiedName": "src/ProgrammableLaunchStampRouterV1.sol:ProgrammableLaunchStampRouterV1"
+ },
+ "deployment": {
+  "transactionHash": "0x3bc086661555c10040feb3fceb23d33003e22ca033e65cfae72592119ee8d486",
+  "blockNumber": "25717612",
+  "transactionIndex": "4",
+  "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+ },
+ "proxyResolution": {
+  "isProxy": false,
+  "proxyType": null,
+  "implementations": []
+ }
+}

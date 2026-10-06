@@ -1,0 +1,27 @@
+# build output
+out/
+cache/
+broadcast/
+node_modules/
+
+# libraries: install with `forge install` (see README), they are not part of this repository
+lib/
+
+# secrets and local files: the real ones live outside the project, in C:\Users\andrea\helix-secrets
+.env
+.env.*
+!.env.example
+gateway/.env
+gateway/data/
+
+# local rehearsals and test output
+web/deployments/*.local.json
+web/deployments/*.smoke.json
+web/deployments/*.fork.json
+eth-launch/launch-record-fork-*.json
+smoke/shots/
+web/.vercel/
+web/.vercelignore
+
+# old versions kept on the owner's disk only
+versions/

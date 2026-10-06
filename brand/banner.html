@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Brownies banner, 1500 x 500</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500&display=block" rel="stylesheet">
+<style>
+  :root { --ink: #0E0E0C; --bone: #F3EFE6; --spark: #FF5A1F; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1500px; height: 500px; background: var(--bone); font-family: "Bricolage Grotesque", sans-serif; color: var(--ink); overflow: hidden; position: relative; }
+  .words { position: absolute; left: 80px; top: 82px; }
+  h1 { font-weight: 800; font-size: 120px; letter-spacing: -0.055em; line-height: 0.9; }
+  h1 i { font-style: normal; color: var(--spark); }
+  .tag { font-weight: 800; font-size: 38px; letter-spacing: -0.035em; line-height: 1; margin-top: 16px; }
+  .sub { font-family: "JetBrains Mono", monospace; font-size: 17px; line-height: 1.5; color: #4a463e; margin-top: 14px; }
+  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 62px; background: var(--ink); }
+  .row { position: absolute; right: 40px; bottom: 56px; }
+  .row svg { height: 272px; display: block; }
+</style>
+</head>
+<body>
+<div class="floor"></div>
+<div class="words">
+  <h1>brownies<i>.</i></h1>
+  <div class="tag">Every trade feeds them.</div>
+  <div class="sub">AI helpers that work for the coin all night.<br>Stakers get paid in AI. feedthebrownies.com</div>
+</div>
+<div class="row" id="row"></div>
+<script src="../web/mascot.js"></script>
+<script>
+  const row = document.getElementById("row");
+  row.innerHTML = window.Mascot.lineup();
+  const svg = row.firstElementChild;
+  svg.style.width = Math.round(272 * Number(svg.dataset.ratio)) + "px";
+</script>
+</body>
+</html>

@@ -66,13 +66,13 @@ contract ForkEthereumTest is Test {
         (, uint256 expected) = h.previewSwap();
         assertEq(expected, 0, "nothing booked before the claim");
         h.claim();
-        assertEq(main.balance, 0.4 ether, "40% to the main wallet, as ETH");
-        assertEq(h.pendingRest(), 0, "the 60% was swapped");
+        assertEq(main.balance, 0.35 ether, "35% to the main wallet, as ETH");
+        assertEq(h.pendingRest(), 0, "the 65% was swapped");
         uint256 usdc = IERC20Like(USDC).balanceOf(funding);
-        assertGt(usdc, 600e6, "0.6 ETH is worth more than 600 dollars");
+        assertGt(usdc, 650e6, "0.65 ETH is worth more than 650 dollars");
         assertEq(h.totalStakersFunded() + h.totalTeamFunded(), usdc, "every dollar reached the funding wallet");
-        assertEq(h.totalStakersFunded(), usdc * 5 / 6);
-        assertEq(core.SUGAR().balanceOf(address(core.TEAM_VAULT())), h.totalTeamFunded(), "the brownies' tenth as SUGAR");
+        assertEq(h.totalStakersFunded(), usdc * 35 / 65);
+        assertEq(core.SUGAR().balanceOf(address(core.TEAM_VAULT())), h.totalTeamFunded(), "the brownies' 30% as SUGAR");
         assertEq(core.STAKING().totalFunded(), h.totalStakersFunded());
         assertEq(IERC20Like(WETH).balanceOf(address(h)), 0);
     }
@@ -88,7 +88,7 @@ contract ForkEthereumTest is Test {
         h.setProgram(true);
         _fees(1 ether);
         h.claim();
-        assertEq(main.balance, 1.4 ether, "on again: 40%");
+        assertEq(main.balance, 1.35 ether, "on again: 35%");
         vm.prank(main);
         vm.expectRevert(BrownieHarvester.NotOwner.selector);
         h.setProgram(false);
@@ -103,8 +103,8 @@ contract ForkEthereumTest is Test {
         tc[1] = int56(spot - 300) * 1800; // USDC is token0: a lower tick is a higher ETH price
         vm.mockCall(POOL, abi.encodeWithSelector(IUniswapV3PoolMinimal.observe.selector), abi.encode(tc, new uint160[](2)));
         h.claim();
-        assertEq(main.balance, 0.4 ether, "the main wallet was paid all the same");
-        assertEq(h.pendingRest(), 0.6 ether, "the 60% waits for a better price");
+        assertEq(main.balance, 0.35 ether, "the main wallet was paid all the same");
+        assertEq(h.pendingRest(), 0.65 ether, "the 65% waits for a better price");
         assertEq(IERC20Like(USDC).balanceOf(funding), 0);
         vm.clearMockedCalls();
         h.claim();
@@ -114,8 +114,8 @@ contract ForkEthereumTest is Test {
     function test_fork_oneClaimSwapsAtMostTheCap() public onlyFork {
         _fees(50 ether);
         h.claim();
-        assertEq(main.balance, 20 ether);
-        assertEq(h.pendingRest(), 10 ether, "30 were due, 20 swapped, 10 wait");
+        assertEq(main.balance, 17.5 ether);
+        assertEq(h.pendingRest(), 12.5 ether, "32.5 were due, 20 swapped, 12.5 wait");
         h.claim();
         assertEq(h.pendingRest(), 0);
     }
@@ -141,7 +141,7 @@ contract ForkEthereumTest is Test {
         (bool ok,) = address(h).call{value: 1 ether}("");
         assertTrue(ok);
         h.claim();
-        assertEq(main.balance, 0.4 ether);
+        assertEq(main.balance, 0.35 ether);
         assertGt(IERC20Like(USDC).balanceOf(funding), 0);
     }
 }

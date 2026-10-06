@@ -15,9 +15,9 @@ the contracts.
 
 - BROWNIE is a coin on Ethereum (chain id 1), launched through Programmable. Every buy and every sell pays a 2% tax.
   That tax is the only money in the system.
-- Half of the tax pays for AI for the people who stake BROWNIE. They receive it as SUGAR. One SUGAR pays for one
+- 35% of the tax pays for AI for the people who stake BROWNIE. They receive it as SUGAR. One SUGAR pays for one
   dollar of AI on the Brownies gateway.
-- A tenth of the tax feeds the brownies: four AI helpers that work for the coin.
+- 30% of the tax feeds the brownies: the AI helpers that work for the coin. The agents are the product, so they get the bigger share.
 - The gateway speaks the OpenAI API and serves every model on OpenRouter. A wallet is the account, and a signature
   from it is the API key.
 
@@ -27,8 +27,8 @@ the contracts.
   curve. The whole supply went into that pool at launch through Programmable's factory.
 - Tax: 2% on buys and 2% on sells, set at launch, nobody can change it. Programmable charges its own 0.30% on every
   trade on top.
-- Where the tax goes, fixed in the Harvester contract: 50% to stakers (swapped to USDC, paid as SUGAR over the next
-  hour), 40% to the protocol (ETH to the Brownies wallet, for servers and growth), 10% to the brownies (swapped to
+- Where the tax goes, fixed in the Harvester contract: 35% to stakers (swapped to USDC, paid as SUGAR over the next
+  hour), 35% to the protocol (ETH to the Brownies wallet, for servers and growth), 30% to the brownies (swapped to
   USDC, minted as SUGAR into the team vault).
 - The team can switch the program off (new fees go to the team wallet) but cannot change the shares.
 
@@ -74,7 +74,7 @@ the contracts.
 - Crumb looks after the community: answers people on Telegram.
 - Nib does research: watches the market and the competition, writes one note a day.
 - Chip builds: changes code in the public repository, github.com/brownieshelper-glitch/brownies.
-- Budget: the 10% of the tax arrives in the team vault as SUGAR. Once a day the vault releases one thirtieth of
+- Budget: the 30% of the tax arrives in the team vault as SUGAR. Once a day the vault releases one thirtieth of
   what it holds, split among the brownies by weight. Steady trading gives a steady budget; a quiet market shrinks it
   slowly, never to zero overnight. Anyone can raise it by sending SUGAR to the vault.
 - Tips: anyone can tip a brownie in SUGAR. A tip goes straight onto that brownie's key and is counted on the chain.

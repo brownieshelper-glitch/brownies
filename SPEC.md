@@ -6,6 +6,15 @@ Owner's framing, 2026-10-02: "we are gonna be a competitor of orbio, so we have 
 
 ## STATUS, 2026-10-05 (after the rebrand)
 
+TAX SPLIT CHANGED 2026-10-06 (owner's decision before any deployment, final): 35% to the team wallet (ETH), 35% to
+stakers (USDC, streamed as SUGAR), 30% to the brownies (USDC minted as SUGAR into the TeamVault). Was 40 / 50 / 10.
+Reason, in the owner's words: the agents are the core of the project and should get more; at full scale they will
+need more; and only a few holders will stake. Changed everywhere: BrownieHarvester constants (MAIN_BPS 3500,
+STAKERS_BPS 3500, TEAM_BPS 3000; the swap legs split 35/65 and 30/65), fork tests, rehearse-fees.mjs, the home page
+bar, docs, llms.txt, README, helpers/facts.md, the explainer video captions. Everywhere below that still says 50/40/10
+is history. Team money can always be added to the agents: send SUGAR to the vault (bought from the Minter at 1 USDC),
+tip a brownie, or in prelaunch mode just pay OpenRouter.
+
 Built and tested, nothing deployed.
 
 REBRAND 2026-10-05, chosen by the owner: the project is BROWNIES. The coin is Brownies / BROWNIE. The credit token

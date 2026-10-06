@@ -6,8 +6,8 @@
 // Steps: fund anvil account 1 (the buyer) -> buy 0.01 ETH inside the wallet-cap window -> a 0.2 ETH buy must be
 // refused by the cap -> jump past the window -> buy 3 ETH -> sell half the coins -> a stranger (account 2) calls
 // ledger.claimCreator() -> the same stranger calls harvester.claim() -> print and assert the split:
-// 40% of the creator fee to MAIN_WALLET as ETH, 60% swapped to USDC and pulled by staking.fund (5/6) and the SUGAR
-// minter (1/6), every dollar of it ending in FUNDING_WALLET. Local anvil only; refuses anything else.
+// 35% of the creator fee to MAIN_WALLET as ETH, 65% swapped to USDC and pulled by staking.fund (35/65) and the SUGAR
+// minter (30/65), every dollar of it ending in FUNDING_WALLET. Local anvil only; refuses anything else.
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -181,9 +181,9 @@ console.log(`  staking.totalFunded() (USDC)        ${fmtUsdc(totalFunded - total
 console.log(`  SUGAR in the TeamVault              ${fmtUsdc(sugarVault - sugarVault0)}`);
 console.log(`  harvester: mainOwed ${fmt(mainOwed)} pendingRest ${fmt(pendingRest)} WETH, totalMainPaid ${fmt(totalMainPaid)} ETH, stakers ${fmtUsdc(totalStakersFunded)} team ${fmtUsdc(totalTeamFunded)} USDC`);
 
-const expectMain = (creatorReceived * 4000n) / 10000n;
+const expectMain = (creatorReceived * 3500n) / 10000n;
 const problems = [];
-if (mainDelta !== expectMain) problems.push(`main wallet got ${mainDelta}, expected exactly 40% = ${expectMain}`);
+if (mainDelta !== expectMain) problems.push(`main wallet got ${mainDelta}, expected exactly 35% = ${expectMain}`);
 if (fundingDelta <= 0n) problems.push("the funding wallet received no dollars");
 if (fundingDelta !== totalStakersFunded + totalTeamFunded) problems.push("funding wallet USDC != stakers + team legs");
 if (totalFunded - totalFunded0 !== totalStakersFunded) problems.push("staking.totalFunded != the stakers leg");
@@ -195,4 +195,4 @@ const ethUsd = Number(fundingDelta) / 1e6 / (Number(creatorReceived - expectMain
 if (!(ethUsd > 500 && ethUsd < 20000)) problems.push("the USDC leg implies an absurd ETH price: " + ethUsd);
 console.log(`  implied ETH price of the swap       $${ethUsd.toFixed(2)}`);
 if (problems.length) fail(problems.join("\n      "));
-console.log("\nREHEARSAL PASSED: 40% to the main wallet as ETH, the rest in dollars to the funding wallet through staking.fund and the SUGAR minter.");
+console.log("\nREHEARSAL PASSED: 35% to the main wallet as ETH, the rest in dollars to the funding wallet through staking.fund and the SUGAR minter.");

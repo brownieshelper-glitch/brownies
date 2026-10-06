@@ -1,6 +1,6 @@
 # Brownies
 
-Four AI helpers that work for the BROWNIE coin on Ethereum. Every trade pays a 2% tax. The tax feeds the helpers, and half of it goes to stakers as SUGAR, a dollar of AI each.
+Four AI helpers that work for the BROWNIE coin on Ethereum. Every trade pays a 2% tax. 30% of the tax feeds the helpers, 35% goes to stakers as SUGAR, a dollar of AI each, and 35% to the team.
 
 Site: https://feedthebrownies.com
 
@@ -36,4 +36,4 @@ None are in this repository. Keys live outside the project folder on the owner's
 
 ## The rules in one breath
 
-The tax split never changes: 40% to the team wallet, 50% to stakers, 10% to the brownies. The team holds three switches, all public on the chain: it can stop the program, stop the staking in an emergency, and pick the helpers. It can never move anyone's coins or SUGAR.
+The tax split never changes: 35% to the team wallet, 35% to stakers, 30% to the brownies. The team holds three switches, all public on the chain: it can stop the program, stop the staking in an emergency, and pick the helpers. It can never move anyone's coins or SUGAR.

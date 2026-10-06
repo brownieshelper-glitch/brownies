@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Wallet } from "ethers";
 import { makeWorld } from "./mock.mjs";
-import { BudgetError, keyMessage, keyFromSignature } from "../lib/brain.mjs";
+import { BudgetError, keyMessage, keyFromSignature, REASONING_HEADROOM } from "../lib/brain.mjs";
 
 test("prelaunch: the call goes to OpenRouter with usage accounting, the cost is counted, the cap stops the helper", async () => {
   const W = makeWorld({ cost: 0.0023, config: { nib: { dailyCapUsd: 0.005 } } });
@@ -13,7 +13,7 @@ test("prelaunch: the call goes to OpenRouter with usage accounting, the cost is 
   const call = W.or.calls[0];
   assert.equal(call.headers.authorization, "Bearer or-test-key");
   assert.deepEqual(call.body.usage, { include: true });
-  assert.equal(call.body.max_tokens, 50);
+  assert.equal(call.body.max_tokens, 50 + REASONING_HEADROOM, "the answer gets its room plus the headroom for thinking");
   assert.equal(call.body.model, "test/big");
   assert.deepEqual(W.store.spentToday("nib", W.clock.now()), { micro: 2300, calls: 1 });
   await W.brain.chat("nib", { prompt: "Again." });

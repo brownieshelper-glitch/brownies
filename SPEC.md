@@ -142,11 +142,14 @@ POST-LAUNCH TOOLING 2026-10-06: eth-launch/add-helpers.mjs (plan | fork | broadc
 
 API ONLINE 2026-10-06: https://api.feedthebrownies.com answers with a Let's Encrypt certificate. Two things had blocked it: the registry still lists Porkbun's nameservers (the switch to Vercel's did not take), so DNS is served by Porkbun's zone (A api -> 142.93.168.190, A apex -> 76.76.21.21, CNAME www -> cname.vercel-dns.com; the same records exist at Vercel for when the nameservers move), and the droplet's ufw only allowed port 22 (80 and 443 opened). feedthebrownies.com, www and api all answer.
 
+THE BROWNIES RUNTIME, LIVE 2026-10-06 (helpers/, 46 tests, owner's rule "no dry mode"): one Node service, brownies-helpers on the droplet next to the gateway (/srv/brownies/helpers, env /etc/brownies/helpers.env copied from helix-secrets/brownies-helpers.env, redeploy = bash helpers/deploy-server.sh). Fudge posts on X at 9, 13, 18 Rome and answers mentions every 20 minutes; Crumb answers Telegram (group and private) within a minute and reports once an hour per chat; Nib writes one research note a day into notes/YYYY-MM-DD.md; Chip works GitHub issues labelled "chip" and standing tasks as pull requests: small text/docs/style/test changes merge alone after Fudge, Crumb and Nib each say yes, anything else or any no goes to the owner on Telegram with Approve and Reject. Every job is a report in the Kitchen. MODE=prelaunch thinks through OpenRouter with daily caps (1.5 / 2 / 1 / 3 USD), models claude-haiku-4.5 (Fudge, Crumb) and claude-sonnet-5.5 (Nib, Chip); MODE=live after the launch pays through the gateway with each helper's wallet key. HELPERS_OFF=fudge keeps Fudge quiet until the owner wants the first post. Facts the helpers may state are in helpers/facts.md (the coin is NOT launched, no addresses yet). First day: Nib's note committed, Chip's PR #1 (notes/README.md) reviewed yes/yes/no and waiting for the owner. Two fixes from that first run: Claude 5 models spend hidden thinking tokens inside max_tokens and OpenRouter refuses to turn it off (the first note was cut), so lib/brain.mjs adds 800 tokens of headroom and warns on finish_reason length; a review without a reason is asked once more.
+
+E2E STACK ON ETHEREUM 2026-10-06: smoke/site-stack.sh rebuilt on an anvil fork of mainnet (:8563) with the real launch flow (launch.mjs fork, rehearse-fees, add-helpers fork), the gateway live on the fork (:8792) behind a stand-in OpenRouter (smoke/mock-upstream.mjs :8793), the site (:8791), sample reports; `bash smoke/site-stack.sh once` runs smoke/site-e2e.mjs all (114 checks, now including tip, propose, vote and settle) and stops only its own PIDs. The first run found a real site bug: the SUGAR ABI in web/common.js had no allowance/approve, so the Tip button failed; fixed and republished. The old Robinhood stack is in versions/robinhood-pons-2026-10-06/site-stack.sh.
+
 NOT BUILT YET:
-- The helpers themselves (off chain): the runtime that runs each brownie on a schedule and on big claims, posting
-  to X, the code pipeline (small changes go live alone, the rest is reviewed by the other brownies and then by the
-  owner, who has the final vote), the alert that asks the owner to deposit or wait when the budget runs out. Needs
-  from the owner: an X account with API keys, a Telegram bot for alerts and votes, a GitHub repository.
+- (Built 2026-10-06, see THE BROWNIES RUNTIME.) Still open there: the Telegram group (Crumb answers private chats
+  only until TELEGRAM_GROUP_CHAT_ID is set), Fudge's first post (HELPERS_OFF=fudge until the owner says so),
+  MODE=live after the launch.
 - A tip button in the app. The home page says anyone can tip a brownie; today that is only a contract call.
 - Checked 2026-10-05 (the owner asked what is left on the tech side): the app has no page to propose or vote on a
   skill either (built 2026-10-06, see APP PAGE); the keeper only called harvester.claim() (fixed 2026-10-06, see KEEPER
@@ -160,7 +163,7 @@ NOT BUILT YET:
 - Short videos for TikTok, Instagram and X made from the brownie animations (needs a video encoder on the server).
 - A way to spend SUGAR without code (a chat page), so the reward is useful to buyers who are not developers.
 
-Still needed before launch (2026-10-06): the brownies runtime on the server (in progress), the deploy wallet funded with
+Still needed before launch (2026-10-06): the deploy wallet funded with
 about 0.05 ETH (owner), a test coin launched the same way first (owner's wish), then "launch it"; after the launch:
 verify.sh, add-helpers.mjs broadcast, the four addresses + START_BLOCK into the gateway env and restart, Programmable
 indexes the coin by hand. The domain, https, site, keeper wallet are done. Owner decisions open: first buy (none, by

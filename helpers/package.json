@@ -1,0 +1,15 @@
+{
+  "name": "brownies-helpers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The runtime that runs the four Brownies AI helpers: Fudge (X), Crumb (Telegram), Nib (research notes), Chip (code as pull requests). Reports every job to the gateway's team log.",
+  "scripts": {
+    "start": "node run.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "engines": { "node": ">=22.13" },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  }
+}

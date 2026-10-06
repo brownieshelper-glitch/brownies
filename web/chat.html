@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brownies chat. Spend your SUGAR on any model.</title>
+<meta name="description" content="Talk to any AI model with your SUGAR. Your wallet signs once, that signature is your key, and every answer is paid from your gateway balance.">
+<meta property="og:title" content="Brownies chat. Spend your SUGAR on any model.">
+<meta property="og:description" content="Connect a wallet, sign once, pick a model, talk. Every answer is paid from your SUGAR balance on the gateway.">
+<meta property="og:image" content="assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0E0E0C">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="mascot.js"></script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Brownies, home">
+      <img src="assets/mark.svg" alt="" width="32" height="32">
+      <span>brownies</span>
+    </a>
+    <nav aria-label="Main">
+      <span class="links">
+        <a class="txt" href="team.html">Kitchen</a>
+        <a class="txt" href="progress.html">Progress</a>
+        <a class="txt" href="docs.html">Docs</a>
+      </span>
+      <button class="btn sm" id="connectBtn" type="button">Connect wallet</button>
+      <div class="chip" id="walletChip" hidden>
+        <button id="chipBtn" type="button" aria-haspopup="menu" aria-expanded="false"><img id="walletIcon" alt="" hidden><span id="walletAddr"></span></button>
+        <div class="menu" id="walletMenu" role="menu" hidden>
+          <button id="menuCopy" type="button" role="menuitem">Copy address</button>
+          <a id="menuExplorer" href="#" target="_blank" rel="noopener" role="menuitem">View on the explorer</a>
+          <button id="menuDisconnect" type="button" role="menuitem">Disconnect</button>
+        </div>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="netwarn" id="netWarn" hidden>
+  <div class="wrap"><span>Your wallet is on another network.</span><button class="btn sm dark" id="switchBtn" type="button">Switch to Ethereum</button></div>
+</div>
+
+<main class="wrap chat-page">
+  <div class="page-head">
+    <h1>Chat<span class="dot">.</span></h1>
+    <p class="lead">Spend your SUGAR here. Your wallet signs one message, the signature is your key, and every answer is paid from your balance on the gateway. Nothing is stored on a server: the conversation lives in this tab.</p>
+  </div>
+
+  <section class="chat-bar" aria-label="Your key and balance">
+    <div class="chat-key">
+      <button class="btn" id="btnChatKey" type="button" disabled>Connect a wallet first</button>
+      <p class="hint" id="chatKeyHint">Signing is free. The same key works in the app and with any OpenAI SDK.</p>
+    </div>
+    <dl class="chat-balance" id="chatBalance" hidden>
+      <div><dt>Balance</dt><dd id="chatBal"></dd></div>
+      <div><dt>Spent in this chat</dt><dd id="chatSpent"></dd></div>
+    </dl>
+    <label class="chat-model"><span>Model</span>
+      <select id="chatModel" disabled><option value="">Connect and sign to load the models</option></select>
+    </label>
+  </section>
+
+  <p class="empty-line" id="chatClosed" hidden>The gateway opens with the launch. Until then this page cannot answer. Stake and get SUGAR in the app once the coin is live.</p>
+
+  <section class="chat-box" aria-label="Conversation">
+    <ol class="chat-log" id="chatLog" aria-live="polite"></ol>
+    <p class="empty-line" id="chatEmpty">Ask anything. The answer comes from the model you picked, and its price is taken from your balance after each answer.</p>
+    <form class="chat-form" id="chatForm">
+      <textarea id="chatInput" rows="3" placeholder="Write here" disabled aria-label="Your message"></textarea>
+      <div class="chat-actions">
+        <button class="btn ghost" id="btnChatClear" type="button">New conversation</button>
+        <button class="btn" id="btnChatSend" type="submit" disabled>Send</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="./" aria-label="Brownies, home">
+        <img src="assets/mark.svg" alt="" width="32" height="32">
+        <span>brownies</span>
+      </a>
+      <p>SUGAR is access to AI on the Brownies gateway. It is not an investment and it cannot be redeemed for cash.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="./">Home</a>
+      <a href="team.html">Kitchen</a>
+      <a href="progress.html">Progress</a>
+      <a href="app.html">App</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://t.me/feedthebrownies" target="_blank" rel="noopener">Telegram</a>
+      <a href="https://x.com/Feedthebrownies" target="_blank" rel="noopener">X</a>
+      <a href="chat.html">Chat</a>
+    </nav>
+  </div>
+</footer>
+
+<div class="modal" id="walletModal" hidden role="dialog" aria-modal="true" aria-labelledby="walletTitle">
+  <div class="sheet">
+    <div class="sheet-head"><h2 id="walletTitle">Connect a wallet</h2><button class="x" id="walletModalClose" type="button" aria-label="Close"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3l12 12M15 3L3 15"/></svg></button></div>
+    <div id="walletList"></div>
+  </div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="wallet.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>

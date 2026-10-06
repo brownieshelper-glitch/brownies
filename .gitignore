@@ -28,3 +28,8 @@ versions/
 
 # Programmable sources fetched from Sourcify keep their own dependency folders; they are not part of this repository
 eth-launch/programmable/*/lib/
+
+# helpers that are not announced yet: their code and settings stay off the public repository until the owner says so
+helpers/private.json
+helpers/helpers/glaze.mjs
+helpers/test/glaze.test.mjs

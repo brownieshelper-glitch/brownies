@@ -53,7 +53,8 @@ EMPTY=$(node -e 'const fs=require("fs"); console.log(fs.readFileSync(process.arg
 echo "== server reachable: $($SSH 'echo yes && node --version')"
 
 # ---- code ----
-tar czf - helpers/run.mjs helpers/brownies.json helpers/facts.md helpers/package.json helpers/package-lock.json helpers/lib helpers/helpers \
+PRIVATE=""; [ -f helpers/private.json ] && PRIVATE="helpers/private.json"
+tar czf - helpers/run.mjs helpers/brownies.json helpers/facts.md helpers/package.json helpers/package-lock.json helpers/lib helpers/helpers $PRIVATE \
   | $SSH 'mkdir -p /srv/brownies /var/lib/brownies /etc/brownies && rm -rf /srv/brownies/helpers/lib /srv/brownies/helpers/helpers && tar xzf - -C /srv/brownies && cd /srv/brownies/helpers && npm ci --omit=dev --no-audit --no-fund 2>&1 | tail -1'
 echo "== code copied and dependencies installed"
 

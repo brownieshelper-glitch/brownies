@@ -89,7 +89,7 @@
   function bubble(role, text) {
     const li = el("li", `msg ${role}`);
     if (role === "you") li.append(el("span", "who", "You"));
-    else { const f = el("span", "who face"); if (window.Mascot) f.innerHTML = window.Mascot.face("crumb"); li.append(f); }
+    else { const f = el("span", "who face"); const crumb = window.Mascot ? window.Mascot.team.find((m) => m.id === "crumb") : null; if (crumb) f.innerHTML = window.Mascot.face(crumb); li.append(f); }
     const p = el("p", "text", text);
     li.append(p);
     log.append(li);

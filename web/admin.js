@@ -15,7 +15,10 @@
   try { token = localStorage.getItem(KEY); } catch (_) {}
   let timer = null;
 
+  // on a local machine, ?demo=1 shows the room with sample figures and no server, for a look at the layout
+  const demo = B.local && new URLSearchParams(location.search).get("demo") === "1" ? demoApi() : null;
   async function api(path, opts = {}) {
+    if (demo) return demo(path, opts);
     const headers = { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) };
     let r;
     try { r = await fetch(API + path, { ...opts, headers }); } catch (_) { return { ok: false, status: 0, body: { error: "the server did not answer" } }; }
@@ -97,7 +100,8 @@
     const art = el("article", "admin-card" + (h.paused ? " paused" : "") + (h.hidden ? " hidden-helper" : ""));
     const head = el("div", "admin-card-head");
     const face = el("span", "face");
-    if (window.Mascot) face.innerHTML = ["fudge", "crumb", "nib", "chip"].includes(h.name) ? window.Mascot.face(h.name) : window.Mascot.coin({ shape: "square" });
+    const known = window.Mascot ? window.Mascot.team.find((m) => m.id === h.name) : null;
+    if (window.Mascot) face.innerHTML = known ? window.Mascot.face(known) : window.Mascot.coin({ shape: "square" });
     const who = el("div");
     const title = el("h3", null, h.title);
     if (h.hidden) title.append(el("span", "badge", "hidden"));
@@ -135,6 +139,31 @@
   }
   $("btnRefresh").onclick = refresh;
   $("btnSummary").onclick = () => command({ action: "summary" });
+
+  /// Sample answers for ?demo=1 on a local machine: a logged-in room with made-up figures.
+  function demoApi() {
+    const t0 = Date.now();
+    const job = (id, daily, every, next) => ({ id, daily, everyMinutes: every, next: new Date(t0 + next).toISOString(), runs: 3 });
+    const state = {
+      mode: "prelaunch", now: new Date(t0).toISOString(), timezone: "Europe/Rome", uptimeSeconds: 5 * 3600 + 12 * 60, reports: 23, thoughts: 41, videos: 4, group: "-1004498393263",
+      helpers: [
+        { name: "fudge", title: "Fudge", role: "marketing. Writes the posts for X and answers mentions that ask something", hidden: false, paused: true, model: "anthropic/claude-haiku-4.5", capUsd: 1.5, spentTodayUsd: 0.0057, callsToday: 2, lastJob: null, jobs: [job("fudge-post", [9, 13, 18], null, 3 * 3600e3), job("fudge-mentions", null, 20, 9 * 60e3)], canAsk: true },
+        { name: "crumb", title: "Crumb", role: "community. Answers people on Telegram, in the group and in private", hidden: false, paused: false, model: "anthropic/claude-haiku-4.5", capUsd: 2, spentTodayUsd: 0.0182, callsToday: 6, lastJob: { at: t0 - 25 * 60e3, job: "reply", ok: true, note: "Answered 3 questions in the group" }, jobs: [job("crumb-flush", null, 5, 2 * 60e3), job("crumb-questions", [20], null, 5 * 3600e3)], canAsk: true },
+        { name: "nib", title: "Nib", role: "research. Reads the gateway's figures, the site and the competitors", hidden: false, paused: false, model: "anthropic/claude-sonnet-5.5", capUsd: 1, spentTodayUsd: 0.0292, callsToday: 1, lastJob: { at: t0 - 7 * 3600e3, job: "research", ok: true, note: "Research note 2026-10-06" }, jobs: [job("nib-note", [8], null, 11 * 3600e3)], canAsk: true },
+        { name: "chip", title: "Chip", role: "builder. Changes code in the repository as pull requests", hidden: false, paused: false, model: "anthropic/claude-sonnet-5.5", capUsd: 3, spentTodayUsd: 0.0171, callsToday: 5, lastJob: { at: t0 - 50 * 60e3, job: "build", ok: true, note: "Add notes/README.md" }, jobs: [job("chip-tasks", null, 30, 14 * 60e3)], canAsk: true },
+        { name: "glaze", title: "Glaze", role: "business development. Prepares everything the team has to send", hidden: true, paused: false, model: "anthropic/claude-sonnet-5.5", capUsd: 1.5, spentTodayUsd: 0.0204, callsToday: 1, lastJob: { at: t0 - 3 * 3600e3, job: "deal", ok: true, note: "Draft 1: Ask Programmable to index BROWNIE" }, jobs: [job("glaze-task", [10], null, 13 * 3600e3)], canAsk: true },
+      ],
+      approvals: [{ id: 2, helper: "chip", title: "Add a FAQ page from the questions people ask", url: "https://github.com/brownieshelper-glitch/brownies/pull/3", at: new Date(t0 - 40 * 60e3).toISOString() }],
+    };
+    const lines = ["[helpers] running", "[crumb] answering in the group -1004498393263 \"Brownies\" from now on", "[chip] a pull request waits for the owner", "[glaze] deal: Draft 1: Ask Programmable to index BROWNIE", "[admin] login (code)"].map((l, i) => `${new Date(t0 - (5 - i) * 60e3).toISOString()} ${l}`);
+    return async (path) => {
+      if (path === "/state") return { ok: true, status: 200, body: state };
+      if (path.startsWith("/log")) return { ok: true, status: 200, body: { lines } };
+      if (path === "/login") return { ok: true, status: 200, body: { token: "d".repeat(64) } };
+      return { ok: true, status: 200, body: { ok: true } };
+    };
+  }
+  if (demo) { token = "demo"; show(true); refresh(); return; }
 
   if (!S.gateway) { loginError("This page needs the gateway address in config.js."); return; }
   if (token) { const st = await api("/state"); if (st.ok) { show(true); refresh(); timer = setInterval(refresh, 20_000); } else { token = null; show(false); } }

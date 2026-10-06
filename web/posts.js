@@ -14,7 +14,8 @@
   function item(e, now) {
     const li = el("li");
     const face = el("span", "face");
-    if (window.Mascot) face.innerHTML = window.Mascot.face("fudge");
+    const fudge = window.Mascot ? window.Mascot.team.find((m) => m.id === "fudge") : null;
+    if (fudge) face.innerHTML = window.Mascot.face(fudge);
     const box = el("div");
     const meta = el("p", "meta");
     const when = el("time", null, B.ago ? B.ago(e.at, now) : new Date(e.at).toLocaleString());

@@ -24,7 +24,13 @@ npm start
 ```
 
 Routes: `GET /v1/models`, `GET /v1/key`, `POST /v1/key/rotate`, `POST /v1/chat/completions` (streaming works),
-`GET /api/protocol/stats`, `GET /api/protocol/account/:wallet`, `POST /api/protocol/index-tx`, `GET /health`.
+`GET /v1/grants`, `POST /v1/grants`, `POST /v1/grants/revoke`, `GET /api/protocol/stats`, `GET /api/protocol/account/:wallet`,
+`POST /api/protocol/index-tx`, `GET /health`.
+
+Grants: `POST /v1/grants {"grantee": "0x...", "daily_usd": 1}` lets another wallet spend from your balance, up to that much
+a day (UTC). The grantee signs its own key and adds `X-Brownies-Pay-From: <your wallet>` to `/v1/key` and
+`/v1/chat/completions`; the charge lands on you and the spend row says who spent it. `GET /v1/grants` lists what you gave
+and received with today's room; `POST /v1/grants/revoke {"grantee"}` ends one. The Bakery's holders fund their brownies this way.
 
 Use it from any OpenAI SDK: base URL `http://host:8790/v1`, API key `sk-brownie-...`. A 401 is a bad or rotated key, a
 402 is not enough balance, a 400 `unknown_model` means pick an id from `/v1/models`.

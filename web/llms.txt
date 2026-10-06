@@ -32,6 +32,7 @@
 - GET /v1/models
 - GET /v1/key
 - POST /v1/key/rotate
+- GET /v1/grants, POST /v1/grants {grantee, daily_usd}, POST /v1/grants/revoke {grantee}: let another wallet spend from your balance up to a daily cap; the spender adds the header X-Brownies-Pay-From: <your wallet>
 - GET /api/protocol/account/{wallet}
 - GET /api/protocol/stats
 - The team adds skills and brownies directly, no vote; the brownies can hire a new brownie themselves when a job is uncovered (a role, tasks and tools, never code). Stakers' votes only decide paid skills they propose.

@@ -5,9 +5,11 @@
 //   MODE=live       the call goes to the gateway (POST /v1/chat/completions) with the helper's own key: its wallet
 //                   signs "Brownies API key, chain 1, epoch N" (gateway/auth.mjs). The helper stops when GET /v1/key
 //                   says its balance is under a few cents. The balance is SUGAR the vault fed it, and tips.
+//                   A baked brownie (lib/bakery.mjs) has a wallet derived from HELPERS_MNEMONIC by its walletIndex and
+//                   pays from its holder's grant: every gateway call carries X-Brownies-Pay-From: <holder>.
 //
 // Both modes count every call in the store (spend per helper per day) and return cost_micro for the job's report.
-import { Wallet } from "ethers";
+import { Wallet, HDNodeWallet } from "ethers";
 
 // the same two lines as gateway/auth.mjs and the site: the runtime is deployed alone, so they are repeated here
 export const keyMessage = (chainId, epoch) => `Brownies API key, chain ${chainId}, epoch ${epoch}`;
@@ -23,9 +25,9 @@ export const DEFAULT_REASONING = { effort: "low" }; // measured: zero thinking t
 
 export class Brain {
   /// helpers: { fudge: { model, dailyCapUsd }, ... }   keys: { fudge: "0x...", ... } (live only)
-  constructor({ mode = "prelaunch", openrouterKey = "", openrouterUrl = "https://openrouter.ai/api/v1", gateway = null, keys = {}, chainId = 1, helpers = {}, store, clock, fetch = globalThis.fetch, alerts = null, minBalanceMicro = 50_000, log = () => {} }) {
+  constructor({ mode = "prelaunch", openrouterKey = "", openrouterUrl = "https://openrouter.ai/api/v1", gateway = null, keys = {}, mnemonic = "", chainId = 1, helpers = {}, store, clock, fetch = globalThis.fetch, alerts = null, minBalanceMicro = 50_000, log = () => {} }) {
     if (!["prelaunch", "live"].includes(mode)) throw new Error("mode must be prelaunch or live");
-    Object.assign(this, { mode, openrouterKey, openrouterUrl: openrouterUrl.replace(/\/$/, ""), gateway, keys, chainId, helpers, store, clock, fetch, alerts, minBalanceMicro, log });
+    Object.assign(this, { mode, openrouterKey, openrouterUrl: openrouterUrl.replace(/\/$/, ""), gateway, keys, mnemonic, chainId, helpers, store, clock, fetch, alerts, minBalanceMicro, log });
     this.wallets = new Map(); this.keyCache = new Map(); this.balanceCache = new Map();
     this.calls = 0;
   }
@@ -35,12 +37,17 @@ export class Brain {
 
   wallet(helper) {
     if (!this.wallets.has(helper)) {
-      if (!this.keys[helper]) throw new Error(`${helper} has no wallet key (${helper.toUpperCase()}_PRIVATE_KEY)`);
-      this.wallets.set(helper, new Wallet(this.keys[helper]));
+      const idx = this.helpers[helper]?.walletIndex;
+      if (this.keys[helper]) this.wallets.set(helper, new Wallet(this.keys[helper]));
+      else if (Number.isInteger(idx) && idx >= 0 && this.mnemonic) this.wallets.set(helper, HDNodeWallet.fromPhrase(this.mnemonic, undefined, `m/44'/60'/0'/0/${idx}`));
+      else throw new Error(`${helper} has no wallet key (${Number.isInteger(idx) ? "HELPERS_MNEMONIC is empty" : helper.toUpperCase() + "_PRIVATE_KEY"})`);
     }
     return this.wallets.get(helper);
   }
   address(helper) { return this.wallet(helper).address; }
+  /// The holder whose grant pays for this helper (a baked brownie), or null when it pays from its own balance.
+  payFrom(helper) { return this.helpers[helper]?.payFrom || null; }
+  payHeaders(helper) { const from = this.payFrom(helper); return from ? { "x-brownies-pay-from": from } : {}; }
 
   /// The helper's gateway key for its current epoch. `fresh` re-reads the epoch (after a key_revoked answer).
   async key(helper, { fresh = false } = {}) {
@@ -59,8 +66,10 @@ export class Brain {
     const c = this.balanceCache.get(helper);
     if (!fresh && c && this.clock.now() - c.at < 60_000) return c.micro;
     let k = await this.key(helper);
-    let r = await this.gateway.key(k.key);
-    if (r.status === 401) { k = await this.key(helper, { fresh: true }); r = await this.gateway.key(k.key); }
+    const H = this.payHeaders(helper);
+    let r = await this.gateway.key(k.key, H);
+    if (r.status === 401) { k = await this.key(helper, { fresh: true }); r = await this.gateway.key(k.key, H); }
+    if (r.status === 403) { this.balanceCache.set(helper, { at: this.clock.now(), micro: 0 }); return 0; } // no grant from the holder: nothing to spend
     if (!r.ok) return null;
     const micro = Math.round(Number(r.body?.balance?.available || 0) * 1e6);
     this.balanceCache.set(helper, { at: this.clock.now(), micro });
@@ -136,8 +145,10 @@ export class Brain {
 
   async _viaGateway(helper, body) {
     let k = await this.key(helper);
-    let r = await this.gateway.chat(k.key, body);
-    if (r.status === 401 && r.body?.error?.code === "key_revoked") { k = await this.key(helper, { fresh: true }); r = await this.gateway.chat(k.key, body); }
+    const H = this.payHeaders(helper);
+    let r = await this.gateway.chat(k.key, body, H);
+    if (r.status === 401 && r.body?.error?.code === "key_revoked") { k = await this.key(helper, { fresh: true }); r = await this.gateway.chat(k.key, body, H); }
+    if (r.status === 403 && r.body?.error?.code === "no_grant") { this.balanceCache.delete(helper); await this.alerts?.budget(helper, "the holder's grant is missing"); throw new BudgetError(helper, "the holder's grant is missing"); }
     if (r.status === 401) { await this.alerts?.credentials("gateway", `the gateway refused ${helper}'s key`); throw new Error(`the gateway refused ${helper}'s key`); }
     if (r.status === 402) { this.balanceCache.delete(helper); await this.alerts?.budget(helper, "gateway balance too low"); throw new BudgetError(helper, "gateway balance too low"); }
     if (r.status < 200 || r.status >= 300) throw new Error(`the gateway answered ${r.status}: ${r.body?.error?.message || "no detail"}`.slice(0, 200));

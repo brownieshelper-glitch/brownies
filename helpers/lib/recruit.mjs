@@ -6,28 +6,35 @@
 //   draft     sends what it produced to the owner on Telegram, as a draft to act on
 //   announce  says one short message in the Telegram group (at most one a day, in the project's voice)
 //   issue     files a task for Chip on GitHub (labelled chip), so a wish becomes code the usual way
+//   feed      (baked brownies) writes what it produced to its own feed in the store, shown by the Bakery
 //   report    (always) a line in the Kitchen, unless the recruit is hidden
 //
 // Spec: { name, title, role, model, dailyCapUsd, hidden, tools: [...], tasks: [{ id, title, text, daily: { hours } | everyMinutes, tool, maxWords }] }
+// A baked brownie (lib/bakery.mjs) adds baked: { wallet, chatId, personality }, walletIndex (its derived wallet) and
+// payFrom (the holder, whose grant pays): it may only use feed and draft, and a draft goes to the holder, not the owner.
 import { Helper } from "./helper.mjs";
 import { tidy, problems } from "./voice.mjs";
 import { cut } from "./text.mjs";
 import { cap } from "./facts.mjs";
+import { isAddress, getAddress } from "ethers";
 
 export const TOOLS = ["note", "draft", "announce", "issue"];
+export const BAKED_TOOLS = ["feed", "draft"];
+export const ALL_TOOLS = [...TOOLS, "feed"];
+const FEED_KEEP = 30;
 const NAME = /^[a-z][a-z0-9]{2,15}$/;
-const RESERVED = ["fudge", "crumb", "nib", "chip", "team", "admin", "owner", "brownies", "sugar"]; // the live roster is checked too, through `existing`
+const RESERVED = ["fudge", "crumb", "nib", "chip", "team", "admin", "owner", "brownies", "sugar", "brownie", "bakery", "bake", "glaze", "swirl", "sprinkle", "dough", "patch", "critic"]; // the live roster is checked too, through `existing`
 
 /// Checks a spec and returns a clean copy, or throws a plain sentence saying what is wrong.
-export function validateSpec(raw, { maxCapUsd = 1, existing = [] } = {}) {
+export function validateSpec(raw, { maxCapUsd = 1, existing = [], allowedTools = TOOLS } = {}) {
   if (!raw || typeof raw !== "object") throw new Error("the spec is not an object");
   const name = String(raw.name || "").toLowerCase().trim();
   if (!NAME.test(name)) throw new Error("the name must be 3 to 16 letters or digits, starting with a letter");
   if (RESERVED.includes(name) || existing.includes(name)) throw new Error(`the name ${name} is taken`);
   const role = cut(String(raw.role || "").trim(), 300);
   if (role.length < 12) throw new Error("the role needs a real sentence");
-  const tools = [...new Set((raw.tools || []).map((t) => String(t).toLowerCase()))].filter((t) => TOOLS.includes(t));
-  if (!tools.length) throw new Error(`the tools must be some of ${TOOLS.join(", ")}`);
+  const tools = [...new Set((raw.tools || []).map((t) => String(t).toLowerCase()))].filter((t) => allowedTools.includes(t));
+  if (!tools.length) throw new Error(`the tools must be some of ${allowedTools.join(", ")}`);
   const tasks = (raw.tasks || []).slice(0, 4).map((t, i) => {
     const id = String(t.id || `task${i + 1}`).toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 24) || `task${i + 1}`;
     const text = cut(String(t.text || "").trim(), 1200);
@@ -40,7 +47,14 @@ export function validateSpec(raw, { maxCapUsd = 1, existing = [] } = {}) {
   });
   if (!tasks.length) throw new Error("a recruit needs at least one task");
   const dailyCapUsd = Math.min(maxCapUsd, Math.max(0.1, Number(raw.dailyCapUsd) || 0.5));
-  return { name, title: cap(name), role, model: String(raw.model || "anthropic/claude-haiku-4.5"), dailyCapUsd, hidden: raw.hidden !== false, tools, tasks, hiredAt: raw.hiredAt || null, why: cut(String(raw.why || ""), 300) };
+  const out = { name, title: cap(name), role, model: String(raw.model || "anthropic/claude-haiku-4.5"), dailyCapUsd, hidden: raw.hidden !== false, tools, tasks, hiredAt: raw.hiredAt || null, why: cut(String(raw.why || ""), 300) };
+  if (raw.baked) {
+    if (!isAddress(raw.baked.wallet || "")) throw new Error("a baked brownie needs its holder's wallet");
+    out.baked = { wallet: getAddress(raw.baked.wallet), chatId: raw.baked.chatId ? String(raw.baked.chatId).slice(0, 32) : null, personality: cut(String(raw.baked.personality || "").trim(), 400) || null };
+  }
+  if (Number.isInteger(raw.walletIndex) && raw.walletIndex >= 0) out.walletIndex = raw.walletIndex;
+  if (raw.payFrom && isAddress(raw.payFrom)) out.payFrom = getAddress(raw.payFrom);
+  return out;
 }
 
 export class Recruit extends Helper {
@@ -55,6 +69,20 @@ export class Recruit extends Helper {
     this.groupChatId = String(deps.groupChatId || "") || String(this.store.getMeta("tg:group:auto") || "");
     this.title = spec.title;
     this.recruit = true;
+    this.baked = spec.baked || null; // { wallet, chatId, personality } when a holder made this brownie in the Bakery
+  }
+
+  /// What a baked brownie is told about itself, before its task.
+  bakedIntro() {
+    if (!this.baked) return "";
+    return `You are a home-baked brownie: a holder of BROWNIE made you in the Bakery and pays for your work with their own SUGAR. You work for that holder and for the coin, with the same honesty rules as the team.${this.baked.personality ? ` Your personality, chosen by the holder: ${this.baked.personality}` : ""}\n\n`;
+  }
+
+  /// The last entries of this brownie's feed (newest first).
+  feed(n = 10) { try { return JSON.parse(this.store.getMeta(`feed:${this.name}`, "[]")).slice(0, n); } catch { return []; } }
+  addFeed(entry) {
+    const list = [entry, ...this.feed(FEED_KEEP)].slice(0, FEED_KEEP);
+    this.store.setMeta(`feed:${this.name}`, JSON.stringify(list));
   }
 
   jobs() {
@@ -78,7 +106,7 @@ export class Recruit extends Helper {
     const now = this.clock.now();
     await this.status(`Working on: ${t.title}`);
     const r = await this.think({
-      system: this.system(`Your task now: ${t.title}.\n${t.text}\n\nWrite about ${t.maxWords} words at most. Plain text, ASCII only, no markdown, no emoji, no hashtags. Facts only from the facts given. Start with the result itself, no preamble.`),
+      system: this.system(`${this.bakedIntro()}Your task now: ${t.title}.\n${t.text}\n\nWrite about ${t.maxWords} words at most. Plain text, ASCII only, no markdown, no emoji, no hashtags. Facts only from the facts given. Start with the result itself, no preamble.`),
       prompt: `${await this.context()}\n\nDo the task now.`, maxTokens: Math.min(2000, Math.round(t.maxWords * 2.2) + 200), temperature: 0.5,
     });
     const text = tidy(r.text);
@@ -103,8 +131,15 @@ export class Recruit extends Helper {
         return { kind: "note", url: this.github.fileUrl(path, branch), place: "github", where: "" };
       }
       case "draft": {
-        if (this.tg?.configured && this.ownerChatId) await this.tg.sendMessage(this.ownerChatId, `${this.title}, ${t.title}:\n\n${cut(text, 3600)}`);
-        return { kind: "deal", url: null, place: "telegram", where: "to the owner" };
+        const chat = this.baked ? this.baked.chatId : this.ownerChatId;
+        if (this.baked) this.addFeed({ at: now, task: t.id, title: t.title, text: cut(text, 1500), kind: "draft" });
+        if (this.baked && (!chat || !this.tg?.configured)) return { kind: "deal", url: null, place: "bakery", where: "in the feed (no Telegram linked yet)" };
+        if (this.tg?.configured && chat) await this.tg.sendMessage(chat, `${this.title}, ${t.title}:\n\n${cut(text, 3600)}`);
+        return { kind: "deal", url: null, place: "telegram", where: this.baked ? "to the holder" : "to the owner" };
+      }
+      case "feed": {
+        this.addFeed({ at: now, task: t.id, title: t.title, text: cut(text, 1500), kind: "note" });
+        return { kind: "note", url: null, place: "bakery", where: "in the feed" };
       }
       case "announce": {
         if (this.store.seen(`${this.name}-announce`, date)) return { kind: "note", url: null, place: null, where: "kept: one announcement a day" };

@@ -64,6 +64,10 @@ the contracts.
   GET /v1/key (balance, spent, epoch), POST /v1/key/rotate, GET /api/protocol/account/{wallet},
   GET /api/protocol/stats. Every request needs max_tokens; without it the gateway assumes 1024.
 - A request costs what OpenRouter charges for the model. The gateway adds nothing.
+- Grants: POST /v1/grants with { grantee, daily_usd } lets another wallet spend from your balance up to that much a
+  day (UTC); the spender signs its own key and adds the header X-Brownies-Pay-From: <your wallet>. GET /v1/grants
+  lists what you gave and received with today's room; POST /v1/grants/revoke { grantee } ends one. Nobody ever
+  holds your key.
 - Errors: 401 wrong or replaced key; 402 balance too low; 400 unknown_model.
 
 ## The brownies

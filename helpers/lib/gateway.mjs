@@ -48,12 +48,12 @@ export class Gateway {
   stats() { return this.get("/api/protocol/stats"); }
   summary() { return this.get("/api/team/summary"); }
   account(wallet) { return this.get(`/api/protocol/account/${wallet}`); }
-  key(bearer) { return this.get("/v1/key", { authorization: `Bearer ${bearer}` }); }
+  key(bearer, headers = {}) { return this.get("/v1/key", { authorization: `Bearer ${bearer}`, ...headers }); }
   health() { return this.get("/health"); }
 
   /// A chat completion through the gateway, paid by the key's SUGAR balance. Returns { status, body }.
-  async chat(bearer, body) {
-    const r = await this.fetch(`${this.url}/v1/chat/completions`, { method: "POST", headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+  async chat(bearer, body, headers = {}) {
+    const r = await this.fetch(`${this.url}/v1/chat/completions`, { method: "POST", headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
     return { status: r.status, body: await r.json().catch(() => null) };
   }
 }

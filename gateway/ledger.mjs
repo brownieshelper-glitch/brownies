@@ -1,8 +1,14 @@
 // The gateway's books: activations read from the chain, spend written by the proxy. SQLite through node:sqlite.
 // One row per activation id (so a re-indexed block credits nothing twice), one running balance per beneficiary.
+//
+// Grants: a wallet (the granter, by its beneficiary id) lets another wallet (the grantee) spend from its balance up
+// to a daily cap. The grantee signs its own key and names the granter in a header; the charge lands on the granter,
+// the spend row says who spent it (via), and a per-day counter holds the cap. Days are UTC dates.
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+
+export const dayKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
 export class Ledger {
   constructor(path) {
@@ -36,7 +42,26 @@ export class Ledger {
         completion_tokens INTEGER
       );
       CREATE INDEX IF NOT EXISTS spend_b ON spend(beneficiary, at);
+      CREATE TABLE IF NOT EXISTS grants (
+        granter TEXT NOT NULL,
+        grantee TEXT NOT NULL,
+        daily_micro INTEGER NOT NULL,
+        created INTEGER NOT NULL,
+        revoked INTEGER,
+        PRIMARY KEY(granter, grantee)
+      );
+      CREATE INDEX IF NOT EXISTS grants_g ON grants(grantee);
+      CREATE TABLE IF NOT EXISTS grant_spend (
+        granter TEXT NOT NULL,
+        grantee TEXT NOT NULL,
+        day TEXT NOT NULL,
+        micro INTEGER NOT NULL DEFAULT 0,
+        calls INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(granter, grantee, day)
+      );
     `);
+    // a book opened before grants existed gets the column that says who spent through a grant
+    if (!this.db.prepare("PRAGMA table_info(spend)").all().some((c) => c.name === "via")) this.db.exec("ALTER TABLE spend ADD COLUMN via TEXT");
     this.q = {
       getMeta: this.db.prepare("SELECT v FROM meta WHERE k = ?"),
       setMeta: this.db.prepare("INSERT INTO meta(k, v) VALUES(?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v"),
@@ -46,12 +71,21 @@ export class Ledger {
       credit: this.db.prepare("UPDATE accounts SET credited_atoms = credited_atoms + ? WHERE beneficiary = ?"),
       account: this.db.prepare("SELECT beneficiary, credited_atoms, spent_micro, epoch FROM accounts WHERE beneficiary = ?"),
       spend: this.db.prepare("UPDATE accounts SET spent_micro = spent_micro + ? WHERE beneficiary = ?"),
-      logSpend: this.db.prepare("INSERT INTO spend(beneficiary, at, model, micro, upstream_id, prompt_tokens, completion_tokens) VALUES(?, ?, ?, ?, ?, ?, ?)"),
+      logSpend: this.db.prepare("INSERT INTO spend(beneficiary, at, model, micro, upstream_id, prompt_tokens, completion_tokens, via) VALUES(?, ?, ?, ?, ?, ?, ?, ?)"),
       setEpoch: this.db.prepare("UPDATE accounts SET epoch = ? WHERE beneficiary = ?"),
       totals: this.db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(atoms), 0) AS atoms FROM activations"),
       spentTotal: this.db.prepare("SELECT COALESCE(SUM(micro), 0) AS micro, COUNT(*) AS n FROM spend"),
-      recentSpend: this.db.prepare("SELECT at, model, micro, prompt_tokens, completion_tokens FROM spend WHERE beneficiary = ? ORDER BY at DESC LIMIT ?"),
+      recentSpend: this.db.prepare("SELECT at, model, micro, prompt_tokens, completion_tokens, via FROM spend WHERE beneficiary = ? ORDER BY at DESC LIMIT ?"),
       activationsOf: this.db.prepare("SELECT id, sender, atoms, block, tx FROM activations WHERE beneficiary = ? ORDER BY id DESC LIMIT ?"),
+      // grants
+      setGrant: this.db.prepare("INSERT INTO grants(granter, grantee, daily_micro, created, revoked) VALUES(?, ?, ?, ?, NULL) ON CONFLICT(granter, grantee) DO UPDATE SET daily_micro = excluded.daily_micro, revoked = NULL, created = CASE WHEN grants.revoked IS NULL THEN grants.created ELSE excluded.created END"),
+      revokeGrant: this.db.prepare("UPDATE grants SET revoked = ? WHERE granter = ? AND grantee = ? AND revoked IS NULL"),
+      grant: this.db.prepare("SELECT granter, grantee, daily_micro, created FROM grants WHERE granter = ? AND grantee = ? AND revoked IS NULL"),
+      grantsBy: this.db.prepare("SELECT granter, grantee, daily_micro, created FROM grants WHERE granter = ? AND revoked IS NULL ORDER BY created, grantee"),
+      grantsTo: this.db.prepare("SELECT granter, grantee, daily_micro, created FROM grants WHERE grantee = ? AND revoked IS NULL ORDER BY created, granter"),
+      grantSpent: this.db.prepare("SELECT micro, calls FROM grant_spend WHERE granter = ? AND grantee = ? AND day = ?"),
+      addGrantSpend: this.db.prepare("INSERT INTO grant_spend(granter, grantee, day, micro, calls) VALUES(?, ?, ?, ?, 1) ON CONFLICT(granter, grantee, day) DO UPDATE SET micro = micro + excluded.micro, calls = calls + 1"),
+      grantCounts: this.db.prepare("SELECT COUNT(*) AS n FROM grants WHERE revoked IS NULL"),
     };
   }
 
@@ -103,7 +137,7 @@ export class Ledger {
     this._tx(() => {
       this.q.ensureAccount.run(b);
       this.q.spend.run(micro, b);
-      this.q.logSpend.run(b, Date.now(), info.model ?? null, micro, info.upstreamId ?? null, info.promptTokens ?? null, info.completionTokens ?? null);
+      this.q.logSpend.run(b, info.at ?? Date.now(), info.model ?? null, micro, info.upstreamId ?? null, info.promptTokens ?? null, info.completionTokens ?? null, null);
     });
   }
 
@@ -118,11 +152,64 @@ export class Ledger {
   stats() {
     const t = this.q.totals.get();
     const s = this.q.spentTotal.get();
-    return { activations: Number(t.n), creditedMicro: Number(t.atoms), spentMicro: Number(s.micro), requests: Number(s.n), lastBlock: this.lastBlock };
+    return { activations: Number(t.n), creditedMicro: Number(t.atoms), spentMicro: Number(s.micro), requests: Number(s.n), grants: Number(this.q.grantCounts.get().n), lastBlock: this.lastBlock };
   }
 
   recent(beneficiary, limit = 50) {
     const b = beneficiary.toLowerCase();
     return { spend: this.q.recentSpend.all(b, limit), activations: this.q.activationsOf.all(b, limit) };
+  }
+
+  // ---- grants ----
+  /// The granter (a beneficiary id) lets the grantee (a wallet) spend up to dailyMicro a day. Setting it again
+  /// changes the cap; a revoked grant set again starts fresh.
+  setGrant(granter, granteeWallet, dailyMicro, now = Date.now()) {
+    if (!Number.isSafeInteger(dailyMicro) || dailyMicro <= 0) throw new Error("dailyMicro must be a positive whole number");
+    this.q.setGrant.run(granter.toLowerCase(), granteeWallet.toLowerCase(), dailyMicro, now);
+    return this.grant(granter, granteeWallet);
+  }
+
+  /// Ends a grant. Returns false when there was none.
+  revokeGrant(granter, granteeWallet, now = Date.now()) {
+    return this.q.revokeGrant.run(now, granter.toLowerCase(), granteeWallet.toLowerCase()).changes > 0;
+  }
+
+  /// The active grant, or null.
+  grant(granter, granteeWallet) {
+    const r = this.q.grant.get(granter.toLowerCase(), granteeWallet.toLowerCase());
+    return r ? { granter: r.granter, grantee: r.grantee, dailyMicro: Number(r.daily_micro), created: Number(r.created) } : null;
+  }
+
+  /// What the grantee may still spend from the granter today: the cap less today's spend, and never more than
+  /// the granter has. Null when there is no active grant.
+  grantRoom(granter, granteeWallet, now = Date.now()) {
+    const g = this.grant(granter, granteeWallet);
+    if (!g) return null;
+    return this._room(g, now);
+  }
+  _room(g, now) {
+    const s = this.q.grantSpent.get(g.granter, g.grantee, dayKey(now));
+    const spentMicro = s ? Number(s.micro) : 0, calls = s ? Number(s.calls) : 0;
+    const roomMicro = Math.max(0, Math.min(g.dailyMicro - spentMicro, this.balance(g.granter).availableMicro));
+    return { ...g, spentMicro, calls, roomMicro, day: dayKey(now) };
+  }
+  /// Every active grant this granter gave, with today's room.
+  grantsBy(granter, now = Date.now()) {
+    return this.q.grantsBy.all(granter.toLowerCase()).map((r) => this._room({ granter: r.granter, grantee: r.grantee, dailyMicro: Number(r.daily_micro), created: Number(r.created) }, now));
+  }
+  /// Every active grant this wallet received, with today's room.
+  grantsTo(granteeWallet, now = Date.now()) {
+    return this.q.grantsTo.all(granteeWallet.toLowerCase()).map((r) => this._room({ granter: r.granter, grantee: r.grantee, dailyMicro: Number(r.daily_micro), created: Number(r.created) }, now));
+  }
+
+  /// A charge paid by the granter for something the grantee did. Counted against the grant's day as well.
+  chargeVia(granter, granteeWallet, micro, info = {}, now = Date.now()) {
+    const b = granter.toLowerCase(), via = granteeWallet.toLowerCase();
+    this._tx(() => {
+      this.q.ensureAccount.run(b);
+      this.q.spend.run(micro, b);
+      this.q.logSpend.run(b, info.at ?? now, info.model ?? null, micro, info.upstreamId ?? null, info.promptTokens ?? null, info.completionTokens ?? null, via);
+      this.q.addGrantSpend.run(b, via, dayKey(now), micro);
+    });
   }
 }

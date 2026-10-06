@@ -70,19 +70,27 @@ export function mockGateway(fetch, { url = "https://gw.test", teamKey = "team-ke
   fetch.on("GET", `${url}/api/protocol/stats`, () => ({ json: g.stats }));
   fetch.on("GET", `${url}/api/team/summary`, () => ({ json: g.summary }));
   fetch.on("GET", new RegExp(`^${url}/api/protocol/account/(0x[0-9a-fA-F]{40})`), (c, m) => ({ json: { wallet: m[1], epoch: g.accounts[m[1].toLowerCase()]?.epoch || 0 } }));
+  // grants: g.grants[granter wallet, lowercase][grantee wallet, lowercase] = room in dollars; the header names the granter
+  g.grants = {};
+  const room = (c, wallet) => { const from = String(c.headers["x-brownies-pay-from"] || "").toLowerCase(); if (!from) return null; const r = g.grants[from]?.[wallet]; return r == null ? { none: true, from } : { from, room: r }; };
   fetch.on("GET", `${url}/v1/key`, (c) => {
     const v = verifyKey(c.headers.authorization, g.accounts);
     if (v.error) return { status: v.error.status, json: { error: v.error } };
+    const gr = room(c, v.wallet);
+    if (gr?.none) return { status: 403, json: { error: { code: "no_grant", message: "no grant" } } };
+    if (gr) return { json: { object: "key", wallet: v.wallet, paid_by: gr.from, balance: { currency: "USD", available: gr.room.toFixed(6), used: "0", credited: "0" } } };
     return { json: { object: "key", wallet: v.wallet, balance: { currency: "USD", available: (g.balances[v.wallet] || 0).toFixed(6), used: "0", credited: "0" } } };
   });
   fetch.on("POST", `${url}/v1/chat/completions`, (c) => {
     const v = verifyKey(c.headers.authorization, g.accounts);
     if (v.error) return { status: v.error.status, json: { error: v.error } };
-    const bal = g.balances[v.wallet] || 0;
+    const gr = room(c, v.wallet);
+    if (gr?.none) return { status: 403, json: { error: { code: "no_grant", message: "no grant" } } };
+    const bal = gr ? gr.room : (g.balances[v.wallet] || 0);
     if (bal < 0.01) return { status: 402, json: { error: { code: "insufficient_balance", message: "Balance too low." } } };
-    g.chats.push({ wallet: v.wallet, body: c.body });
-    g.balances[v.wallet] = bal - g.chatCost;
-    return { json: { id: "gw-" + g.chats.length, choices: [{ message: { role: "assistant", content: g.reply(c.body, g.chats.length) } }], usage: { prompt_tokens: 50, completion_tokens: 20, cost: g.chatCost }, brownies: { charged_usd: g.chatCost.toFixed(6), balance_usd: g.balances[v.wallet].toFixed(6) } } };
+    g.chats.push({ wallet: v.wallet, body: c.body, headers: c.headers, paidBy: gr?.from || null });
+    if (gr) g.grants[gr.from][v.wallet] = bal - g.chatCost; else g.balances[v.wallet] = bal - g.chatCost;
+    return { json: { id: "gw-" + g.chats.length, choices: [{ message: { role: "assistant", content: g.reply(c.body, g.chats.length) } }], usage: { prompt_tokens: 50, completion_tokens: 20, cost: g.chatCost }, brownies: { charged_usd: g.chatCost.toFixed(6), balance_usd: Number((gr ? g.grants[gr.from][v.wallet] : g.balances[v.wallet]) || 0).toFixed(6), ...(gr ? { paid_by: gr.from } : {}) } } };
   });
   g.kinds = () => g.reports.map((r) => r.kind);
   g.of = (helper, kind = null) => g.reports.filter((r) => r.helper === helper && (!kind || r.kind === kind));

@@ -28,6 +28,7 @@ import { loadFacts, HELPERS } from "./lib/facts.mjs";
 import { sendSummary } from "./lib/summary.mjs";
 import { Admin } from "./lib/admin.mjs";
 import { Recruit } from "./lib/recruit.mjs";
+import { Bakery } from "./lib/bakery.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
@@ -64,7 +65,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const gateway = new Gateway({ url: S.gatewayUrl, teamKey: S.teamLogKey, log });
   const telegram = new Telegram({ token: S.telegram.token, log });
   const alerts = new Alerts({ telegram, ownerChatId: S.telegram.ownerChatId, store, clock, mode: S.mode, log });
-  const brain = new Brain({ mode: S.mode, openrouterKey: S.openrouterKey, openrouterUrl: S.openrouterUrl, gateway, keys: S.keys, chainId: config.chainId || 1, helpers: config.helpers, store, clock, alerts, log });
+  const brain = new Brain({ mode: S.mode, openrouterKey: S.openrouterKey, openrouterUrl: S.openrouterUrl, gateway, keys: S.keys, mnemonic: S.mnemonic, chainId: config.chainId || 1, helpers: config.helpers, store, clock, alerts, log });
   const x = new XClient({ ...S.x, clock, log });
   const github = new GitHub({ token: S.github.token, repo: S.github.repo, log });
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
@@ -82,7 +83,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     if (!raw) continue;
     const spec = JSON.parse(raw);
     if (spec.retired) continue;
-    config.helpers[name] = { role: spec.role, model: spec.model, dailyCapUsd: spec.dailyCapUsd, hidden: spec.hidden };
+    config.helpers[name] = { role: spec.role, model: spec.model, dailyCapUsd: spec.dailyCapUsd, hidden: spec.hidden, walletIndex: spec.walletIndex, payFrom: spec.payFrom };
     all[name] = new Recruit(recruitDeps(spec));
   }
   const off = offList(env); // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
@@ -93,7 +94,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     const names = recruitNames().filter((n) => n !== spec.name);
     store.setMeta(`recruit:${spec.name}`, JSON.stringify(spec));
     store.setMeta("recruits", [...names, spec.name].join(","));
-    config.helpers[spec.name] = { role: spec.role, model: spec.model, dailyCapUsd: spec.dailyCapUsd, hidden: spec.hidden };
+    config.helpers[spec.name] = { role: spec.role, model: spec.model, dailyCapUsd: spec.dailyCapUsd, hidden: spec.hidden, walletIndex: spec.walletIndex, payFrom: spec.payFrom };
     const r = new Recruit(recruitDeps(spec));
     all[spec.name] = r;
     restartSoon(`hired ${spec.name}`);
@@ -137,6 +138,8 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const summaryNow = () => sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log });
   const origins = [S.siteUrl, "https://feedthebrownies.com", "https://www.feedthebrownies.com", /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/, ...S.adminOrigins];
   W.admin = new Admin({ W, ring: RING, log, wallets: S.adminWallets, origins, sendSummary: summaryNow });
+  // the Bakery: holders bake their own brownies through /bake/* (lib/bakery.mjs); before the launch only the admin wallets may, to test it
+  W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
   scheduler.isOff = (name) => W.admin.isPaused(name);
   return W;
 }
@@ -157,6 +160,7 @@ async function main() {
   const started = Date.now();
   const health = createServer((req, res) => {
     if (req.url.startsWith("/admin/")) return W.admin.handle(req, res);
+    if (req.url.startsWith("/bake/")) return W.bakery.handle(req, res);
     const now = Date.now();
     const body = {
       ok: true, mode: S.mode, uptimeSeconds: Math.round((now - started) / 1000), reports: gateway.reports, thoughts: brain.calls,

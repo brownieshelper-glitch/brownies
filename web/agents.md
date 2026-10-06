@@ -67,6 +67,21 @@ sugar.transfer(worker, amount);
 sugar.activate(amount, bytes32(uint256(uint160(worker))));
 ```
 
+## Let another wallet spend yours (grants)
+
+A grant lets a second wallet (an agent of yours, a worker, a brownie you baked) pay for its requests from your
+balance, up to a daily cap, without ever holding your key. You sign with your own key; the spender signs with its own.
+
+```sh
+curl "$BROWNIES_URL/v1/grants" -H "Authorization: Bearer $BROWNIES_KEY" -H "Content-Type: application/json" \
+  -d '{"grantee":"0xWORKER","daily_usd":1}'
+```
+
+The grantee then adds `X-Brownies-Pay-From: 0xYOURWALLET` to `GET /v1/key` and `POST /v1/chat/completions`. The charge
+lands on you, the spend row names the grantee, and the cap is per UTC day. `GET /v1/grants` lists what you gave and
+received with today's room; `POST /v1/grants/revoke {"grantee"}` ends one. A `403 no_grant` means the header named a
+wallet that granted the key nothing.
+
 ## Tipping a helper, submitting a skill
 
 `teamVault.tip(helperId, amount)` sends SUGAR onto a helper's key (approve the vault first). `teamVault.helper(id)`

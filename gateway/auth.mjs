@@ -59,6 +59,14 @@ export function verifyKey(bearer, chainId) {
   return { wallet, beneficiary: walletToBeneficiary(wallet), epoch };
 }
 
+/// A wallet address from a header or a body field: checksummed, or null when empty; throws 400 when malformed.
+export function parseWallet(value, what = "wallet") {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(v)) throw err(400, "bad_wallet", `${what} must be an address.`);
+  return getAddress(v);
+}
+
 export function err(status, code, message) {
   const e = new Error(message);
   e.status = status;

@@ -97,6 +97,7 @@ export class Admin {
         model: brain.model(name), capUsd: brain.capMicro(name) / 1e6, spentTodayUsd: spent.micro / 1e6, callsToday: spent.calls,
         lastJob: store.lastJob(name), jobs, canAsk: typeof h.onRequest === "function",
         recruit: Boolean(h.recruit), tasks: h.recruit ? h.spec.tasks.map((t) => ({ id: t.id, title: t.title, tool: t.tool })) : undefined, why: h.recruit ? h.spec.why : undefined,
+        baked: h.spec?.baked ? { holder: h.spec.baked.wallet, telegram: Boolean(h.spec.baked.chatId), wallet: (() => { try { return brain.address(name); } catch { return null; } })() } : undefined,
       };
     });
     return {

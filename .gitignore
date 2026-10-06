@@ -25,3 +25,6 @@ web/.vercelignore
 
 # old versions kept on the owner's disk only
 versions/
+
+# Programmable sources fetched from Sourcify keep their own dependency folders; they are not part of this repository
+eth-launch/programmable/*/lib/

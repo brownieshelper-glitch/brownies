@@ -45,6 +45,7 @@ export class Store {
       markSeen: p("INSERT OR IGNORE INTO seen(place, ref, at) VALUES(?, ?, ?)"),
       addTurn: p("INSERT INTO turns(chat, at, role, who, text) VALUES(?, ?, ?, ?, ?)"),
       turns: p("SELECT role, who, text, at FROM turns WHERE chat = ? ORDER BY id DESC LIMIT ?"),
+      turnsSince: p("SELECT chat, role, who, text, at FROM turns WHERE at >= ? AND role = ? ORDER BY id"),
       pruneTurns: p("DELETE FROM turns WHERE chat = ? AND id NOT IN (SELECT id FROM turns WHERE chat = ? ORDER BY id DESC LIMIT ?)"),
       addSpend: p("INSERT INTO spend(helper, day, micro, calls) VALUES(?, ?, ?, 1) ON CONFLICT(helper, day) DO UPDATE SET micro = micro + excluded.micro, calls = calls + 1"),
       spend: p("SELECT micro, calls FROM spend WHERE helper = ? AND day = ?"),
@@ -97,6 +98,8 @@ export class Store {
     this.q.pruneTurns.run(String(chat), String(chat), keep);
   }
   turns(chat, n = 12) { return this.q.turns.all(String(chat), n).reverse(); }
+  /// Every turn of one role since `at`, across all chats (what people asked today, for the questions digest).
+  turnsSince(at, role = "user") { return this.q.turnsSince.all(at, role); }
 
   // ---- money, per helper per local day ----
   addSpend(helper, micro, now) { this.q.addSpend.run(helper, this.dayKey(now), Math.max(0, Math.round(micro))); }

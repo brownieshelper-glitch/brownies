@@ -90,9 +90,12 @@ test("isQuestion", () => {
   assert.equal(isQuestion("nice project https://x.com/a"), false);
 });
 
-test("without X credentials Fudge posts nothing and says so", async () => {
-  const W = makeWorld();
+test("without X credentials Fudge still posts, on the site alone, and says so in the report", async () => {
+  const W = makeWorld({ reply: () => POSTS[1] });
   W.x.clientId = "";
-  assert.equal(await W.fudge.post(), null);
-  assert.equal(W.or.calls.length, 0);
+  const r = await W.fudge.post();
+  assert.equal(r.place, "site");
+  assert.equal(W.xm.posts.length, 0, "nothing went to X");
+  assert.equal(W.gw.of("fudge", "post")[0].place, "site");
+  assert.equal(W.gw.of("fudge", "post")[0].url, "https://feedthebrownies.com/posts.html");
 });

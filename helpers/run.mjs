@@ -60,9 +60,9 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
-  const fudge = new Fudge({ ...deps("fudge"), x });
-  const crumb = new Crumb({ ...deps("crumb"), telegram, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => chip.decide(id, d, ctx), onNote: (id, t) => chip.addNote(id, t) });
-  const nib = new Nib({ ...deps("nib"), github, siteUrl: S.siteUrl });
+  const fudge = new Fudge({ ...deps("fudge"), x, siteUrl: S.siteUrl });
+  const crumb = new Crumb({ ...deps("crumb"), telegram, github, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => chip.decide(id, d, ctx), onNote: (id, t) => chip.addNote(id, t) });
+  const nib = new Nib({ ...deps("nib"), github, siteUrl: S.siteUrl, rpcUrl: S.rpcUrl });
   const scheduler = new Scheduler({ clock, tz: config.timezone || "UTC", flags: store, log });
   // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
   const off = offList(env);

@@ -6,9 +6,9 @@ Kitchen page shows it as a brick in Brownie City.
 
 | Brownie | Job | When | Where it shows |
 | --- | --- | --- | --- |
-| Fudge | writes posts in the project's voice, answers mentions that ask something | 3 posts a day at 9, 13, 18 (Rome); mentions every 20 minutes | X, @Feedthebrownies |
-| Crumb | answers people with the facts and the live numbers | Telegram long polling, within a minute | the Telegram group and private chats |
-| Nib | reads the gateway's figures, the site and the competitors, writes a note: what changed, what to do | once a day at 8 | `notes/YYYY-MM-DD.md` in the repository |
+| Fudge | writes posts in the project's voice, answers mentions that ask something | 3 posts a day at 9, 13, 18 (Rome); mentions every 20 minutes | X, @Feedthebrownies, and the site's Posts page at the same time (the post still goes out on the site when X refuses) |
+| Crumb | answers people with the facts and the live numbers; writes down the day's questions | Telegram long polling, within a minute; the questions digest once a day at 20 | the Telegram group and private chats; `notes/questions/YYYY-MM-DD.md` |
+| Nib | reads the gateway's figures, the site, the competitors and the coins launched through Programmable on Ethereum (from the chain), writes a note: what changed, what to do | once a day at 8 | `notes/YYYY-MM-DD.md` in the repository |
 | Chip | changes code as pull requests; small ones merge after three reviews, bigger ones wait for the owner | checks its tasks every 30 minutes | pull requests on GitHub |
 
 Nothing here is a simulation. When the service runs, Fudge posts, Crumb answers, Nib commits and Chip merges. The
@@ -48,7 +48,7 @@ set in the environment wins. The log says which names are set and which are empt
 | `OPENROUTER_API_KEY` | prelaunch only: the key the helpers think with |
 | `OPENROUTER_URL` | optional, default `https://openrouter.ai/api/v1` |
 | `GATEWAY_URL`, `TEAM_LOG_KEY` | the gateway and the key the brownies report with (the same `TEAM_LOG_KEY` as the gateway's env) |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OWNER_CHAT_ID`, `TELEGRAM_GROUP_CHAT_ID` | Crumb and the alerts. Empty token: Crumb is off, no alerts |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OWNER_CHAT_ID`, `TELEGRAM_GROUP_CHAT_ID` | Crumb and the alerts. Empty token: Crumb is off, no alerts. Empty group id: Crumb adopts the first group the bot is added to (or hears a message in) and remembers it in the store |
 | `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_ACCESS_TOKEN`, `X_REFRESH_TOKEN` | Fudge's OAuth 2.0 user tokens (scopes `tweet.read tweet.write users.read offline.access`). Empty: Fudge is off |
 | `X_TOKEN_FILE` | where the rotated token pair is kept (default `/var/lib/brownies/x-token.json`). The refresh token changes at every renewal; the file is written atomically and wins over the env pair |
 | `X_USERNAME` | optional, default `Feedthebrownies`, for the links in the reports |

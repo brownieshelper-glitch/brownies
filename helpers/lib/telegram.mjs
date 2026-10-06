@@ -27,7 +27,7 @@ export class Telegram {
 
   /// Long poll: waits up to `timeout` seconds for messages and button presses after `offset`.
   getUpdates({ offset = 0, timeout = 25, limit = 50 } = {}) {
-    return this.call("getUpdates", { offset, timeout, limit, allowed_updates: ["message", "callback_query"] }, { timeoutMs: (timeout + 15) * 1000 });
+    return this.call("getUpdates", { offset, timeout, limit, allowed_updates: ["message", "callback_query", "my_chat_member"] }, { timeoutMs: (timeout + 15) * 1000 });
   }
 
   /// Plain text, cut to Telegram's size. `buttons` is [[{ text, data }]] for an inline keyboard.

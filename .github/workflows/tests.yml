@@ -1,0 +1,49 @@
+# The tests run on every pull request and on main. Patch, the quality brownie, waits for these checks before a
+# change Chip wrote is merged by itself; a red check blocks the merge and sends the change to the owner.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  helpers:
+    name: helpers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: helpers/package-lock.json
+      - run: npm ci
+        working-directory: helpers
+      - run: npm test
+        working-directory: helpers
+
+  gateway:
+    name: gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gateway/package-lock.json
+      - run: npm ci
+        working-directory: gateway
+      - run: node --test test/core.test.mjs test/team.test.mjs test/keeper.test.mjs
+        working-directory: gateway
+
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge install foundry-rs/forge-std transmissions11/solmate Uniswap/v4-core --no-git
+      - run: forge build
+      - run: forge test --no-match-path "test/Fork_*"

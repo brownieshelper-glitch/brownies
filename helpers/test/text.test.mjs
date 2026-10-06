@@ -20,7 +20,7 @@ test("voice: ASCII, no promises, no boilerplate, no hashtag storm", () => {
   assert.deepEqual(problems("The gateway returns a key."), [], "the word returns alone is fine");
   assert.deepEqual(problems("Guaranteed returns of 10% apy"), ["promise words: Guaranteed"]);
   const sp = systemPrompt({ name: "Fudge", role: "marketing", facts: "- fact", note: "2026-10-07: n", extra: "Task." });
-  assert.match(sp, /You are Fudge, one of the four brownies/);
+  assert.match(sp, /You are Fudge, one of the brownies/);
   assert.match(sp, /FACTS[\s\S]*- fact/);
   assert.match(sp, /LATEST RESEARCH NOTE, written by Nib\n2026-10-07: n/);
   assert.ok(sp.endsWith("Task."));

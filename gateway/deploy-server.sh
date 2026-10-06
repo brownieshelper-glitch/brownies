@@ -61,5 +61,6 @@ EOF
 systemctl daemon-reload && systemctl enable --now brownies-gateway >/dev/null 2>&1; systemctl restart brownies-gateway; sleep 2; systemctl is-active brownies-gateway; curl -s http://127.0.0.1:8790/health'
 echo
 $SSH "if ! command -v caddy >/dev/null; then (apt-get install -y -qq caddy >/dev/null 2>&1 || (apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl >/dev/null 2>&1 && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list && apt-get update -qq >/dev/null && apt-get install -y -qq caddy >/dev/null)); fi; command -v caddy && caddy version | head -1"
-$SSH "printf '%s\n' '$DOMAIN {' '  reverse_proxy 127.0.0.1:8790' '}' > /etc/caddy/Caddyfile && systemctl enable --now caddy >/dev/null 2>&1; systemctl reload caddy || systemctl restart caddy; sleep 1; systemctl is-active caddy"
+# /admin/* goes to the helpers' own server (the owner's control room, helpers/lib/admin.mjs); everything else to the gateway
+$SSH "printf '%s\n' '$DOMAIN {' '  handle /admin/* {' '    reverse_proxy 127.0.0.1:8791' '  }' '  reverse_proxy 127.0.0.1:8790' '}' > /etc/caddy/Caddyfile && systemctl enable --now caddy >/dev/null 2>&1; systemctl reload caddy || systemctl restart caddy; sleep 1; systemctl is-active caddy"
 echo "== caddy serves $DOMAIN -> 127.0.0.1:8790 (the certificate arrives once the name points here)"

@@ -188,6 +188,16 @@ export class Crumb extends Helper {
     return text;
   }
 
+  /// The owner's instruction (the control room, or /crumb on Telegram): say this in the group, as it is. No model.
+  async onRequest(text) {
+    const t = String(text || "").trim();
+    if (!t) return null;
+    if (!this.groupChatId) { this.log("[crumb] no group to announce in"); return null; }
+    await this.tg.sendMessage(this.groupChatId, t.slice(0, 3800));
+    await this.report("post", `Announced in the group: ${cut(t, 120)}`, { place: "telegram" });
+    return { text: t };
+  }
+
   /// /stats: the live numbers as plain text, from the gateway only. One answer a minute per chat.
   async stats(m) {
     const chat = String(m.chat.id);

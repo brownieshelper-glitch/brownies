@@ -1,6 +1,8 @@
 // Telegram Bot API. Crumb reads the group and private chats with long polling; the alerts and the approval
-// buttons for the owner go through the same bot. Messages are sent as plain text. The bot token is part of every
-// URL, so no error here ever repeats a URL.
+// buttons for the owner go through the same bot, and Sprinkle's videos too. Messages are sent as plain text,
+// a video as a multipart upload. The bot token is part of every URL, so no error here ever repeats a URL.
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { CredentialsError } from "./xapi.mjs";
 
 export class Telegram {
@@ -10,8 +12,11 @@ export class Telegram {
   get configured() { return Boolean(this.token); }
 
   /// One method call. Returns `result`. Throws a plain sentence (status and Telegram's description) on failure.
-  async call(method, params = {}, { timeoutMs = 30_000 } = {}) {
-    const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params) };
+  call(method, params = {}, { timeoutMs = 30_000 } = {}) {
+    return this._send(method, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params) }, timeoutMs);
+  }
+
+  async _send(method, init, timeoutMs) {
     if (typeof AbortSignal?.timeout === "function") init.signal = AbortSignal.timeout(timeoutMs);
     const r = await this.fetch(`https://api.telegram.org/bot${this.token}/${method}`, init);
     const j = await r.json().catch(() => ({}));
@@ -46,4 +51,19 @@ export class Telegram {
   editMessageText(chatId, messageId, text) { return this.call("editMessageText", { chat_id: chatId, message_id: messageId, text: String(text).slice(0, 4000), disable_web_page_preview: true }); }
 
   sendChatAction(chatId, action = "typing") { return this.call("sendChatAction", { chat_id: chatId, action }).catch(() => null); }
+
+  /// A video file (mp4, Telegram takes up to 50 MB from a bot) with a plain-text caption. width, height and
+  /// duration (seconds) help the player show it right. The file is read whole, once, and sent as multipart.
+  async sendVideo(chatId, { file, caption = "", width = null, height = null, duration = null, filename = null } = {}) {
+    const bytes = await readFile(file);
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    if (caption) form.append("caption", String(caption).slice(0, 1000));
+    if (width) form.append("width", String(Math.round(width)));
+    if (height) form.append("height", String(Math.round(height)));
+    if (duration) form.append("duration", String(Math.round(duration)));
+    form.append("supports_streaming", "true");
+    form.append("video", new Blob([bytes], { type: "video/mp4" }), filename || basename(file));
+    return this._send("sendVideo", { method: "POST", body: form }, 240_000);
+  }
 }

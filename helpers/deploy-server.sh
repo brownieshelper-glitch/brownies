@@ -54,8 +54,10 @@ echo "== server reachable: $($SSH 'echo yes && node --version')"
 
 # ---- code ----
 PRIVATE=""; [ -f helpers/private.json ] && PRIVATE="helpers/private.json"
-tar czf - helpers/run.mjs helpers/brownies.json helpers/facts.md helpers/package.json helpers/package-lock.json helpers/lib helpers/helpers $PRIVATE \
-  | $SSH 'mkdir -p /srv/brownies /var/lib/brownies /etc/brownies && rm -rf /srv/brownies/helpers/lib /srv/brownies/helpers/helpers && tar xzf - -C /srv/brownies && cd /srv/brownies/helpers && npm ci --omit=dev --no-audit --no-fund 2>&1 | tail -1'
+VIDEO=""; [ -d helpers/video ] && VIDEO="helpers/video"
+# web/mascot.js goes along: the video brownie draws its frames with the site's own drawing engine
+tar czf - helpers/run.mjs helpers/brownies.json helpers/facts.md helpers/package.json helpers/package-lock.json helpers/lib helpers/helpers $PRIVATE $VIDEO web/mascot.js \
+  | $SSH 'mkdir -p /srv/brownies /var/lib/brownies /var/lib/brownies/videos /etc/brownies && rm -rf /srv/brownies/helpers/lib /srv/brownies/helpers/helpers /srv/brownies/helpers/video && tar xzf - -C /srv/brownies && cd /srv/brownies/helpers && npm ci --omit=dev --no-audit --no-fund 2>&1 | tail -1; command -v ffmpeg >/dev/null || (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg >/dev/null 2>&1 && echo "ffmpeg installed")'
 echo "== code copied and dependencies installed"
 
 # ---- the env file, straight from the local file to the server, never through the screen ----

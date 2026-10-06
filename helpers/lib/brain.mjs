@@ -19,6 +19,7 @@ export class BudgetError extends Error {
 
 const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
 export const REASONING_HEADROOM = 800; // tokens of thinking a Claude 5 model may spend before the answer (measured: about 250 on a research note)
+export const DEFAULT_REASONING = { effort: "low" }; // measured: zero thinking tokens on our jobs, the whole budget goes to the answer
 
 export class Brain {
   /// helpers: { fudge: { model, dailyCapUsd }, ... }   keys: { fudge: "0x...", ... } (live only)
@@ -88,15 +89,17 @@ export class Brain {
   }
 
   /// One chat completion. Returns { text, costMicro, model, usage }. Throws BudgetError when the helper cannot pay.
-  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7 } = {}) {
+  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning = DEFAULT_REASONING } = {}) {
     await this.budgetOrThrow(helper);
     const list = [];
     if (system) list.push({ role: "system", content: system });
     list.push(...messages);
     if (prompt) list.push({ role: "user", content: prompt });
-    // Claude 5 models think before they answer and that thinking is counted inside max_tokens (OpenRouter refuses
-    // to switch it off), so the limit gets headroom; maxTokens stays the room meant for the answer itself.
+    // Claude 5 models think before they answer and that thinking is counted inside max_tokens. OpenRouter refuses
+    // to switch it off, but "effort: low" leaves it at zero tokens on these jobs (measured), so that is the default;
+    // a call may ask for more. The headroom stays as a belt to the braces.
     const body = { model: this.model(helper), messages: list, max_tokens: maxTokens + REASONING_HEADROOM, temperature, usage: { include: true } };
+    if (reasoning) body.reasoning = reasoning;
     const j = this.mode === "live" ? await this._viaGateway(helper, body) : await this._viaOpenRouter(helper, body);
     if (j?.choices?.[0]?.finish_reason === "length") this.log(`[brain] ${helper}'s answer was cut at ${body.max_tokens} tokens (${j.usage?.completion_tokens_details?.reasoning_tokens ?? "?"} of them thinking)`);
     const text = j?.choices?.[0]?.message?.content ?? "";

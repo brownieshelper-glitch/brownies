@@ -96,6 +96,7 @@ export class Admin {
         name, title: cap(name), role: c.role || h.role || "", hidden: Boolean(h.hidden), paused: this.isPaused(name), pausedByEnv: this.W.off.includes(name),
         model: brain.model(name), capUsd: brain.capMicro(name) / 1e6, spentTodayUsd: spent.micro / 1e6, callsToday: spent.calls,
         lastJob: store.lastJob(name), jobs, canAsk: typeof h.onRequest === "function",
+        recruit: Boolean(h.recruit), tasks: h.recruit ? h.spec.tasks.map((t) => ({ id: t.id, title: t.title, tool: t.tool })) : undefined, why: h.recruit ? h.spec.why : undefined,
       };
     });
     return {
@@ -150,6 +151,12 @@ export class Admin {
         if (this.isPaused(helper)) return { ok: false, error: `${cap(helper)} is paused; switch it on first` };
         scheduler.runNow(job.id).catch((e) => this.log(`[admin] ${job.id} failed: ${e.message}`));
         return { ok: true, started: job.id };
+      }
+      case "retire": {
+        if (!h.recruit) return { ok: false, error: `${cap(helper)} is not a recruit; pause it instead` };
+        const dough = helpers.dough;
+        const ok = dough?.fire ? await dough.fire(helper, "retired from the control room") : false;
+        return ok ? { ok: true, retired: helper } : { ok: false, error: "could not retire it (no hiring brownie)" };
       }
       case "ask": {
         if (typeof h.onRequest !== "function") return { ok: false, error: `${cap(helper)} takes no instructions yet` };

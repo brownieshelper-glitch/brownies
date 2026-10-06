@@ -106,6 +106,7 @@
     const title = el("h3", null, h.title);
     if (h.hidden) title.append(el("span", "badge", "hidden"));
     if (h.paused) title.append(el("span", "badge", "paused"));
+    if (h.recruit) title.append(el("span", "badge", "recruit"));
     who.append(title, el("p", "role", h.role));
     head.append(face, who);
     const facts = el("dl", "admin-facts");
@@ -119,6 +120,12 @@
     const toggle = el("button", "btn sm ghost", h.paused ? "Switch on" : "Pause"); toggle.onclick = () => command({ helper: h.name, action: h.paused ? "on" : "off" });
     const capBtn = el("button", "btn sm ghost", "Daily cap"); capBtn.onclick = () => { const v = prompt(`${h.title}'s daily cap in dollars`, String(h.capUsd)); if (v != null && v !== "") command({ helper: h.name, action: "cap", value: Number(v) }); };
     actions.append(run, toggle, capBtn);
+    if (h.recruit) {
+      if (h.why) row("Hired for", h.why);
+      for (const t of h.tasks || []) row("task", `${t.title} (${t.tool})`);
+      const retire = el("button", "btn sm ghost", "Retire"); retire.onclick = () => { if (confirm(`Retire ${h.title}? Its jobs stop. The service restarts in a moment.`)) command({ helper: h.name, action: "retire" }); };
+      actions.append(retire);
+    }
     art.append(head, facts, actions);
     if (h.canAsk) {
       const ask = el("form", "admin-ask");

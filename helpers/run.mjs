@@ -27,6 +27,7 @@ import { Alerts } from "./lib/alerts.mjs";
 import { loadFacts, HELPERS } from "./lib/facts.mjs";
 import { sendSummary } from "./lib/summary.mjs";
 import { Admin } from "./lib/admin.mjs";
+import { Recruit } from "./lib/recruit.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
@@ -72,29 +73,65 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const fudge = new Fudge({ ...deps("fudge"), x, siteUrl: S.siteUrl });
   const crumb = new Crumb({ ...deps("crumb"), telegram, github, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => chip.decide(id, d, ctx), onNote: (id, t) => chip.addNote(id, t) });
   const nib = new Nib({ ...deps("nib"), github, siteUrl: S.siteUrl, rpcUrl: S.rpcUrl });
-  // the private helpers, by module
-  const extra = {};
+  // the recruits: brownies hired at runtime by Dough (lib/hiring.mjs), kept as specs in the store, never as code
+  const all = { fudge, crumb, nib, chip };
+  const recruitNames = () => String(store.getMeta("recruits", "")).split(",").filter(Boolean);
+  const recruitDeps = (spec) => ({ ...deps(spec.name), telegram, github, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, spec });
+  for (const name of recruitNames()) {
+    const raw = store.getMeta(`recruit:${name}`);
+    if (!raw) continue;
+    const spec = JSON.parse(raw);
+    if (spec.retired) continue;
+    config.helpers[name] = { role: spec.role, model: spec.model, dailyCapUsd: spec.dailyCapUsd, hidden: spec.hidden };
+    all[name] = new Recruit(recruitDeps(spec));
+  }
+  const off = offList(env); // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
+  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
+  // a hire is saved and the service restarts itself in a moment: the scheduler takes the new jobs at start
+  const restartSoon = (why) => { log(`[helpers] ${why}: restarting in 3 seconds so the roster is reloaded`); if (W.requestRestart) setTimeout(() => W.requestRestart(why), 3000); };
+  const hire = async (spec) => {
+    const names = recruitNames().filter((n) => n !== spec.name);
+    store.setMeta(`recruit:${spec.name}`, JSON.stringify(spec));
+    store.setMeta("recruits", [...names, spec.name].join(","));
+    config.helpers[spec.name] = { role: spec.role, model: spec.model, dailyCapUsd: spec.dailyCapUsd, hidden: spec.hidden };
+    const r = new Recruit(recruitDeps(spec));
+    all[spec.name] = r;
+    restartSoon(`hired ${spec.name}`);
+    return r;
+  };
+  const fire = async (name) => {
+    const raw = store.getMeta(`recruit:${name}`);
+    if (!raw || !all[name]?.recruit) return false;
+    store.setMeta(`recruit:${name}`, JSON.stringify({ ...JSON.parse(raw), retired: Date.now() }));
+    store.setMeta("recruits", recruitNames().filter((n) => n !== name).join(","));
+    delete all[name];
+    restartSoon(`retired ${name}`);
+    return true;
+  };
+  const recruits = () => Object.values(all).filter((h) => h.recruit);
+  const roster = () => Object.entries(all).map(([name, h]) => ({ name, role: config.helpers[name]?.role || h.role || "" }));
+  // the private helpers, by module (Dough among them, with the hiring hands)
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    extra[name] = new Cls({ ...deps(name), telegram, github, ownerChatId: S.telegram.ownerChatId });
+    all[name] = new Cls({ ...deps(name), telegram, github, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
   }
-  const all = { fudge, crumb, nib, chip, ...extra };
   const names = Object.keys(all);
   const hidden = names.filter((n) => all[n].hidden);
+  W.hidden = hidden;
   // the owner's private commands: /glaze <what> asks the hidden helper for a draft; /summary sends today's summary now
   crumb.onOwnerCommand = async (cmd, text) => {
     if (cmd === "admin") { const code = W.admin?.newCode(); return code ? `Your control room code: ${code}\nIt works for ten minutes at ${S.siteUrl}/admin.html` : "The control room is not ready yet."; }
+    if (cmd === "hire") { if (!all.dough) return "There is no hiring brownie yet."; if (!text) return "Tell me the job: /hire <what the new brownie should do>"; const r = await all.dough.onRequest(text); return r ? true : "Dough could not make that hire (budget, ceiling, or an unusable spec). The log says why."; }
+    if (cmd === "fire") { if (!all.dough) return "There is no hiring brownie yet."; if (!text) return `Which one? Recruits: ${recruits().map((r) => r.name).join(", ") || "none"}`; const ok = await all.dough.fire(text.toLowerCase().trim()); return ok ? true : `${text} is not a recruit.`; }
     if (cmd === "summary") { await sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }); return true; }
     if (all[cmd]?.onRequest) { if (!text) return `Tell ${cmd} what to draft: /${cmd} <what>`; const r = await all[cmd].onRequest(text); return r ? true : `${cmd} could not write that one now (budget or an error). Check the log.`; }
     return undefined; // not a command of ours: Crumb answers it like any message
   };
   const scheduler = new Scheduler({ clock, tz: config.timezone || "UTC", flags: store, log });
   scheduler.add({ id: "team-summary", helper: "team", daily: { hours: [config.summaryHour ?? 22], minute: 0 }, run: () => sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }).catch((e) => log(`[summary] failed: ${e.message}`)) });
-  // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
-  const off = offList(env);
   for (const h of Object.values(all)) if (!off.includes(h.name)) for (const j of h.jobs()) scheduler.add(j);
-  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, helpers: all, scheduler, off, hidden, startedAt: Date.now() };
+  W.scheduler = scheduler;
   // the control room: the owner's page talks to it through /admin/*; a paused helper skips its scheduled runs
   const summaryNow = () => sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log });
   const origins = [S.siteUrl, "https://feedthebrownies.com", "https://www.feedthebrownies.com", /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/, ...S.adminOrigins];
@@ -147,6 +184,7 @@ async function main() {
     store.close();
     process.exit(0);
   };
+  W.requestRestart = (why) => stop(why); // systemd starts the service again (Restart=always): the roster is reloaded
   process.on("SIGTERM", () => stop("SIGTERM"));
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("unhandledRejection", (e) => log(`[helpers] unhandled: ${e?.message || e}`));

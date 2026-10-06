@@ -5,7 +5,7 @@ broadcast/
 node_modules/
 
 # libraries: install with `forge install` (see README), they are not part of this repository
-lib/
+/lib/
 
 # secrets and local files: the real ones live outside the project, in C:\Users\andrea\helix-secrets
 .env

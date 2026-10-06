@@ -61,7 +61,7 @@ export class Nib extends Helper {
       "Write today's note now.",
     ].join("\n\n");
     await this.status("Writing today's research note");
-    const r = await this.think({ system: this.system(RULES), prompt, maxTokens: 800, temperature: 0.4 });
+    const r = await this.think({ system: this.system(RULES), prompt, maxTokens: 1200, temperature: 0.4 });
     const text = tidy(r.text);
     if (!text) { await this.status("The research note came back empty"); return null; }
     const md = `# Research note ${date}\n\nWritten by Nib, the research brownie, from the gateway's figures, the site and the competitors' pages.\n\n${text}\n`;

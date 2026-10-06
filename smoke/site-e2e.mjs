@@ -1,10 +1,13 @@
 // Drives the real site in a real browser (headless Edge over the DevTools protocol) against the local stack that
-// smoke/site-stack.sh brings up. A test wallet is injected into the page: it forwards to anvil, which signs for
-// its own account 1. Every button of the app is pressed and its effect is checked; then every page is
-// photographed at 375, 768, 1024 and 1440 pixels wide.
+// smoke/site-stack.sh brings up: an anvil fork of Ethereum with the coin launched the real way, the gateway in live
+// mode and the site. A test wallet is injected into the page: it forwards to anvil, which signs for its own
+// account 1 (the wallet that holds BROWNIE and has staked). Every button of the app is pressed and its effect is
+// checked; then every page is photographed at 375, 768, 1024 and 1440 pixels wide.
 //   node smoke/site-e2e.mjs [flow|intro|pages|shots|all]      (default all)
+// The stack's addresses come from web/deployments/1.fork.json. SITE, RPC, GW and DEP in the environment override
+// the defaults (http://127.0.0.1:8791, :8563, :8792, 1.fork).
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
+import { mkdirSync, writeFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,11 +16,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, "shots");
 mkdirSync(OUT, { recursive: true });
 const mode = process.argv[2] || "all";
+if (!["flow", "intro", "pages", "shots", "all"].includes(mode)) { console.log("usage: node smoke/site-e2e.mjs [flow|intro|pages|shots|all]"); process.exit(2); }
 const EDGE = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
-const SITE = "http://127.0.0.1:8788", RPC = "http://127.0.0.1:8556", GW = "http://127.0.0.1:8795";
-const QS = `?intro=0&dep=4663.smoke&rpc=${encodeURIComponent(RPC)}&gw=${encodeURIComponent(GW)}`;
-const ACCOUNT = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-const PORT = 9333;
+const SITE = process.env.SITE || "http://127.0.0.1:8791", RPC = process.env.RPC || "http://127.0.0.1:8563", GW = process.env.GW || "http://127.0.0.1:8792";
+const DEP = process.env.DEP || "1.fork";
+let dep = null;
+try { dep = JSON.parse(readFileSync(join(here, "..", "web", "deployments", `${DEP}.json`), "utf8")); } catch {}
+if (!dep) { console.log(`no deployment record web/deployments/${DEP}.json: run bash smoke/site-stack.sh first`); process.exit(2); }
+const QS = `?intro=0&dep=${DEP}&rpc=${encodeURIComponent(RPC)}&gw=${encodeURIComponent(GW)}`;
+// a page with nothing behind it: no deployment, and a gateway address nothing answers on (the real one must not be called from a test)
+const NOGW = `gw=${encodeURIComponent("http://127.0.0.1:9")}`;
+const ACCOUNT = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"; // anvil account 1
+const PORT = 9337;
+const STACK_SKILL = "https://github.com/brownieshelper-glitch/brownies/pull/1"; // proposed and voted on by account 1 in site-stack.sh
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const WALLET = `(() => {
@@ -47,16 +58,20 @@ async function rpc(method, params = []) {
   const r = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
   return (await r.json()).result;
 }
+// the chain's clock moves forward (anvil only), and the page is asked to read again: a hidden tab does not refresh itself
+const timeJump = async (seconds) => { await rpc("evm_increaseTime", [seconds]); await rpc("evm_mine", []); };
 
 // ---- browser ----
+// a fresh profile and no extensions: a real wallet extension would otherwise load into the test browser
 const profile = mkdtempSync(join(tmpdir(), "brownies-edge-"));
-const edge = spawn(EDGE, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--disable-extensions", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, "about:blank"], { stdio: "ignore" });
+const edge = spawn(EDGE, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--disable-extensions", "--disable-component-extensions-with-background-pages", "--no-default-browser-check", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, "about:blank"], { stdio: "ignore" });
 let ws, seq = 0;
 const waiting = new Map();
 async function connect() {
   for (let i = 0; i < 60; i++) {
     try { const v = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json(); ws = new WebSocket(v.webSocketDebuggerUrl); break; } catch { await sleep(250); }
   }
+  if (!ws) throw new Error("Edge did not open its debugging port " + PORT);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
@@ -117,7 +132,9 @@ async function openPage(withWallet) {
 
 const results = [];
 const ok = (name, cond, detail = "") => { results.push({ name, pass: !!cond, detail }); console.log(`${cond ? "PASS" : "FAIL"}  ${name}${detail ? "  " + detail : ""}`); };
+const until = async (fn, ms = 30000, step = 300) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (await fn()) return true; } catch {} await sleep(step); } return false; };
 
+// The app, with the test wallet: every button in the order a visitor would press them.
 async function flow() {
   const p = await openPage(true);
   await p.size(1440, 900);
@@ -127,44 +144,55 @@ async function flow() {
   const click = async (id) => { await until(() => p.ev(`!document.getElementById(${JSON.stringify(id)}).disabled`), 20000); return p.ev(`document.getElementById(${JSON.stringify(id)}).click()`); };
   const type = (id, v) => p.ev(`(() => { const el = document.getElementById(${JSON.stringify(id)}); el.value = ${JSON.stringify(String(v))}; el.dispatchEvent(new Event("input", { bubbles: true })); })()`);
   const lastToast = () => p.ev(`(() => { const t = [...document.querySelectorAll("#toasts .toast")]; return t.length ? t[t.length - 1].textContent : ""; })()`);
-  const until = async (fn, ms = 30000, step = 300) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (await fn()) return true; } catch {} await sleep(step); } return false; };
+  const clearToasts = () => p.ev(`document.querySelectorAll("#toasts .toast").forEach(t => t.remove())`);
   const idle = (id) => until(async () => !(await p.ev(`document.getElementById(${JSON.stringify(id)}).classList.contains("busy")`)), 60000);
+  const refresh = () => p.ev("window.BrowniesApp.refresh()");
+  // the skills list, one entry by the address of the skill
+  const skillLi = (uri) => `[...document.querySelectorAll("#skills li")].find((li) => (li.querySelector(".what a")?.href || li.querySelector(".what")?.textContent) === ${JSON.stringify(uri)})`;
+  const skillMeta = (uri) => p.ev(`(${skillLi(uri)})?.querySelector(".meta")?.textContent || ""`);
+  const skillButtons = (uri) => p.ev(`[...((${skillLi(uri)})?.querySelectorAll(".acts button") || [])].map((b) => b.textContent + (b.disabled ? " (off)" : "")).join(", ")`);
+  const pressSkill = (uri, label) => p.ev(`(() => { const b = [...((${skillLi(uri)})?.querySelectorAll(".acts button") || [])].find((x) => x.textContent === ${JSON.stringify(label)}); if (!b || b.disabled) return false; b.click(); return true; })()`);
+  // what the vault has counted for helper 0, read through the page's own contracts
+  const tippedTo0 = async () => BigInt(await p.ev(`window.Brownies.load().then((S) => S.vault.tippedTo(0)).then((v) => v.toString())`));
 
-  ok("buttons are disabled before a wallet connects", await p.ev(`document.getElementById("btnStake").disabled && document.getElementById("btnClaim").disabled`));
+  ok("buttons are disabled before a wallet connects", await p.ev(`document.getElementById("btnStake").disabled && document.getElementById("btnClaim").disabled && document.getElementById("btnTip").disabled && document.getElementById("btnSubmitSkill").disabled`));
   ok("the protocol numbers load without a wallet", await until(async () => (await text("pStaked")).includes("BROWNIE")), await text("pStaked"));
+  ok("the tip box lists the four brownies", await until(() => p.ev(`document.querySelectorAll("#tipWho option").length === 4`)), await p.ev(`[...document.querySelectorAll("#tipWho option")].map((o) => o.textContent).join(", ")`));
+  ok("the skills list shows the stack's proposal", await until(() => p.ev(`document.querySelectorAll("#skills li").length >= 1`)) && (await skillMeta(STACK_SKILL)).includes("asks 5 SUGAR"), await skillMeta(STACK_SKILL));
 
   await click("connectBtn");
   ok("the wallet picker lists the wallet", await until(() => p.ev(`!!document.querySelector("#walletList .wallet-item")`)));
   await p.ev(`document.querySelector("#walletList .wallet-item").click()`);
   ok("connected: the address chip shows", await until(async () => (await text("walletAddr")).startsWith("0x7099")), await text("walletAddr"));
-  ok("wallet balances are read", await until(async () => (await num("vWallet")) > 0 && (await num("vUsdc")) > 0), `BROWNIE ${await text("vWallet")}, USDC ${await text("vUsdc")}`);
+  ok("wallet balances are read", await until(async () => (await num("vWallet")) > 0 && (await num("vUsdc")) > 0 && (await num("vStaked")) >= 10000), `BROWNIE ${await text("vWallet")}, staked ${await text("vStaked")}, USDC ${await text("vUsdc")}`);
 
   // stake (approve, then stake)
-  const before = await num("vWallet");
+  const before = await num("vWallet"), staked0 = await num("vStaked");
   await type("inStake", "50000");
   await click("btnStake");
-  ok("stake goes through (approve then stake)", await until(async () => (await num("vStaked")) >= 50000, 60000), `staked ${await text("vStaked")}, toast "${await lastToast()}"`);
+  ok("stake goes through (approve then stake)", await until(async () => (await num("vStaked")) >= staked0 + 50000, 60000), `staked ${await text("vStaked")}, toast "${await lastToast()}"`);
   await idle("btnStake");
   ok("the wallet balance fell by the stake", Math.abs(before - (await num("vWallet")) - 50000) < 1);
-  ok("a new stake shows no loyalty bonus yet, and says when the first one comes", (await text("vBoost")) === "none yet" && (await text("boostHint")).startsWith("Your stake is 0 days old. It earns 10% more from day 30."), `${await text("vBoost")} | ${await text("boostHint")}`);
+  // the stake's age is the average of the old coins (a day, from the stack) and the new ones (now): still under a day
+  ok("a young stake shows no loyalty bonus yet, and says when the first one comes", (await text("vBoost")) === "none yet" && /^Your stake is \d+ days? old\. It earns 10% more from day 30\./.test(await text("boostHint")), `${await text("vBoost")} | ${await text("boostHint")}`);
 
   // a stake under the minimum is refused before any transaction
-  await p.ev(`document.querySelectorAll("#toasts .toast").forEach(t => t.remove())`);
+  await clearToasts();
   await type("inStake", "abc"); await click("btnStake"); await sleep(300);
   ok("a bad amount is refused with a sentence", (await lastToast()).includes("Type an amount"), await lastToast());
 
-  // collect the tax (the keeper's job, pressed by hand), then let the hour stream
+  // collect the tax (the keeper's job, pressed by hand): 0.1 WETH of fee waits in the harvester; then let the hour stream
   await click("btnCollect");
   ok("collect the tax goes through", await until(async () => (await lastToast()).startsWith("Collected"), 60000), await lastToast());
   await idle("btnCollect");
   ok("the stream is running", await until(async () => (await num("pStream")) > 0), await text("pStream"));
   ok("the AI team vault received its 10% and shows a daily budget", await until(async () => (await num("pVault")) > 0 && (await num("pTeam")) > 0), `vault ${await text("pVault")}, today ${await text("pTeam")}`);
-  await rpc("evm_increaseTime", [1800]); await rpc("evm_mine", []);
+  await timeJump(1800);
   console.log("      (tab hidden in this browser: " + (await p.ev("document.hidden")) + ", so the test asks the page to refresh)");
-  await p.ev("window.BrowniesApp.refresh()");
+  await refresh();
   ok("SUGAR is being earned", await until(async () => (await num("vEarned")) > 0, 30000), await text("vEarned"));
 
-  await p.ev(`document.querySelectorAll("#toasts .toast").forEach(t => t.remove())`);
+  await clearToasts();
   await click("btnClaim");
   ok("claim puts SUGAR in the wallet", await until(async () => (await num("vSugar")) > 0, 40000), `SUGAR "${await text("vSugar")}", toast "${await lastToast()}", button "${await text("btnClaim")}"`);
   await idle("btnClaim");
@@ -193,15 +221,16 @@ async function flow() {
   ok("buy to wallet adds 2 SUGAR", await until(async () => (await num("vSugar")) >= sp0 + 1.999, 60000), `SUGAR ${await text("vSugar")}`);
   await idle("btnBuy");
 
-  // try the key with a real model
+  // try the key: the stack's gateway talks to a stand-in upstream (smoke/mock-upstream.mjs), so no real model is called
   const hasTry = await p.ev(`!document.getElementById("tryPanel").hidden`);
   ok("the try panel is shown when the gateway is known", hasTry);
-  const model = await p.ev(`document.getElementById("inModel").value`);
+  const model = await until(() => p.ev(`!!document.getElementById("inModel").value`), 15000) ? await p.ev(`document.getElementById("inModel").value`) : "";
+  ok("a model from the gateway's catalogue is picked", model.startsWith("test/"), model);
   await p.ev(`(() => { const el = document.getElementById("inPrompt"); el.value = "Say hello in five words."; })()`);
   const balBefore = await num("vBalance");
   await click("btnSend");
   const replied = await until(() => p.ev(`!document.getElementById("reply").hidden`), 90000);
-  ok("a real model answers through the gateway", replied, replied ? (await text("reply")).replace(/\s+/g, " ").slice(0, 110) : await lastToast());
+  ok("a model answers through the gateway", replied && (await text("reply")).includes("Hello from the test model"), replied ? (await text("reply")).replace(/\s+/g, " ").slice(0, 110) : await lastToast());
   await idle("btnSend");
   ok("the request was charged to the balance", await until(async () => (await num("vSpent")) > 0 || (await num("vBalance")) < balBefore, 15000), `model ${model}, spent ${await text("vSpent")}`);
 
@@ -210,8 +239,24 @@ async function flow() {
   ok("replace my key makes an epoch 1 key", await until(async () => (await text("keyBox")).startsWith("sk-brownie-1-"), 30000), (await text("keyBox")).slice(0, 18) + "...");
   await idle("btnRotate");
 
-  // unstake everything
-  await type("inStake", "50000");
+  // tip a brownie: half a SUGAR to the first on the payroll (approve, then tip); the vault counts it for that helper
+  await clearToasts();
+  const tipName = await p.ev(`document.querySelector("#tipWho option").textContent`);
+  const tipped0 = await tippedTo0(), sugarBeforeTip = await num("vSugar");
+  await p.ev(`(() => { const s = document.getElementById("tipWho"); s.value = s.options[0].value; s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  await type("inTip", "0.5");
+  await click("btnTip");
+  ok("tip goes through (approve then tip) and the vault counts it for the brownie", await until(async () => (await tippedTo0()) === tipped0 + 500000n, 60000), `${tipName}: tipped ${Number(tipped0) / 1e6} then ${Number(await tippedTo0()) / 1e6} SUGAR, toast "${await lastToast()}"`);
+  await idle("btnTip");
+  ok("the tip thanks the brownie by name", (await lastToast()).startsWith(`Tipped. ${tipName} says thank you.`), await lastToast()); // the toast carries an explorer link after the sentence
+  ok("the tip left the wallet", await until(async () => Math.abs(sugarBeforeTip - (await num("vSugar")) - 0.5) < 0.002, 20000), `SUGAR ${sugarBeforeTip} then ${await text("vSugar")}`);
+  // a tip over the wallet's SUGAR is refused before any transaction
+  await clearToasts();
+  await type("inTip", "999999"); await click("btnTip"); await sleep(300);
+  ok("a tip the wallet cannot pay is refused with a sentence", (await lastToast()).includes("do not have that much SUGAR"), await lastToast());
+
+  // unstake everything (the stack's 10,000 and the 50,000 of this run)
+  await type("inStake", String(await num("vStaked")));
   await click("btnUnstake");
   ok("unstake returns the BROWNIE", await until(async () => (await num("vStaked")) === 0, 60000), `staked "${await text("vStaked")}"`);
   await idle("btnUnstake");
@@ -219,8 +264,8 @@ async function flow() {
   // the loyalty bonus: stake, let 31 days pass, apply
   await type("inStake", "60000"); await click("btnStake");
   await until(async () => (await num("vStaked")) >= 60000, 60000); await idle("btnStake");
-  await rpc("evm_increaseTime", [31 * 86400]); await rpc("evm_mine", []);
-  await p.ev("window.BrowniesApp.refresh()");
+  await timeJump(31 * 86400);
+  await refresh();
   ok("after 31 days the page offers the bonus", await until(() => p.ev(`!document.getElementById("btnPoke").hidden`), 20000), await text("boostHint"));
   await click("btnPoke");
   ok("apply my bonus sets +10%", await until(async () => (await text("vBoost")) === "+10%", 60000), await text("vBoost"));
@@ -231,17 +276,55 @@ async function flow() {
   // leave a stake and a visible state for the screenshots
   await type("inStake", "120000"); await click("btnStake");
   await until(async () => (await num("vStaked")) >= 120000, 60000); await idle("btnStake");
-  await p.ev(`document.querySelectorAll("#toasts .toast").forEach(t => t.remove())`);
+
+  // skills. The stake must be a day old to propose or vote, so a day passes first. The stack's proposal closed
+  // while the days went by: it is settled, then a new skill is proposed, voted on, and settled after its 3 days.
+  await timeJump(86401);
+  await refresh();
+  ok("a closed vote offers Settle", await until(async () => (await skillMeta(STACK_SKILL)).includes("waiting to be settled") && (await skillButtons(STACK_SKILL)) === "Settle", 20000), `${await skillMeta(STACK_SKILL)} [${await skillButtons(STACK_SKILL)}]`);
+  await pressSkill(STACK_SKILL, "Settle");
+  ok("settle pays the passed skill from the vault", await until(async () => /passed, paid [\d.,]+ SUGAR/.test(await skillMeta(STACK_SKILL)), 60000), await skillMeta(STACK_SKILL));
+  const n0 = await p.ev(`document.querySelectorAll("#skills li").length`);
+  const URI = `https://github.com/brownieshelper-glitch/brownies/pull/${n0 + 1}`;
+  await clearToasts();
+  await type("inSkillUri", URI); await type("inSkillAsk", "1");
+  await click("btnSubmitSkill");
+  ok("propose a skill opens a 3-day vote", await until(async () => (await skillMeta(URI)).includes("vote open"), 60000), `${await skillMeta(URI)} | toast "${await lastToast()}"`);
+  await idle("btnSubmitSkill");
+  ok("the new proposal is first in the list and links to its repository", await p.ev(`document.querySelector("#skills li .what a")?.href === ${JSON.stringify(URI)} && document.querySelector("#skills li .what a").target === "_blank"`));
+  ok("the proposal shows the ask, the author, the count and the bar", /^asks 1 SUGAR, by 0x7099\.\.\.79C8, vote open, closes \d+ \w+ \d{4}\. yes 0, no 0, bar [\d,]+$/.test(await skillMeta(URI)), await skillMeta(URI));
+  ok("a staker is offered Yes and No", (await skillButtons(URI)) === "Yes, No", await skillButtons(URI));
+  await pressSkill(URI, "Yes");
+  ok("a yes vote is counted with the stake's weight", await until(async () => /You voted\./.test(await skillMeta(URI)) && /yes [1-9][\d,]*, no 0/.test(await skillMeta(URI)), 60000), await skillMeta(URI));
+  ok("a wallet that voted gets no second vote", (await skillButtons(URI)) === "", `[${await skillButtons(URI)}]`);
+  await timeJump(3 * 86400 + 1);
+  await refresh();
+  ok("after 3 days the vote is closed and waits to be settled", await until(async () => (await skillMeta(URI)).includes("vote closed, waiting to be settled") && (await skillButtons(URI)) === "Settle", 20000), await skillMeta(URI));
+  const sugarBeforePay = await num("vSugar");
+  await pressSkill(URI, "Settle");
+  ok("settle pays the author the SUGAR asked", await until(async () => /passed, paid 1 SUGAR/.test(await skillMeta(URI)), 60000), await skillMeta(URI));
+  ok("the author's wallet received it", await until(async () => (await num("vSugar")) >= sugarBeforePay + 0.999, 20000), `SUGAR ${sugarBeforePay} then ${await text("vSugar")}`);
+  ok("a settled skill offers no button", (await skillButtons(URI)) === "");
+
+  await clearToasts();
   await sleep(600);
   await p.shot("app-1440-connected.png");
   await p.size(375, 812, true); await sleep(500);
   await p.shot("app-375-connected.png");
   await p.close();
+
+  // the Kitchen shows the tip on the brownie's card
+  const k = await openPage(false);
+  await k.size(1440, 900);
+  await k.go(`${SITE}/team.html${QS}`);
+  const tipsOn = (name) => k.ev(`(() => { const c = [...document.querySelectorAll("#crew .live-card")].find((c) => c.querySelector("h3").textContent === ${JSON.stringify(name)}); const row = c && [...c.querySelectorAll("dl div")].find((d) => d.querySelector("dt").textContent === "Tips" && !d.hidden); return row ? row.querySelector("dd").textContent : ""; })()`);
+  ok("kitchen: the brownie's card shows the tip", await until(async () => Number((await tipsOn(tipName)).replace(/[^0-9.]/g, "")) >= 0.5, 20000), `${tipName}: ${await tipsOn(tipName)}`);
+  await k.close();
 }
 
 // The intro on the home page: it plays once per visit, the brownies move and eat, Enter lifts it.
 async function intro() {
-  const wait = async (fn, ms = 15000, step = 300) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (await fn()) return true; } catch {} await sleep(step); } return false; };
+  const wait = (fn, ms = 15000, step = 300) => until(fn, ms, step);
   const p = await openPage(false);
   const on = () => p.ev(`document.documentElement.classList.contains("intro-on")`);
   const st = () => p.ev(`window.BrowniesIntro.state()`);
@@ -286,9 +369,9 @@ async function intro() {
   await p.close();
 }
 
-// The Kitchen and Progress pages, fed by the reports that smoke/seed-team.mjs wrote.
+// The Kitchen and Progress pages, fed by the reports that smoke/seed-team.mjs wrote and by the fork.
 async function pages() {
-  const wait = async (fn, ms = 15000, step = 300) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (await fn()) return true; } catch {} await sleep(step); } return false; };
+  const wait = (fn, ms = 15000, step = 300) => until(fn, ms, step);
   const p = await openPage(false);
   await p.size(1440, 900);
   await p.go(`${SITE}/team.html${QS}`);
@@ -297,7 +380,7 @@ async function pages() {
   const now = (name) => p.ev(`[...document.querySelectorAll("#crew .live-card")].find((c) => c.querySelector("h3").textContent === ${JSON.stringify(name)}).querySelector(".now").textContent`);
   ok("kitchen: a fresh task shows as Now", (await now("Fudge")).startsWith("Now: Writing tomorrow"), await now("Fudge"));
   ok("kitchen: an old task shows as resting", (await now("Nib")).startsWith("Resting. Last report"), await now("Nib"));
-  ok("kitchen: the chain's numbers are on the cards", await wait(() => p.ev(`[...document.querySelectorAll("#crew .live-card dt")].filter((d) => d.textContent === "Fed by the vault" && !d.parentElement.hidden).length === 4`)));
+  ok("kitchen: the chain's numbers are on the cards", await wait(() => p.ev(`[...document.querySelectorAll("#crew .live-card dt")].filter((d) => d.textContent === "Fed by the vault" && !d.parentElement.hidden).length === 4 && [...document.querySelectorAll("#crew .live-card dt")].filter((d) => d.textContent === "Tips" && !d.parentElement.hidden).length === 4`)));
   ok("kitchen: markup in a report is shown as text and never runs", await p.ev(`window.__pwned === undefined && document.querySelector("#feed").textContent.includes("<img src=x onerror") && document.querySelectorAll("#feed img, #feed script").length === 0`));
   ok("kitchen: a link in a report opens the proof in a new tab", await p.ev(`[...document.querySelectorAll("#feed a.link")].every((a) => a.href.startsWith("https://") && a.target === "_blank" && a.rel.includes("noopener")) && document.querySelectorAll("#feed a.link").length >= 2`));
   await p.ev(`[...document.querySelectorAll("#who button")].find((b) => b.textContent === "Crumb").click()`);
@@ -322,7 +405,7 @@ async function pages() {
   await p.shot("kitchen-tower2-1440.png", true);
 
   await p.go(`${SITE}/progress.html${QS}`);
-  ok("progress: the numbers come from the chain", await wait(() => p.ev(`!document.getElementById("numbers").hidden && document.getElementById("numbersList").textContent.includes("Paid to stakers")`)), await p.ev(`[...document.querySelectorAll("#numbersList div")].slice(0, 3).map((d) => d.textContent).join(" | ")`));
+  ok("progress: the numbers come from the chain", await wait(() => p.ev(`!document.getElementById("numbers").hidden && document.getElementById("numbersList").textContent.includes("Paid to stakers") && document.getElementById("numbersList").textContent.includes("Skills proposed by stakers")`)), await p.ev(`[...document.querySelectorAll("#numbersList div")].slice(0, 3).map((d) => d.textContent).join(" | ")`));
   ok("progress: the last 7 days count the reports", await wait(() => p.ev(`!document.getElementById("week").hidden`)) && (await p.ev(`[...document.querySelectorAll("#weekList div")].find((d) => d.firstChild.textContent === "Posts").lastChild.textContent`)) === "2");
   ok("progress: the city has a tower for every 100 jobs", await wait(() => p.ev(`(() => { const t = [...document.querySelectorAll("#city a.tower")]; return t.length === 3 && t.map((a) => a.getAttribute("data-count")).join() === "100,100,31" && document.querySelectorAll("#city .roof").length === 2 && document.querySelectorAll("#city .lot").length >= 3; })()`)), await p.ev(`document.getElementById("cityLine").textContent`));
   ok("progress: the line counts the jobs", (await p.ev(`document.getElementById("cityLine").textContent`)) === "231 jobs done. The brownies are on tower 3.");
@@ -330,11 +413,11 @@ async function pages() {
   ok("progress: milestones, newest first", await p.ev(`(() => { const t = [...document.querySelectorAll("#miles .what")].map((x) => x.textContent); return t.length === 3 && t[0] === "Tip button shipped" && t[2] === "BROWNIE launched on Pons"; })()`));
 
   // with no deployment and no gateway: the pages still stand, with nothing empty or broken on show
-  await p.go(`${SITE}/team.html`);
+  await p.go(`${SITE}/team.html?${NOGW}`);
   await sleep(600);
   ok("kitchen with nothing behind it: an empty lot and four brownies", await p.ev(`document.querySelectorAll("#site .actor").length === 4 && document.querySelectorAll("#site .brick").length === 0 && document.querySelector(".site-count").textContent === "0 of 100 bricks" && document.querySelector(".site-info .what").textContent.startsWith("No bricks yet")`));
   ok("kitchen with nothing behind it: the four cards and a plain empty line", await p.ev(`document.querySelectorAll("#crew .live-card").length === 4 && !document.getElementById("feedEmpty").hidden && document.getElementById("who").hidden && [...document.querySelectorAll("#crew .now")].every((n) => n.hidden)`));
-  await p.go(`${SITE}/progress.html`);
+  await p.go(`${SITE}/progress.html?${NOGW}`);
   await sleep(600);
   ok("progress with nothing behind it: empty lots, no empty blocks", await p.ev(`document.querySelectorAll("#city .lot").length >= 6 && document.querySelectorAll("#city a.tower").length === 0 && document.getElementById("figures").hidden && !document.getElementById("milesEmpty").hidden`));
   await p.close();
@@ -348,6 +431,7 @@ async function shots() {
       await p.size(w, w === 375 ? 812 : 900, w === 375);
       await p.go(SITE + path);
       if (name === "team" || name === "progress") await sleep(1500);
+      if (name === "app") await until(() => p.ev(`document.querySelectorAll("#skills li").length >= 1 && document.querySelectorAll("#tipWho option").length === 4`), 15000);
       const overflow = await p.ev(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
       if (name === "home") await p.shot(`${name}-${w}-fold.png`, true);
       const m = await p.shot(`${name}-${w}.png`);
@@ -358,16 +442,17 @@ async function shots() {
     writeFileSync(join(OUT, `${name}.txt`), txt);
     const bad = [...new Set([...txt].filter((c) => c.charCodeAt(0) > 126))];
     ok(`${name}: only plain keyboard characters`, bad.length === 0, bad.length ? "found " + bad.map((c) => "U+" + c.charCodeAt(0).toString(16)).join(" ") : "");
-    const small = await p.ev(`[...document.querySelectorAll("a, button")].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 44 && !e.closest("pre") && !e.closest(".prose p, .prose li, .prose td, .foot p, .hint, td.addr"); }).map(e => (e.textContent || e.id).trim().slice(0, 24) + " " + Math.round(e.getBoundingClientRect().height))`);
+    // links inside running text are exempt, like everywhere on the web; buttons and standalone links are not
+    const small = await p.ev(`[...document.querySelectorAll("a, button")].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 44 && !e.closest("pre") && !e.closest(".prose p, .prose li, .prose td, .foot p, .hint, td.addr, .skills .what"); }).map(e => (e.textContent || e.id).trim().slice(0, 24) + " " + Math.round(e.getBoundingClientRect().height))`);
     ok(`${name} at 375: tap targets are at least 44px`, small.length === 0, small.join(" | "));
   }
   // the page with no deployment at all: nothing broken, nothing empty on show
   await p.size(1440, 900);
-  await p.go(`${SITE}/index.html?intro=0`);
+  await p.go(`${SITE}/index.html?intro=0&${NOGW}`);
   ok("home without a deployment hides the live numbers", await p.ev(`document.getElementById("live").hidden`));
-  await p.go(`${SITE}/app.html`);
+  await p.go(`${SITE}/app.html?${NOGW}`);
   await p.shot("app-1440-nodeploy.png");
-  ok("app without a deployment keeps its buttons disabled", await p.ev(`document.getElementById("btnStake").disabled`));
+  ok("app without a deployment keeps its buttons disabled", await p.ev(`document.getElementById("btnStake").disabled && document.getElementById("btnTip").disabled && document.getElementById("btnSubmitSkill").disabled`));
   await p.close();
 }
 
@@ -382,7 +467,9 @@ try {
   process.exitCode = 1;
 } finally {
   try { ws?.close(); } catch {}
-  edge.kill();
+  edge.kill(); // only the Edge this run started
+  await sleep(500);
+  try { rmSync(profile, { recursive: true, force: true }); } catch {}
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length} passed, ${failed.length} failed`);
   if (failed.length) process.exitCode = 1;

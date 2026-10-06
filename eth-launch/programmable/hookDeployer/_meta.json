@@ -1,0 +1,47 @@
+{
+ "match": "match",
+ "creationMatch": "match",
+ "runtimeMatch": "match",
+ "verifiedAt": "2026-08-25T05:58:08Z",
+ "compilation": {
+  "language": "Solidity",
+  "compiler": "solc",
+  "compilerVersion": "0.8.26+commit.8a97fa7a",
+  "compilerSettings": {
+   "viaIR": false,
+   "metadata": {
+    "appendCBOR": false,
+    "bytecodeHash": "none"
+   },
+   "libraries": {},
+   "optimizer": {
+    "runs": 1000,
+    "enabled": true
+   },
+   "evmVersion": "cancun",
+   "remappings": [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/uniswap-hooks/=lib/openzeppelin-uniswap-hooks/",
+    "@solady/=lib/solady/",
+    "@uniswap/v4-core/=lib/v4-core/",
+    "@uniswap/v4-periphery/=lib/v4-periphery/",
+    "programmable-src/=src/",
+    "shards-v1/=lib/shards-v1/",
+    "solady/=lib/solady/src/"
+   ]
+  },
+  "name": "ProgrammableCreate2GraphDeployerV1",
+  "fullyQualifiedName": "deployment/router-v4/src/ProgrammableCreate2GraphDeployerV1.sol:ProgrammableCreate2GraphDeployerV1"
+ },
+ "deployment": {
+  "transactionHash": "0x1ad14da89e9446190fc3cf14fc34888e072d53d66bce9ba8040b1ae9773d34b3",
+  "blockNumber": "25716935",
+  "transactionIndex": "21",
+  "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+ },
+ "proxyResolution": {
+  "isProxy": false,
+  "proxyType": null,
+  "implementations": []
+ }
+}

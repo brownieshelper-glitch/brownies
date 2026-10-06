@@ -1,0 +1,37 @@
+{
+ "match": "match",
+ "creationMatch": "match",
+ "runtimeMatch": "match",
+ "verifiedAt": "2026-10-05T10:51:23Z",
+ "compilation": {
+  "language": "Solidity",
+  "compiler": "solc",
+  "compilerVersion": "0.8.26+commit.8a97fa7a",
+  "compilerSettings": {
+   "viaIR": true,
+   "metadata": {
+    "appendCBOR": false,
+    "bytecodeHash": "none"
+   },
+   "libraries": {},
+   "optimizer": {
+    "runs": 200,
+    "enabled": true
+   },
+   "evmVersion": "cancun"
+  },
+  "name": "FoundationTokenV1",
+  "fullyQualifiedName": "src/module-foundation/FoundationTokenV1.sol:FoundationTokenV1"
+ },
+ "deployment": {
+  "transactionHash": "0x81de2fbe25ab114190bf90e191e21e2022ff1e05091664a65d93eaef5ce507da",
+  "blockNumber": "26125667",
+  "transactionIndex": "213",
+  "deployer": "0x9e1339Eaed0EfF31Eda7D714A341Eb09a7e4513e"
+ },
+ "proxyResolution": {
+  "isProxy": false,
+  "proxyType": null,
+  "implementations": []
+ }
+}

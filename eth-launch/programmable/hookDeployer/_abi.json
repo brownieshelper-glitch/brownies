@@ -1,0 +1,944 @@
+[
+ {
+  "name": "DeploymentAddressAlreadyOccupied",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "targetIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "deployment",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "DeploymentAddressMismatch",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "targetIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "actual",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "predicted",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "DeploymentRuntimeCodeMissing",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "targetIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "deployment",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "DuplicateDeploymentAddress",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "firstIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "duplicateIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "deployment",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "DuplicateEffectiveSalt",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "firstIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "duplicateIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "effectiveSalt",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "DuplicateTargetId",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "firstIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "duplicateIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "targetIdHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "EmptyGraph",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "GraphAuthorizationAlreadyConsumed",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "authorizationKey",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "GraphCommitmentMismatch",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "actual",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "reviewed",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "GraphInputBytesLimitExceeded",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "maximum",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "GraphTargetLimitExceeded",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "maximum",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "GraphTargetValueSumMismatch",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "targetSum",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "authorized",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "GraphValueMismatch",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "authorized",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "InitializerCallFailed",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "targetIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "deployment",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "returnDataLength",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "boundedReturnData",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ]
+ },
+ {
+  "name": "InvalidGraphAuthorization",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "InvalidGraphTarget",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "targetIndex",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "ReentrantGraphDeployment",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "UnauthorizedLauncher",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "caller",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "authorizedLauncher",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "ProgrammableCreate2GraphDeployed",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "routeNamespace",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "graphCommitment",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "graphDeploymentHash",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "routeNonce",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "topologyHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "authorizedLauncher",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "totalValue",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "targetCount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "ProgrammableCreate2GraphTargetDeployed",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "graphCommitment",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "targetIdHash",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "deployment",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "targetIndex",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "effectiveSalt",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "initCodeHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "initializerCalldataHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "runtimeCodeHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "deploymentValue",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "initializerValue",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "GRAPH_AUTHORIZATION_KEY_TYPEHASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "GRAPH_COMMITMENT_TYPEHASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "GRAPH_DEPLOYMENT_ACCUMULATOR_TYPEHASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "GRAPH_TARGET_COMMITMENT_TYPEHASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MAX_INITIALIZER_REVERT_BYTES",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MAX_TARGETS",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MAX_TARGET_INITIALIZER_BYTES",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MAX_TARGET_INIT_CODE_BYTES",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MAX_TOTAL_INPUT_BYTES",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "TARGET_SALT_TYPEHASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "computeGraphCommitment",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "authorization",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "routeNamespace",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "routeNonce",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "topologyHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "graphCommitment",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "authorizedLauncher",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "totalValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.GraphAuthorization"
+   },
+   {
+    "name": "targets",
+    "type": "tuple[]",
+    "components": [
+     {
+      "name": "targetIdHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "applicantSalt",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "deploymentValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "initializerValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "initCode",
+      "type": "bytes",
+      "internalType": "bytes"
+     },
+     {
+      "name": "initializerCalldata",
+      "type": "bytes",
+      "internalType": "bytes"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.Target[]"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "commitment",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "targetValueSum",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "consumedGraphAuthorization",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "authorizationKey",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "consumed",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "deployGraph",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "authorization",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "routeNamespace",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "routeNonce",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "topologyHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "graphCommitment",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "authorizedLauncher",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "totalValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.GraphAuthorization"
+   },
+   {
+    "name": "targets",
+    "type": "tuple[]",
+    "components": [
+     {
+      "name": "targetIdHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "applicantSalt",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "deploymentValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "initializerValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "initCode",
+      "type": "bytes",
+      "internalType": "bytes"
+     },
+     {
+      "name": "initializerCalldata",
+      "type": "bytes",
+      "internalType": "bytes"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.Target[]"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "deployments",
+    "type": "address[]",
+    "internalType": "address[]"
+   },
+   {
+    "name": "runtimeCodeHashes",
+    "type": "bytes32[]",
+    "internalType": "bytes32[]"
+   },
+   {
+    "name": "runtimeCodes",
+    "type": "bytes[]",
+    "internalType": "bytes[]"
+   },
+   {
+    "name": "graphDeploymentHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "payable"
+ },
+ {
+  "name": "effectiveTargetSalt",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "authorization",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "routeNamespace",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "routeNonce",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "topologyHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "graphCommitment",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "authorizedLauncher",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "totalValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.GraphAuthorization"
+   },
+   {
+    "name": "targetIdHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "applicantSalt",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "graphAuthorizationKey",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "authorization",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "routeNamespace",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "routeNonce",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "topologyHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "graphCommitment",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "authorizedLauncher",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "totalValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.GraphAuthorization"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "predictTarget",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "authorization",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "routeNamespace",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "routeNonce",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "topologyHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "graphCommitment",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "authorizedLauncher",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "totalValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.GraphAuthorization"
+   },
+   {
+    "name": "target",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "targetIdHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "applicantSalt",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "deploymentValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "initializerValue",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "initCode",
+      "type": "bytes",
+      "internalType": "bytes"
+     },
+     {
+      "name": "initializerCalldata",
+      "type": "bytes",
+      "internalType": "bytes"
+     }
+    ],
+    "internalType": "struct ProgrammableCreate2GraphDeployerV1.Target"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ }
+]

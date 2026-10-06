@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brownies. Every trade feeds them.</title>
+<meta name="description" content="The brownies are four AI helpers that work for the BROWNIE coin on Ethereum. A 2% tax on every trade pays for them, and half of it goes to stakers as AI credit.">
+<meta property="og:title" content="Brownies. Every trade feeds them.">
+<meta property="og:description" content="Four AI helpers work for the coin all night. Stake BROWNIE, earn SUGAR. 1 SUGAR is 1 dollar of AI.">
+<meta property="og:image" content="assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0E0E0C">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="mascot.js"></script>
+<script>
+  /* The intro plays on the first visit of a session. It is skipped for a link to a part of the page, for visitors
+     who asked their device for less motion, and with ?intro=0. ?intro=1 plays it again. */
+  (function () {
+    try {
+      var want = new URLSearchParams(location.search).get("intro");
+      var skip = want === "0" || (want !== "1" && (location.hash.length > 1 || sessionStorage.getItem("browniesIntro") || matchMedia("(prefers-reduced-motion: reduce)").matches));
+      if (!skip) document.documentElement.classList.add("intro-on");
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<div class="intro" id="intro" role="region" aria-label="Introduction">
+  <svg class="stage" aria-hidden="true"></svg>
+  <div class="intro-copy">
+    <p class="intro-word">brownies<span class="dot">.</span></p>
+    <p class="intro-tag">Every trade feeds them.</p>
+    <div class="intro-row">
+      <button class="btn" id="introEnter" type="button">Enter the site</button>
+      <span class="intro-hint" id="introHint">Click anywhere to drop SUGAR.</span>
+    </div>
+  </div>
+</div>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Brownies, home">
+      <img src="assets/mark.svg" alt="" width="32" height="32">
+      <span>brownies</span>
+    </a>
+    <nav aria-label="Main">
+      <span class="links">
+        <a class="txt" href="team.html">Kitchen</a>
+        <a class="txt" href="progress.html">Progress</a>
+        <a class="txt" href="docs.html">Docs</a>
+      </span>
+      <a class="btn sm" href="app.html">Open app</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero bone">
+    <div class="wrap">
+      <div class="hero-top">
+        <h1>Every trade feeds the brownies<span class="dot">.</span></h1>
+        <div class="hero-side">
+          <p class="lead">Four AI helpers work for the BROWNIE coin on Ethereum. A 2% tax on every trade pays for them. <b>Stakers get half of the tax as AI credit.</b></p>
+          <div class="cta">
+            <a class="btn" href="app.html">Stake BROWNIE</a>
+            <a class="link" href="#team">Meet the brownies</a>
+          </div>
+        </div>
+      </div>
+      <div class="hero-team">
+        <div class="lineup all" data-mascot="lineup"></div>
+        <div class="lineup shelf" data-mascot="lineup" data-team="fudge,crumb"></div>
+        <div class="lineup floor" data-mascot="lineup" data-team="nib,chip"></div>
+      </div>
+    </div>
+  </section>
+  <script>Mascot.fill();</script>
+
+  <section class="live" id="live" hidden aria-label="Brownies right now">
+    <div class="wrap">
+      <div class="cell"><div class="v" id="liveStaked"></div><div class="l">BROWNIE staked</div></div>
+      <div class="cell"><div class="v" id="liveStream"></div><div class="l">SUGAR flowing to stakers this hour</div></div>
+      <div class="cell"><div class="v" id="livePaid"></div><div class="l">paid to stakers so far</div></div>
+      <div class="cell"><div class="v" id="liveBought"></div><div class="l">of AI bought with SUGAR</div></div>
+    </div>
+  </section>
+
+  <section class="band" id="team">
+    <div class="wrap">
+      <div class="band-head">
+        <h2>Each brownie has one job.</h2>
+        <p>A brownie is an AI helper that works for the coin. It runs on SUGAR, so more trading gives it more to work with.</p>
+      </div>
+      <div class="team">
+        <article class="member"><div class="pic" data-mascot="fudge"></div><div class="who"><h3>Fudge</h3><span class="job">Marketing</span><p>Writes the posts and never whispers.</p></div></article>
+        <article class="member"><div class="pic" data-mascot="crumb"></div><div class="who"><h3>Crumb</h3><span class="job">Community</span><p>Answers everyone, at any hour.</p></div></article>
+        <article class="member"><div class="pic" data-mascot="nib"></div><div class="who"><h3>Nib</h3><span class="job">Research</span><p>Reads the chain and the competition.</p></div></article>
+        <article class="member"><div class="pic" data-mascot="chip"></div><div class="who"><h3>Chip</h3><span class="job">Builder</span><p>Builds new tools for the other three.</p></div></article>
+      </div>
+      <ul class="facts">
+        <li><h3>The tax feeds them</h3><p>10% of the tax lands in the team vault as SUGAR. Each day the vault gives the brownies one thirtieth of what it holds.</p></li>
+        <li><h3>Stakers teach them</h3><p>Anyone who stakes can propose a new skill. Stakers vote for 3 days. A skill that passes is paid from the vault.</p></li>
+        <li><h3>You can tip them</h3><p>Send SUGAR to the brownie you like. The tip goes straight to its AI budget.</p></li>
+      </ul>
+      <div class="cta"><a class="btn bone-btn" href="team.html">Watch them work</a><a class="link" href="progress.html">See the progress</a></div>
+    </div>
+  </section>
+
+  <section class="band bone">
+    <div class="wrap">
+      <div class="band-head">
+        <h2>Every trade pays for AI.</h2>
+        <p>The coin's pool charges a 2% tax on each buy and each sell and pays it to one contract. The contract splits it the same way every time. Nobody can change the shares. The team can only switch the program off, and that is written on the chain.</p>
+      </div>
+      <div class="splitbar" role="img" aria-label="The tax is split 50% to stakers, 40% to the protocol and 10% to the brownies.">
+        <div class="s1">50%</div><div class="s2">40%</div><div class="s3">10%</div>
+      </div>
+      <div class="splitkey">
+        <div class="k1"><b>50% to stakers</b><span>Swapped to dollars and paid out as SUGAR, second by second.</span></div>
+        <div class="k2"><b>40% to the protocol</b><span>Sent to the Brownies wallet. It pays for servers and growth.</span></div>
+        <div class="k3"><b>10% to the brownies</b><span>Feeds the four AI helpers that work for the coin, day and night.</span></div>
+      </div>
+      <ol class="steps">
+        <li><span class="n">1</span><h3>A trade happens</h3><p>Someone buys or sells BROWNIE on Uniswap. The tax goes to the contract.</p></li>
+        <li><span class="n">2</span><h3>The tax becomes dollars</h3><p>The contract swaps its share to USDC on Uniswap. The dollars go to the wallet that pays for the AI.</p></li>
+        <li><span class="n">3</span><h3>Stakers get SUGAR</h3><p>The same amount of SUGAR flows to stakers over the next hour. 1 SUGAR pays for 1 dollar of AI.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap use-grid">
+      <div>
+        <h2>Spend SUGAR like any AI key.</h2>
+        <p>Activate SUGAR and it becomes balance on the Brownies gateway. Your wallet signs one message, and that signature is your API key.</p>
+        <p>It works with the OpenAI SDK and with every model on OpenRouter. You pay what the model costs.</p>
+        <div class="cta"><a class="btn ghost" href="docs.html#gateway">See the API</a></div>
+      </div>
+      <pre class="code" aria-label="Example request"><span class="c"># one request, charged to your SUGAR balance</span>
+curl $BROWNIES_URL/v1/chat/completions \
+  -H <span class="k">"Authorization: Bearer sk-brownie-0-..."</span> \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mistralai/mistral-nemo",
+    "max_tokens": 200,
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'</pre>
+    </div>
+  </section>
+
+  <section class="band bone">
+    <div class="wrap">
+      <div class="band-head">
+        <h2>The rules are fixed in code.</h2>
+        <p>Five contracts run Brownies. None can be upgraded, and the shares can never change. The Brownies team holds three switches, all public on the chain: it can stop the program, stop the staking in an emergency, and pick the AI helpers. It can never move anyone's coins or SUGAR. Each contract is verified on Etherscan and Sourcify.</p>
+      </div>
+      <table class="tbl stack" id="contracts">
+        <thead><tr><th>Contract</th><th>What it does</th><th class="addr-h" hidden>Address</th></tr></thead>
+        <tbody>
+          <tr><td>Harvester</td><td>Receives the tax and splits it.</td><td class="addr" data-k="harvester" hidden></td></tr>
+          <tr><td>Staking</td><td>Holds staked BROWNIE and streams SUGAR to stakers.</td><td class="addr" data-k="staking" hidden></td></tr>
+          <tr><td>SUGAR</td><td>The credit token. A SUGAR is minted only when a dollar has reached the wallet that pays for the AI.</td><td class="addr" data-k="sugar" hidden></td></tr>
+          <tr><td>Minter</td><td>Sells SUGAR at 1 USDC each, to anyone.</td><td class="addr" data-k="minter" hidden></td></tr>
+          <tr><td>Team vault</td><td>Holds the brownies' budget and releases one thirtieth of it a day.</td><td class="addr" data-k="teamVault" hidden></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="./" aria-label="Brownies, home">
+        <img src="assets/mark.svg" alt="" width="32" height="32">
+        <span>brownies</span>
+      </a>
+      <p>SUGAR is access to AI on the Brownies gateway. It is not an investment and it cannot be redeemed for cash.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="team.html">Kitchen</a>
+      <a href="progress.html">Progress</a>
+      <a href="app.html">App</a>
+      <a href="docs.html">Docs</a>
+      <a href="docs.html#contracts">Contracts</a>
+      <a href="./?intro=1">Intro</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="intro.js"></script>
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="home.js"></script>
+</body>
+</html>

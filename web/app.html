@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brownies app. Stake, claim SUGAR, get your key.</title>
+<meta name="description" content="Stake BROWNIE, claim SUGAR, activate it and use your key on any AI model.">
+<meta name="theme-color" content="#0E0E0C">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Brownies, home">
+      <img src="assets/mark.svg" alt="" width="32" height="32">
+      <span>brownies</span>
+    </a>
+    <nav aria-label="Main">
+      <span class="links">
+        <a class="txt" href="team.html">Kitchen</a>
+        <a class="txt" href="progress.html">Progress</a>
+        <a class="txt" href="docs.html">Docs</a>
+      </span>
+      <button class="btn sm" id="connectBtn" type="button">Connect wallet</button>
+      <div class="chip" id="walletChip" hidden>
+        <button id="chipBtn" type="button" aria-haspopup="menu" aria-expanded="false"><img id="walletIcon" alt="" hidden><span id="walletAddr"></span></button>
+        <div class="menu" id="walletMenu" role="menu" hidden>
+          <button id="menuCopy" type="button" role="menuitem">Copy address</button>
+          <a id="menuExplorer" href="#" target="_blank" rel="noopener" role="menuitem">View on the explorer</a>
+          <button id="menuDisconnect" type="button" role="menuitem">Disconnect</button>
+        </div>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="netwarn" id="netWarn" hidden>
+  <div class="wrap"><span>Your wallet is on another network.</span><button class="btn sm dark" id="switchBtn" type="button">Switch to Ethereum</button></div>
+</div>
+
+<main class="wrap">
+  <div class="app-head">
+    <h1>Stake<span class="dot">.</span></h1>
+    <p>Stake BROWNIE, collect SUGAR, and spend it on any AI model.</p>
+  </div>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="hStake">
+      <h2 id="hStake">Your stake</h2>
+      <p class="sub">A stake earns SUGAR every second. You can unstake at any time.</p>
+      <dl class="kv">
+        <div><dt>BROWNIE in your wallet</dt><dd id="vWallet"></dd></div>
+        <div><dt>Staked</dt><dd id="vStaked"></dd></div>
+        <div><dt>Smallest stake</dt><dd id="vMin"></dd></div>
+        <div><dt>Loyalty bonus</dt><dd id="vBoost"></dd></div>
+      </dl>
+      <div class="form">
+        <label class="field"><input id="inStake" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Amount of BROWNIE"><span class="unit">BROWNIE</span><button class="max" id="maxStake" type="button">Max</button></label>
+        <div class="row">
+          <button class="btn" id="btnStake" type="button" disabled>Stake</button>
+          <button class="btn ghost" id="btnUnstake" type="button" disabled>Unstake</button>
+        </div>
+        <p class="hint" id="boostHint" hidden></p>
+        <button class="btn ghost" id="btnPoke" type="button" hidden>Apply my bonus</button>
+        <p class="hint" id="buyHint" hidden>No BROWNIE yet? <a class="link" id="buyLink" href="#" target="_blank" rel="noopener">Buy it on GMGN</a></p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="hSugar">
+      <h2 id="hSugar">Your SUGAR</h2>
+      <p class="sub">1 SUGAR pays for 1 dollar of AI.</p>
+      <dl class="kv">
+        <div><dt>Earned, not claimed</dt><dd class="big" id="vEarned"></dd></div>
+        <div><dt>SUGAR in your wallet</dt><dd id="vSugar"></dd></div>
+      </dl>
+      <div class="form">
+        <button class="btn" id="btnClaim" type="button" disabled>Claim</button>
+        <label class="field"><input id="inActivate" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Amount of SUGAR to activate"><span class="unit">SUGAR</span><button class="max" id="maxActivate" type="button">Max</button></label>
+        <button class="btn ghost" id="btnActivate" type="button" disabled>Activate</button>
+        <p class="hint">Activating burns the SUGAR and adds the same number of dollars to your key. It cannot be undone.</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="hKey">
+      <h2 id="hKey">Your key</h2>
+      <p class="sub">Your wallet signs one message. The signature is your API key. Signing is free.</p>
+      <dl class="kv">
+        <div><dt>Balance</dt><dd class="big" id="vBalance"></dd></div>
+        <div><dt>Spent so far</dt><dd id="vSpent"></dd></div>
+      </dl>
+      <div class="form">
+        <div class="row">
+          <button class="btn bone-btn" id="btnKey" type="button" disabled>Show my key</button>
+          <button class="btn ghost" id="btnRotate" type="button" disabled>Replace my key</button>
+        </div>
+        <div id="keyWrap" hidden>
+          <div class="keybox" id="keyBox"></div>
+          <div class="row" style="margin-top:10px"><button class="btn ghost sm" id="btnCopyKey" type="button">Copy key</button></div>
+        </div>
+        <p class="hint">Replace your key if it leaked. The old one stops working at once and your balance stays.</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="hBuy">
+      <h2 id="hBuy">Buy SUGAR</h2>
+      <p class="sub">1 USDC buys 1 SUGAR, in any amount.</p>
+      <dl class="kv">
+        <div><dt>USDC in your wallet</dt><dd id="vUsdc"></dd></div>
+      </dl>
+      <div class="form">
+        <label class="field"><input id="inBuy" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Amount of USDC"><span class="unit">USDC</span><button class="max" id="maxBuy" type="button">Max</button></label>
+        <div class="row">
+          <button class="btn bone-btn" id="btnBuyAct" type="button" disabled>Buy and activate</button>
+          <button class="btn ghost" id="btnBuy" type="button" disabled>Buy to wallet</button>
+        </div>
+        <p class="hint">Buy and activate puts the dollars straight on your key. Buy to wallet gives you SUGAR you can send or sell.</p>
+      </div>
+    </section>
+
+    <section class="panel wide" id="tryPanel" aria-labelledby="hTry" hidden>
+      <h2 id="hTry">Try your key</h2>
+      <p class="sub">Ask any model a question. The cost comes off your balance.</p>
+      <div class="form">
+        <label class="field"><input id="inModel" list="modelList" autocomplete="off" placeholder="model" aria-label="Model"><span class="unit">model</span></label>
+        <datalist id="modelList"></datalist>
+        <textarea class="prompt" id="inPrompt" aria-label="Your question" placeholder="Ask something"></textarea>
+        <div class="row"><button class="btn bone-btn" id="btnSend" type="button" disabled>Send</button></div>
+      </div>
+      <div class="reply" id="reply" hidden></div>
+    </section>
+
+    <section class="panel" aria-labelledby="hTip">
+      <h2 id="hTip">Tip a brownie</h2>
+      <p class="sub">SUGAR you send goes straight onto that brownie's AI budget. It never rests in the vault.</p>
+      <div class="form">
+        <label class="field"><select id="tipWho" aria-label="Which brownie"></select></label>
+        <label class="field"><input id="inTip" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="SUGAR to tip"><span class="unit">SUGAR</span><button class="max" id="maxTip" type="button">Max</button></label>
+        <button class="btn" id="btnTip" type="button" disabled>Tip</button>
+        <p class="hint" id="tipHint">Tips so far are shown on the Kitchen page, on each brownie's card.</p>
+      </div>
+    </section>
+
+    <section class="panel wide" aria-labelledby="hSkills">
+      <h2 id="hSkills">Skills</h2>
+      <p class="sub">A skill is a tool or a set of instructions the brownies can use. Anyone who stakes can propose one with a price in SUGAR. Stakers vote for 3 days. A skill that passes is paid from the vault, at most 5% of it.</p>
+      <ol class="skills" id="skills"></ol>
+      <p class="empty-line" id="skillsEmpty" hidden>No skills proposed yet.</p>
+      <div class="form two">
+        <div>
+          <h3>Propose a skill</h3>
+          <p class="hint">Your stake must be unchanged for a day, and you can have one open proposal at a time. The vote closes 3 days after you submit.</p>
+        </div>
+        <div>
+          <label class="field"><input id="inSkillUri" autocomplete="off" placeholder="Where the skill lives, for example a repository link" aria-label="Where the skill lives"></label>
+          <label class="field"><input id="inSkillAsk" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Price asked in SUGAR"><span class="unit">SUGAR</span></label>
+          <button class="btn" id="btnSubmitSkill" type="button" disabled>Propose</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel wide" aria-labelledby="hProto">
+      <h2 id="hProto">The protocol right now</h2>
+      <p class="sub">Read straight from the contracts.</p>
+      <div class="two">
+        <dl class="kv">
+          <div><dt>BROWNIE staked by everyone</dt><dd id="pStaked"></dd></div>
+          <div><dt>SUGAR flowing to stakers this hour</dt><dd id="pStream"></dd></div>
+          <div><dt>Paid to stakers so far</dt><dd id="pPaid"></dd></div>
+          <div><dt>AI bought with SUGAR</dt><dd id="pBought"></dd></div>
+        </dl>
+        <dl class="kv">
+          <div><dt>ETH waiting to be swapped</dt><dd id="pPending"></dd></div>
+          <div><dt>SUGAR in the brownies' vault</dt><dd id="pVault"></dd></div>
+          <div><dt>The brownies' budget today</dt><dd id="pTeam"></dd></div>
+        </dl>
+      </div>
+      <div class="form">
+        <div class="row"><button class="btn ghost" id="btnCollect" type="button" disabled>Collect the tax</button></div>
+        <p class="hint">Anyone can press this. It moves the tax the contract is holding into the split. You pay only the gas.</p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="modal" id="walletModal" hidden role="dialog" aria-modal="true" aria-labelledby="walletTitle">
+  <div class="sheet">
+    <div class="sheet-head"><h2 id="walletTitle">Connect a wallet</h2><button class="x" id="walletModalClose" type="button" aria-label="Close"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3l12 12M15 3L3 15"/></svg></button></div>
+    <div id="walletList"></div>
+  </div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="wallet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

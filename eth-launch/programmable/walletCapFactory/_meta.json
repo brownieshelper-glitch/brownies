@@ -1,0 +1,59 @@
+{
+ "match": "match",
+ "creationMatch": "match",
+ "runtimeMatch": "match",
+ "verifiedAt": "2026-10-05T10:24:42Z",
+ "compilation": {
+  "language": "Solidity",
+  "compiler": "solc",
+  "compilerVersion": "0.8.26+commit.8a97fa7a",
+  "compilerSettings": {
+   "viaIR": true,
+   "metadata": {
+    "appendCBOR": false,
+    "bytecodeHash": "none",
+    "useLiteralContent": false
+   },
+   "libraries": {},
+   "optimizer": {
+    "runs": 200,
+    "enabled": true
+   },
+   "evmVersion": "cancun",
+   "remappings": [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/uniswap-hooks/=lib/openzeppelin-uniswap-hooks/",
+    "@solady/=lib/solady/",
+    "@uniswap/blocknumberish/=lib/blocknumberish/",
+    "@uniswap/liquidity-launcher/=lib/liquidity-launcher/",
+    "@uniswap/uerc20-factory/=lib/uerc20-factory/",
+    "@uniswap/v4-core/=lib/v4-core/",
+    "@uniswap/v4-periphery/=lib/v4-periphery/",
+    "@uniswap/v4-periphery-v211/=lib/v4-periphery-v211/",
+    "@uniswap/universal-router/=lib/universal-router/",
+    "blocknumberish/=lib/blocknumberish/",
+    "continuous-clearing-auction/=lib/continuous-clearing-auction/src/",
+    "forge-std/=lib/forge-std/src/",
+    "liquidity-launcher/=lib/liquidity-launcher/",
+    "permit2/=lib/permit2/",
+    "solady/=lib/solady/src/",
+    "solmate/=lib/solmate/",
+    "test/module-mode/=test/module-mode/",
+    "v4-periphery/=lib/v4-periphery/"
+   ]
+  },
+  "name": "LaunchWalletCapEthereumFactoryV1",
+  "fullyQualifiedName": "src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapEthereumFactoryV1.sol:LaunchWalletCapEthereumFactoryV1"
+ },
+ "deployment": {
+  "transactionHash": "0x228134c7d610c6a952c2cd12b99710b1dabff4a6d2be0ca06db21503b3ed3ed5",
+  "blockNumber": "26125551",
+  "transactionIndex": "232",
+  "deployer": "0x9e1339Eaed0EfF31Eda7D714A341Eb09a7e4513e"
+ },
+ "proxyResolution": {
+  "isProxy": false,
+  "proxyType": null,
+  "implementations": []
+ }
+}

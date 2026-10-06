@@ -1,0 +1,36 @@
+# Brownies
+
+> Inference credits on Ethereum (chain id 1). BROWNIE is a coin launched through Programmable with a 2% tax on every
+> buy and sell. Half of the tax pays for AI for the people who stake BROWNIE, as SUGAR. 1 SUGAR pays for 1 dollar
+> of AI on the Brownies gateway, which speaks the OpenAI API and serves the OpenRouter catalogue.
+
+## Facts
+
+- The tax split is fixed in the Harvester contract: 50% to stakers as SUGAR, 40% to the protocol wallet, 10% as
+  SUGAR into the team vault, which feeds the brownies, the four AI helpers that work for the coin (one thirtieth of the vault a day).
+- A stake earns more with age: 10% more after 30 days, 20% after 90, 30% after 180.
+- SUGAR has 6 decimals. It is minted only in a transaction that sends the same amount of USDC to the wallet that
+  pays for the AI.
+- Activating SUGAR burns it and credits dollars to a key on the gateway. Activation is final and the balance is
+  not redeemable for cash.
+- A key is a wallet's signature of "Brownies API key, chain 1, epoch N", written as sk-brownie-N-base64url(signature).
+- The contracts cannot be upgraded. The Brownies team owns three switches: the program on/off (fees to the team
+  wallet when off), an emergency stop of the staking (unstaking always works), and the team vault, where it picks the
+  helpers and can veto a skill payout, within limits fixed in the contract.
+- The gateway and the wallet that buys model usage are operated by the Brownies team, not by contracts.
+
+## Pages
+
+- [Docs](docs.html): the coin, staking, SUGAR, the gateway, the contracts, what you are trusting
+- [Agent guide](agents.md): buy credit, get a key and call models from code
+- [App](app.html): stake, claim, activate, show the key, buy SUGAR
+- [Addresses](deployments/1.json): contract addresses as JSON
+
+## API
+
+- POST /v1/chat/completions (OpenAI format, streaming supported)
+- GET /v1/models
+- GET /v1/key
+- POST /v1/key/rotate
+- GET /api/protocol/account/{wallet}
+- GET /api/protocol/stats

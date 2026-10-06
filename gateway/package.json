@@ -1,0 +1,15 @@
+{
+  "name": "brownies-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Brownies inference gateway: SUGAR activations on Robinhood Chain become API balance; OpenAI-style API in front of OpenRouter.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=22.5" },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  }
+}

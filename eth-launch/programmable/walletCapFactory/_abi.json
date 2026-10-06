@@ -1,0 +1,99 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "InvalidInfrastructure",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "OnlyBoundHost",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "BUY_ROUTER",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "BUY_ROUTER_CODE_HASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "createModule",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "context_",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "host",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "token",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "quote",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "creator",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "ledger",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "poolId",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     }
+    ],
+    "internalType": "struct FoundationTypesV1.ModuleContext"
+   },
+   {
+    "name": "configuration",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ }
+]

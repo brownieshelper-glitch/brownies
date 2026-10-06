@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>One brownie</title>
+<style>*{margin:0;padding:0}html,body{width:100vw;height:100vh;overflow:hidden;background:transparent}svg{width:100vw;height:100vh;display:block}</style>
+</head><body>
+<script src="../web/mascot.js"></script>
+<script>
+  const id = new URLSearchParams(location.search).get("id") || "chip";
+  const h = window.Mascot.team.find((x) => x.id === id);
+  document.body.insertAdjacentHTML("afterbegin", window.Mascot.svg(Object.assign({}, h, { label: h.name })));
+</script>
+</body></html>

@@ -1,0 +1,42 @@
+{
+ "match": "exact_match",
+ "creationMatch": "exact_match",
+ "runtimeMatch": "exact_match",
+ "verifiedAt": "2026-08-09T12:11:54Z",
+ "compilation": {
+  "language": "Solidity",
+  "compiler": "solc",
+  "compilerVersion": "0.7.6+commit.7338295f",
+  "compilerSettings": {
+   "metadata": {
+    "bytecodeHash": "ipfs",
+    "useLiteralContent": true
+   },
+   "libraries": {},
+   "optimizer": {
+    "runs": 200,
+    "enabled": false
+   },
+   "evmVersion": "istanbul",
+   "remappings": []
+  },
+  "name": "SafeProxy",
+  "fullyQualifiedName": "contracts/proxies/SafeProxy.sol:SafeProxy"
+ },
+ "deployment": {
+  "transactionHash": "0xa59fde76ab583f33f3ac4e9910529302fb9d01fadd2b97caf8e9e515b03af997",
+  "blockNumber": "25717334",
+  "transactionIndex": "14",
+  "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+ },
+ "proxyResolution": {
+  "isProxy": true,
+  "proxyType": "GnosisSafeProxy",
+  "implementations": [
+   {
+    "address": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+    "name": "Safe"
+   }
+  ]
+ }
+}

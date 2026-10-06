@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Brownies wordmark</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&display=block" rel="stylesheet">
+<style>
+  *{margin:0;padding:0} html,body{width:1600px;height:600px;overflow:hidden;display:grid;place-items:center;font-family:"Bricolage Grotesque",sans-serif}
+  body.bone{background:#F3EFE6;color:#0E0E0C} body.ink{background:#0E0E0C;color:#F3EFE6} body.none{background:transparent;color:#0E0E0C}
+  h1{font-weight:800;font-size:300px;letter-spacing:-0.055em;line-height:0.9} h1 i{font-style:normal;color:#FF5A1F}
+  .row{display:flex;align-items:center;gap:40px} .row svg{width:260px;height:260px}
+</style>
+</head><body>
+<script src="../web/mascot.js"></script>
+<script>
+  const q = new URLSearchParams(location.search), theme = q.get("theme") || "bone";
+  document.body.className = theme;
+  const mark = q.get("mark") === "1" ? window.Mascot.coin({ shape: "round" }) : "";
+  document.body.innerHTML += `<div class="row">${mark}<h1>brownies<i>.</i></h1></div>`;
+</script>
+</body></html>

@@ -1,0 +1,1191 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "permitAuthority",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "graphFactory",
+    "type": "address",
+    "internalType": "contract IProgrammableCreate2GraphDeployerV1"
+   },
+   {
+    "name": "poolManager",
+    "type": "address",
+    "internalType": "contract IPoolManager"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "ComponentAlreadyStamped",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "component",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "DuplicateOrUnsortedComponent",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "previous",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "current",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "FactoryResultMismatch",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "field",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "index",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "InvalidArrayLength",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "field",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "expected",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "InvalidBinding",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "field",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ]
+ },
+ {
+  "name": "InvalidComponent",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "component",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "supplied",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "actual",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "InvalidPermitSignature",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "InvalidShortString",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "LaunchAlreadyStamped",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "NonCanonicalRoutePayload",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "NonceAlreadyUsed",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "launchWallet",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "nonce",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "PermitAlreadyUsed",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "permitDigest",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "PermitOutsideValidityWindow",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "timestamp",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "validAfter",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "deadline",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "PoolAlreadyInitialized",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "poolManager",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "PoolAlreadyStamped",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "poolManager",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "ReentrancyGuardReentrantCall",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "ResidualLaunchValue",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "expected",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "name": "StringTooLong",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "str",
+    "type": "string",
+    "internalType": "string"
+   }
+  ]
+ },
+ {
+  "name": "UnauthorizedLaunchWallet",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "caller",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "launchWallet",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "UnsupportedLaunchKind",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "kind",
+    "type": "uint8",
+    "internalType": "enum IProgrammableLaunchStampRouterV1.LaunchKindV1"
+   }
+  ]
+ },
+ {
+  "name": "EIP712DomainChanged",
+  "type": "event",
+  "inputs": [],
+  "anonymous": false
+ },
+ {
+  "name": "ProgrammableComponentStampedV1",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "component",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "kind",
+    "type": "uint8",
+    "indexed": true,
+    "internalType": "enum IProgrammableLaunchStampRouterV1.ComponentKindV1"
+   },
+   {
+    "name": "runtimeCodeHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "ProgrammableLaunchRouteStampedV1",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "kind",
+    "type": "uint8",
+    "indexed": true,
+    "internalType": "enum IProgrammableLaunchStampRouterV1.LaunchKindV1"
+   },
+   {
+    "name": "routePayloadHash",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "expectedResultHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "permitDigest",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "ProgrammableLaunchStampedV1",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "token",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "hook",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "poolManager",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "stampHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "CHAIN_ID",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "GRAPH_FACTORY",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IProgrammableCreate2GraphDeployerV1"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "GRAPH_FACTORY_RUNTIME_CODE_HASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "PERMIT_AUTHORITY",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "PERMIT_AUTHORITY_RUNTIME_CODE_HASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "POOL_MANAGER",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IPoolManager"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "POOL_MANAGER_RUNTIME_CODE_HASH",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "componentRuntimeCodeHash",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "component",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "runtimeCodeHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "computeComponentSetHash",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "components",
+    "type": "tuple[]",
+    "components": [
+     {
+      "name": "resultIndex",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "account",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "runtimeCodeHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "kind",
+      "type": "uint8",
+      "internalType": "enum IProgrammableLaunchStampRouterV1.ComponentKindV1"
+     },
+     {
+      "name": "scope",
+      "type": "uint8",
+      "internalType": "enum IProgrammableLaunchStampRouterV1.ComponentScopeV1"
+     }
+    ],
+    "internalType": "struct IProgrammableLaunchStampRouterV1.ComponentV1[]"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "pure"
+ },
+ {
+  "name": "computePoolKeyHash",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "poolKey",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "currency0",
+      "type": "address",
+      "internalType": "Currency"
+     },
+     {
+      "name": "currency1",
+      "type": "address",
+      "internalType": "Currency"
+     },
+     {
+      "name": "fee",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "tickSpacing",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "hooks",
+      "type": "address",
+      "internalType": "contract IHooks"
+     }
+    ],
+    "internalType": "struct PoolKey"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "pure"
+ },
+ {
+  "name": "computeStampRequestHash",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "request",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "launchId",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "token",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "tokenRuntimeCodeHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "poolKey",
+      "type": "tuple",
+      "components": [
+       {
+        "name": "currency0",
+        "type": "address",
+        "internalType": "Currency"
+       },
+       {
+        "name": "currency1",
+        "type": "address",
+        "internalType": "Currency"
+       },
+       {
+        "name": "fee",
+        "type": "uint24",
+        "internalType": "uint24"
+       },
+       {
+        "name": "tickSpacing",
+        "type": "int24",
+        "internalType": "int24"
+       },
+       {
+        "name": "hooks",
+        "type": "address",
+        "internalType": "contract IHooks"
+       }
+      ],
+      "internalType": "struct PoolKey"
+     },
+     {
+      "name": "hookRuntimeCodeHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "components",
+      "type": "tuple[]",
+      "components": [
+       {
+        "name": "resultIndex",
+        "type": "uint8",
+        "internalType": "uint8"
+       },
+       {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+       },
+       {
+        "name": "runtimeCodeHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+       },
+       {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "enum IProgrammableLaunchStampRouterV1.ComponentKindV1"
+       },
+       {
+        "name": "scope",
+        "type": "uint8",
+        "internalType": "enum IProgrammableLaunchStampRouterV1.ComponentScopeV1"
+       }
+      ],
+      "internalType": "struct IProgrammableLaunchStampRouterV1.ComponentV1[]"
+     }
+    ],
+    "internalType": "struct IProgrammableLaunchStampRouterV1.StampRequestV1"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "pure"
+ },
+ {
+  "name": "eip712Domain",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "fields",
+    "type": "bytes1",
+    "internalType": "bytes1"
+   },
+   {
+    "name": "name",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "version",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "chainId",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "verifyingContract",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "salt",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "extensions",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "launchAndStampV1",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "permit",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "chainId",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "router",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "launchWallet",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "kind",
+      "type": "uint8",
+      "internalType": "enum IProgrammableLaunchStampRouterV1.LaunchKindV1"
+     },
+     {
+      "name": "routePayloadHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "expectedResultHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "stampRequestHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "nonce",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "validAfter",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "value",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ],
+    "internalType": "struct IProgrammableLaunchStampRouterV1.LaunchPermitV1"
+   },
+   {
+    "name": "stampRequest",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "launchId",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "token",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "tokenRuntimeCodeHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "poolKey",
+      "type": "tuple",
+      "components": [
+       {
+        "name": "currency0",
+        "type": "address",
+        "internalType": "Currency"
+       },
+       {
+        "name": "currency1",
+        "type": "address",
+        "internalType": "Currency"
+       },
+       {
+        "name": "fee",
+        "type": "uint24",
+        "internalType": "uint24"
+       },
+       {
+        "name": "tickSpacing",
+        "type": "int24",
+        "internalType": "int24"
+       },
+       {
+        "name": "hooks",
+        "type": "address",
+        "internalType": "contract IHooks"
+       }
+      ],
+      "internalType": "struct PoolKey"
+     },
+     {
+      "name": "hookRuntimeCodeHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "components",
+      "type": "tuple[]",
+      "components": [
+       {
+        "name": "resultIndex",
+        "type": "uint8",
+        "internalType": "uint8"
+       },
+       {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+       },
+       {
+        "name": "runtimeCodeHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+       },
+       {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "enum IProgrammableLaunchStampRouterV1.ComponentKindV1"
+       },
+       {
+        "name": "scope",
+        "type": "uint8",
+        "internalType": "enum IProgrammableLaunchStampRouterV1.ComponentScopeV1"
+       }
+      ],
+      "internalType": "struct IProgrammableLaunchStampRouterV1.ComponentV1[]"
+     }
+    ],
+    "internalType": "struct IProgrammableLaunchStampRouterV1.StampRequestV1"
+   },
+   {
+    "name": "routePayload",
+    "type": "bytes",
+    "internalType": "bytes"
+   },
+   {
+    "name": "signature",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "stampHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "payable"
+ },
+ {
+  "name": "launchIdByComponent",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "component",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "launchIdByPool",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "poolManager",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "launchIdByToken",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "launchStamp",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "kind",
+      "type": "uint8",
+      "internalType": "enum IProgrammableLaunchStampRouterV1.LaunchKindV1"
+     },
+     {
+      "name": "launchWallet",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "token",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "hook",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "poolManager",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "poolId",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "poolKeyHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "componentSetHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "routePayloadHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "routeLauncher",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "routeLauncherRuntimeCodeHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "expectedResultHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "permitDigest",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "stampHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     }
+    ],
+    "internalType": "struct IProgrammableLaunchStampRouterV1.StampRecordV1"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "permitDigest",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "permit",
+    "type": "tuple",
+    "components": [
+     {
+      "name": "chainId",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "router",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "launchWallet",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "kind",
+      "type": "uint8",
+      "internalType": "enum IProgrammableLaunchStampRouterV1.LaunchKindV1"
+     },
+     {
+      "name": "routePayloadHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "expectedResultHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "stampRequestHash",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "nonce",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "validAfter",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "value",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ],
+    "internalType": "struct IProgrammableLaunchStampRouterV1.LaunchPermitV1"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "stampProof",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "component",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "launchId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "stampHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ }
+]

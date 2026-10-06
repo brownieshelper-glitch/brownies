@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Brownies banner, dark</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=JetBrains+Mono:wght@500&display=block" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1500px;height:500px;background:#0E0E0C;color:#F3EFE6;font-family:"Bricolage Grotesque",sans-serif;overflow:hidden;position:relative}
+  .words{position:absolute;left:80px;top:44px}
+  h1{font-weight:800;font-size:104px;letter-spacing:-0.055em;line-height:0.9} h1 i{font-style:normal;color:#FF5A1F}
+  .tag{font-weight:800;font-size:34px;letter-spacing:-0.035em;line-height:1;margin-top:12px}
+  .url{font-family:"JetBrains Mono",monospace;font-size:18px;color:#FF5A1F;margin-top:12px}
+  .stage{position:absolute;left:0;right:0;bottom:0;height:260px;background:#F3EFE6}
+  .row{position:absolute;right:48px;bottom:0} .row svg{height:250px;display:block}
+  .floor{position:absolute;left:0;right:0;bottom:0;height:22px;background:#0E0E0C}
+</style>
+</head><body>
+<div class="stage"></div>
+<div class="row" id="row"></div>
+<div class="floor"></div>
+<div class="words">
+  <h1>brownies<i>.</i></h1>
+  <div class="tag">Every trade feeds them.</div>
+  <div class="url">feedthebrownies.com</div>
+</div>
+<script src="../web/mascot.js"></script>
+<script>
+  const row = document.getElementById("row");
+  row.innerHTML = window.Mascot.lineup();
+  const svg = row.firstElementChild;
+  svg.style.width = Math.round(290 * Number(svg.dataset.ratio)) + "px";
+</script>
+</body></html>

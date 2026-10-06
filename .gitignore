@@ -41,3 +41,4 @@ helpers/test/video.test.mjs
 helpers/video/
 helpers/test/renderchild.test.mjs
 helpers/test/pilot.test.mjs
+helpers/test/audio.test.mjs

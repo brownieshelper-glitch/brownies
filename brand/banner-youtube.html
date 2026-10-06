@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Brownies YouTube banner, 2560 x 1440</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500&display=block" rel="stylesheet">
+<style>
+  /* YouTube shows the middle 1546 x 423 on every screen (the safe area); the rest appears on TVs and wide screens.
+     Everything that matters sits inside the safe area, centred. */
+  :root { --ink: #0E0E0C; --bone: #F3EFE6; --spark: #FF5A1F; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 2560px; height: 1440px; background: var(--bone); font-family: "Bricolage Grotesque", sans-serif; color: var(--ink); overflow: hidden; position: relative; }
+  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 509px; background: var(--ink); }
+  .safe { position: absolute; left: 507px; top: 508px; width: 1546px; height: 423px; }
+  .words { position: absolute; left: 40px; top: 70px; }
+  h1 { font-weight: 800; font-size: 118px; letter-spacing: -0.055em; line-height: 0.9; }
+  h1 i { font-style: normal; color: var(--spark); }
+  .tag { font-weight: 800; font-size: 34px; letter-spacing: -0.035em; line-height: 1; margin-top: 18px; }
+  .sub { font-family: "JetBrains Mono", monospace; font-size: 17px; line-height: 1.5; color: #4a463e; margin-top: 14px; }
+  .row { position: absolute; right: 0; bottom: -4px; }
+  .row svg { height: 212px; display: block; }
+  .dots { position: absolute; left: 0; right: 0; top: 0; height: 508px; background:
+    radial-gradient(circle at 12% 70%, rgba(255,90,31,0.18) 0 10px, transparent 11px),
+    radial-gradient(circle at 88% 30%, rgba(14,14,12,0.10) 0 7px, transparent 8px),
+    radial-gradient(circle at 70% 75%, rgba(255,90,31,0.14) 0 6px, transparent 7px),
+    radial-gradient(circle at 30% 25%, rgba(14,14,12,0.08) 0 9px, transparent 10px); }
+</style>
+</head>
+<body>
+<div class="dots"></div>
+<div class="floor"></div>
+<div class="safe">
+  <div class="words">
+    <h1>brownies<i>.</i></h1>
+    <div class="tag">Every trade feeds them.</div>
+    <div class="sub">AI helpers that work for the coin all night.<br>Stakers get paid in AI.<br>feedthebrownies.com · x.com/Feedthebrownies<br>t.me/feedthebrownies</div>
+  </div>
+  <div class="row" id="row"></div>
+</div>
+<script src="../web/mascot.js"></script>
+<script>
+  const row = document.getElementById("row");
+  row.innerHTML = window.Mascot.lineup();
+  const svg = row.firstElementChild;
+  svg.style.width = Math.round(212 * Number(svg.dataset.ratio)) + "px";
+</script>
+</body>
+</html>

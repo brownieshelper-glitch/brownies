@@ -1,20 +1,20 @@
 {
-  "name": "Brownies",
-  "symbol": "BROWNIE",
-  "description": "Four AI helpers that work for the coin. The creator fee on every trade pays for them, and half of it goes to stakers as SUGAR, 1 SUGAR = 1 dollar of AI.",
+  "name": "Brownies Test",
+  "symbol": "BRWTEST",
+  "description": "A rehearsal of the Brownies launch on Ethereum: same contracts, same path, a test coin with no value. The real coin is BROWNIE.",
   "imageURI": "https://feedthebrownies.com/assets/logo-1024.png",
   "website": "https://feedthebrownies.com",
   "x": "https://x.com/Feedthebrownies",
   "telegram": "https://t.me/feedthebrownies",
   "creatorBuyFeeBps": 200,
   "creatorSellFeeBps": 200,
-  "startMcapUsd": 5000,
+  "startMcapUsd": 1000,
   "walletCap": {
     "enabled": true,
     "bps": 200,
     "minutes": 3
   },
   "minPosition": "10000000000000000000000",
-  "tokenSaltSeed": "brownies-ethereum-2026-10",
+  "tokenSaltSeed": "brownies-ethereum-test-2026-10",
   "deadlineSeconds": 3600
 }

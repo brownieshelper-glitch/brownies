@@ -90,8 +90,18 @@ export async function build({ env = process.env, configFile = null } = {}) {
   }
   const off = offList(env); // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
   const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, youtube, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
-  // a hire is saved and the service restarts itself in a moment: the scheduler takes the new jobs at start
-  const restartSoon = (why) => { log(`[helpers] ${why}: restarting in 3 seconds so the roster is reloaded`); if (W.requestRestart) setTimeout(() => W.requestRestart(why), 3000); };
+  // a hire or a retirement changes the schedule in place: the retired brownie's jobs are dropped, a new one's are
+  // added, and the scheduler is started again, which recomputes every next run (the day's flags keep a slot that
+  // already ran from running twice). No process restart, so the pages and the bot keep answering.
+  const reschedule = (why, { drop = null } = {}) => {
+    const s = W.scheduler; if (!s) return;
+    const running = !s.stopped;
+    if (running) s.stop();
+    if (drop) s.jobs = s.jobs.filter((j) => j.helper !== drop);
+    for (const h of Object.values(all)) if (h.recruit && !s.jobs.some((j) => j.helper === h.name)) for (const j of h.jobs()) s.add(j);
+    if (running) s.start();
+    log(`[helpers] ${why}: schedule reloaded, ${s.jobs.length} jobs`);
+  };
   const hire = async (spec) => {
     const names = recruitNames().filter((n) => n !== spec.name);
     store.setMeta(`recruit:${spec.name}`, JSON.stringify(spec));
@@ -99,7 +109,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     config.helpers[spec.name] = { role: spec.role, model: spec.model, dailyCapUsd: spec.dailyCapUsd, hidden: spec.hidden, walletIndex: spec.walletIndex, payFrom: spec.payFrom };
     const r = new Recruit(recruitDeps(spec));
     all[spec.name] = r;
-    restartSoon(`hired ${spec.name}`);
+    reschedule(`hired ${spec.name}`);
     return r;
   };
   const fire = async (name) => {
@@ -108,7 +118,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     store.setMeta(`recruit:${name}`, JSON.stringify({ ...JSON.parse(raw), retired: Date.now() }));
     store.setMeta("recruits", recruitNames().filter((n) => n !== name).join(","));
     delete all[name];
-    restartSoon(`retired ${name}`);
+    reschedule(`retired ${name}`, { drop: name });
     return true;
   };
   const recruits = () => Object.values(all).filter((h) => h.recruit);

@@ -15,7 +15,16 @@
 
   const U = { token: null, wallet: null, info: null, mine: null, key: null, grant: null, busy: false };
   try { const raw = sessionStorage.getItem(TOKEN_KEY); if (raw) { const t = JSON.parse(raw); if (t.expiresAt > Date.now()) { U.token = t.token; U.wallet = t.wallet; } } } catch (_) {}
-  const api = (path, opts = {}) => K.api(S, path, { ...opts, token: U.token });
+  // a call that hits a hiccup on the server (a deploy, a restart) is tried again a few times; never a bake or a login
+  const api = async (path, opts = {}) => {
+    for (let i = 0; ; i++) {
+      const r = await K.api(S, path, { ...opts, token: U.token });
+      const again = (r.status === 0 || r.status === 502 || r.status === 503 || r.status === 504) && path !== "/create" && path !== "/login" && i < 4;
+      if (!again) return r;
+      await new Promise((res) => setTimeout(res, 2500));
+    }
+  };
+  const modelName = (id) => { const m = (U.info?.models || []).find((x) => x.id === id); return m ? m.name : String(id || "").split("/").pop(); };
 
   // ---- the rules ----
   const inf = await api("/info");
@@ -24,11 +33,18 @@
   if (U.info) {
     $("zoneName").textContent = K.zoneName(U.info.timezone);
     const sel = $("inModel"); sel.replaceChildren();
-    const label = (m) => (/haiku/i.test(m) ? "Claude Haiku 4.5, quick and cheap" : /sonnet/i.test(m) ? "Claude Sonnet 5.5, sharper, costs more" : m);
-    for (const m of U.info.models || []) { const o = el("option", null, label(m)); o.value = m; sel.append(o); }
-    $("inCap").value = String(U.info.defaultCapUsd ?? 0.5);
+    const groups = new Map();
+    for (const m of U.info.models || []) {
+      const item = typeof m === "string" ? { id: m, name: m.split("/").pop(), provider: m.split("/")[0], in: null, out: null } : m;
+      if (!groups.has(item.provider)) { const g = el("optgroup"); g.label = item.provider; groups.set(item.provider, g); sel.append(g); }
+      const o = el("option", null, item.in != null ? `${item.name} (in $${item.in} / out $${item.out} per M tokens)` : item.name);
+      o.value = item.id; groups.get(item.provider).append(o);
+    }
+    $("inCap").value = String(U.info.defaultCapUsd ?? 1);
     $("inCap").max = String(U.info.maxCapUsd ?? 1);
-    $("capHint").textContent = `The most it may spend in a day, up to ${U.info.maxCapUsd} USD. It stops when the cap or your grant is reached.`;
+    $("capHint").textContent = live
+      ? `The most it may spend in a day, up to ${U.info.maxCapUsd} USD, paid from your SUGAR through the grant you set. It stops when the cap or the grant is reached.`
+      : `Before the launch a trial brownie may spend up to ${U.info.maxCapUsd} USD a day from the team's budget. After the launch the cap goes up to ${U.info.liveMaxCapUsd ?? 50} USD a day, paid from your SUGAR.`;
     const hours = $("ownHour"); hours.replaceChildren();
     for (let h = 0; h < 24; h++) { const o = el("option", null, K.hourLabel(h)); o.value = String(h); if (h === 10) o.selected = true; hours.append(o); }
     const menu = $("jobMenu"); menu.replaceChildren();
@@ -167,7 +183,7 @@
     row("Baked", b.since ? K.when(b.since) : "");
     row("Jobs done", String(b.outputs || 0));
     row("Spent today", `${Number(b.spentTodayUsd || 0).toFixed(4)} USD of ${Number(b.capUsd || 0).toFixed(2)}`);
-    row("Model", /haiku/i.test(b.model) ? "Claude Haiku 4.5" : /sonnet/i.test(b.model) ? "Claude Sonnet 5.5" : b.model || "");
+    row("Model", modelName(b.model));
     if (b.wallet) row("Its wallet", B.short(b.wallet));
     row("Telegram", b.telegram ? "linked, drafts and answers go there" : "not linked yet");
     $("btnLink").hidden = Boolean(b.telegram); $("btnUnlink").hidden = !b.telegram;
@@ -175,7 +191,7 @@
     // feed it
     const text = $("fundText"), fundBtn = $("btnFund"), revoke = $("btnRevoke"), ff = $("fundFacts");
     if (!live || !b.wallet) {
-      text.textContent = U.mine.trial ? "Before the launch your brownie runs on a small trial budget from the team. Funding with SUGAR opens with the launch." : "Funding opens with the launch.";
+      text.textContent = !live ? "Before the launch your brownie runs on a small trial budget from the team. Funding with your own SUGAR opens with the launch." : "Your brownie has no wallet yet. Try again in a minute.";
       fundBtn.hidden = true; revoke.hidden = true; ff.hidden = true;
     } else {
       text.textContent = `Your brownie pays for its thinking from your SUGAR, through a grant of up to ${Number(b.capUsd).toFixed(2)} USD a day. You sign once with your wallet; the grant is set on the gateway and you can stop it here any time.`;
@@ -191,7 +207,7 @@
     const feed = $("mineFeed"); feed.replaceChildren();
     const list = Array.isArray(b.feed) ? b.feed : [];
     $("mineFeedEmpty").hidden = list.length > 0;
-    if (!list.length) { const first = (b.tasks || []).map((t) => (t.hours || [])[0]).filter((h) => h != null).sort((x, y) => x - y)[0]; $("mineFeedEmpty").textContent = first != null ? `Nothing yet. Its first job runs at ${K.hourLabel(first)}.` : "Nothing yet."; }
+    if (!list.length) { const hours = [...new Set((b.tasks || []).flatMap((t) => t.hours || []))].sort((x, y) => x - y); $("mineFeedEmpty").textContent = hours.length ? `Nothing yet. It works at ${hours.map(K.hourLabel).join(" and ")}.` : "Nothing yet."; }
     for (const e of list) {
       const li = el("li");
       const face = el("span", "face"); face.innerHTML = K.face(b.name);

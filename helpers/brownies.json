@@ -8,10 +8,12 @@
     "minHold": 10000,
     "maxPerWallet": 1,
     "maxTotal": 50,
-    "maxCapUsd": 1,
-    "defaultCapUsd": 0.5,
+    "maxCapUsd": 50,
+    "trialCapUsd": 1,
+    "defaultCapUsd": 1,
     "asksPerDay": 3,
-    "models": ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-5.5"]
+    "models": ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-opus-5.5"],
+    "providers": ["anthropic", "openai", "google", "x-ai", "deepseek", "moonshotai", "z-ai", "meta-llama", "mistralai", "qwen"]
   },
   "helpers": {
     "fudge": {

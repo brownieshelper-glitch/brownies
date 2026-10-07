@@ -54,7 +54,12 @@
       { id: "faq", title: "Questions people ask", tool: "feed", hours: [17], text: "Pick the three questions people asked most this week about Brownies and answer each in two or three plain sentences." },
       { id: "note", title: "Weekly note", tool: "feed", hours: [8], text: "Read the latest research note and the facts, and write what a holder should know this week, in a few lines." },
     ];
-    const info = { on: true, live: true, minHold: 10000, maxPerWallet: 1, maxTotal: 50, total: 3, room: 47, maxCapUsd: 1, defaultCapUsd: 0.5, asksPerDay: 3, models: ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-5.5"], tools: ["feed", "draft"], menu, timezone: "Europe/Rome", chainId: 1 };
+    const models = [
+      { id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5", provider: "Anthropic", in: 1, out: 5 }, { id: "anthropic/claude-sonnet-5.5", name: "Claude Sonnet 5.5", provider: "Anthropic", in: 2, out: 10 }, { id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", provider: "Anthropic", in: 4, out: 20 },
+      { id: "openai/gpt-5.5", name: "GPT-5.5", provider: "OpenAI", in: 5, out: 30 }, { id: "openai/gpt-5.4-mini", name: "GPT-5.4 Mini", provider: "OpenAI", in: 0.75, out: 4.5 },
+      { id: "google/gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "Google", in: 0.75, out: 3.75 }, { id: "x-ai/grok-4.7", name: "Grok 4.7", provider: "xAI", in: 2, out: 6 }, { id: "deepseek/deepseek-v3.2", name: "DeepSeek V3.2", provider: "DeepSeek", in: 0.28, out: 0.42 },
+    ];
+    const info = { on: true, live: true, minHold: 10000, maxPerWallet: 1, maxTotal: 50, total: 3, room: 47, maxCapUsd: 50, liveMaxCapUsd: 50, trialCapUsd: 1, defaultCapUsd: 1, asksPerDay: 3, models, tools: ["feed", "draft"], menu, timezone: "Europe/Rome", chainId: 1 };
     const feedOf = (name, lines) => lines.map(([hoursAgo, task, title, text]) => ({ at: t0 - hoursAgo * H, task, title, text, kind: "note" })).concat([]).sort((a, b) => b.at - a.at);
     const sage = {
       name: "sage", title: "Sage", role: "watches the coin for me and explains what moved, in plain words", personality: "calm, a little dry, likes short sentences", holder, holderShort: B.short(holder),
@@ -91,7 +96,7 @@
         const tasks = (body.tasks || []).map((t, i) => t.menu ? { ...menu.find((m) => m.id === t.menu), hours: t.hours && t.hours.length ? t.hours : menu.find((m) => m.id === t.menu).hours } : { id: `task${i + 1}`, title: t.title, tool: t.tool || "feed", hours: t.hours || [10] }).map((t) => ({ id: t.id, title: t.title, tool: t.tool, hours: t.hours }));
         if (!tasks.length) return { ok: false, status: 400, body: { error: "a recruit needs at least one task" } };
         const b = full({ name, title: cap(name), role: body.role, personality: body.personality || null, holder, holderShort: B.short(holder), since: new Date().toISOString(), outputs: 0, lastJob: null, telegram: false, tasks, feed: [] });
-        b.capUsd = Math.min(info.maxCapUsd, Number(body.dailyCapUsd) || info.defaultCapUsd); b.fund.daily_usd = b.capUsd; b.spentTodayUsd = 0; b.callsToday = 0; b.asksLeft = 3;
+        b.capUsd = Math.min(info.maxCapUsd, Number(body.dailyCapUsd) || info.defaultCapUsd); b.fund.daily_usd = b.capUsd; b.spentTodayUsd = 0; b.callsToday = 0; b.asksLeft = 3; b.model = models.some((m) => m.id === body.model) ? body.model : models[0].id;
         state.mine = [b]; state.shelf.unshift(b); state.grant = null;
         return ok(b);
       }

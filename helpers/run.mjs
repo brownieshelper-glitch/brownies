@@ -138,6 +138,12 @@ export async function build({ env = process.env, configFile = null } = {}) {
     if (cmd === "admin") { const code = W.admin?.newCode(); return code ? `Your control room code: ${code}\nIt works for ten minutes at ${S.siteUrl}/admin.html` : "The control room is not ready yet."; }
     if (cmd === "hire") { if (!all.dough) return "There is no hiring brownie yet."; if (!text) return "Tell me the job: /hire <what the new brownie should do>"; const r = await all.dough.onRequest(text); return r ? true : "Dough could not make that hire (budget, ceiling, or an unusable spec). The log says why."; }
     if (cmd === "fire") { if (!all.dough) return "There is no hiring brownie yet."; if (!text) return `Which one? Recruits: ${recruits().map((r) => r.name).join(", ") || "none"}`; const ok = await all.dough.fire(text.toLowerCase().trim()); return ok ? true : `${text} is not a recruit.`; }
+    if (cmd === "cap") {
+      const [who = "", usd = ""] = text.split(/\s+/);
+      if (!all[who.toLowerCase()]) return `Which brownie? /cap <name> <usd a day>. Names: ${names.join(", ")}.`;
+      const r = await W.admin.command({ helper: who.toLowerCase(), action: "cap", value: usd });
+      return r.ok ? `${who[0].toUpperCase() + who.slice(1).toLowerCase()}'s cap is now ${r.capUsd} USD a day.` : r.error;
+    }
     if (cmd === "summary") { await sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }); return true; }
     if (all[cmd]?.onRequest) { if (!text) return `Tell ${cmd} what to draft: /${cmd} <what>`; const r = await all[cmd].onRequest(text); return r ? true : `${cmd} could not write that one now (budget or an error). Check the log.`; }
     return undefined; // not a command of ours: Crumb answers it like any message

@@ -1,5 +1,5 @@
 {
-  "_comment": "The four brownies. Hours are local to the timezone. dailyCapUsd is the most a helper may spend on AI in a day; in MODE=live its gateway balance (SUGAR from the vault and tips) is the other limit. Models are OpenRouter ids.",
+  "_comment": "The four brownies. Hours are local to the timezone. dailyCapUsd is the most a helper may spend on AI in a day (the owner hears at 80% and can raise it with /cap <brownie> <usd> on Telegram); in MODE=live its gateway balance (SUGAR from the vault and tips) is the other limit. model is any id on OpenRouter; reasoning {effort} and reasoningHeadroom (tokens kept for the model's thinking) are per brownie.",
   "timezone": "Europe/Rome",
   "chainId": 1,
   "bakery": {
@@ -12,14 +12,29 @@
     "trialCapUsd": 1,
     "defaultCapUsd": 1,
     "asksPerDay": 3,
-    "models": ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-opus-5.5"],
-    "providers": ["anthropic", "openai", "google", "x-ai", "deepseek", "moonshotai", "z-ai", "meta-llama", "mistralai", "qwen"]
+    "models": [
+      "anthropic/claude-haiku-4.5",
+      "anthropic/claude-sonnet-5.5",
+      "anthropic/claude-opus-5.5"
+    ],
+    "providers": [
+      "anthropic",
+      "openai",
+      "google",
+      "x-ai",
+      "deepseek",
+      "moonshotai",
+      "z-ai",
+      "meta-llama",
+      "mistralai",
+      "qwen"
+    ]
   },
   "helpers": {
     "fudge": {
       "role": "marketing. You write the posts for X and answer the mentions that ask something",
-      "model": "anthropic/claude-haiku-4.5",
-      "dailyCapUsd": 1.5,
+      "model": "anthropic/claude-sonnet-5.5",
+      "dailyCapUsd": 31.5,
       "postHours": [
         9,
         13,
@@ -44,16 +59,16 @@
     },
     "crumb": {
       "role": "community. You answer people on Telegram, in the group and in private, with the facts and the live numbers",
-      "model": "anthropic/claude-haiku-4.5",
-      "dailyCapUsd": 2,
+      "model": "anthropic/claude-sonnet-5.5",
+      "dailyCapUsd": 32.0,
       "reportEveryMinutes": 60,
       "questionsHour": 20,
       "_questions": "Once a day at questionsHour Crumb writes what people asked into notes/questions/YYYY-MM-DD.md, a short answer each, for the team and for Chip's FAQ page."
     },
     "nib": {
       "role": "research. Once a day you read the gateway's figures, the site and the competitors, and write a note on what changed and what to do",
-      "model": "anthropic/claude-sonnet-5.5",
-      "dailyCapUsd": 1,
+      "model": "anthropic/claude-fable-5.1",
+      "dailyCapUsd": 31.0,
       "hour": 8,
       "minute": 0,
       "competitors": [
@@ -78,12 +93,16 @@
           "https://rpc.mevblocker.io",
           "https://ethereum-rpc.publicnode.com"
         ]
-      }
+      },
+      "reasoning": {
+        "effort": "medium"
+      },
+      "reasoningHeadroom": 6000
     },
     "chip": {
       "role": "builder. You change code in the repository as pull requests, small ones alone, bigger ones with the owner's approval",
-      "model": "anthropic/claude-sonnet-5.5",
-      "dailyCapUsd": 3,
+      "model": "anthropic/claude-fable-5.1",
+      "dailyCapUsd": 33.0,
       "checkEveryMinutes": 30,
       "smallMaxLines": 60,
       "reviewers": [
@@ -107,7 +126,11 @@
           "title": "List helpers/ in the root README",
           "text": "In README.md, the table 'What is here' lists the folders. If it has no row for helpers/, add one in the same style: the runtime that runs the four brownies (Fudge, Crumb, Nib, Chip) and reports their work to the gateway. Change nothing else."
         }
-      ]
+      ],
+      "reasoning": {
+        "effort": "medium"
+      },
+      "reasoningHeadroom": 8000
     }
   }
 }

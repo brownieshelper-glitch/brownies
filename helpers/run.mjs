@@ -29,6 +29,7 @@ import { sendSummary } from "./lib/summary.mjs";
 import { Admin } from "./lib/admin.mjs";
 import { Recruit } from "./lib/recruit.mjs";
 import { Bakery } from "./lib/bakery.mjs";
+import { youtubeFromEnv } from "./lib/youtube.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
@@ -68,11 +69,12 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const brain = new Brain({ mode: S.mode, openrouterKey: S.openrouterKey, openrouterUrl: S.openrouterUrl, gateway, keys: S.keys, mnemonic: S.mnemonic, chainId: config.chainId || 1, helpers: config.helpers, store, clock, alerts, log });
   const x = new XClient({ ...S.x, clock, log });
   const github = new GitHub({ token: S.github.token, repo: S.github.repo, log });
+  const youtube = youtubeFromEnv(env, { log }); // the project's channel (lib/youtube.mjs); Sprinkle uploads there when it is configured
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
   const fudge = new Fudge({ ...deps("fudge"), x, siteUrl: S.siteUrl });
-  const crumb = new Crumb({ ...deps("crumb"), telegram, github, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => chip.decide(id, d, ctx), onNote: (id, t) => chip.addNote(id, t) });
+  const crumb = new Crumb({ ...deps("crumb"), telegram, github, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => { const a = store.approval(id); const h = a ? all[a.helper] : null; return (h && typeof h.decide === "function" ? h : chip).decide(id, d, ctx); }, onNote: (id, t) => chip.addNote(id, t) });
   const nib = new Nib({ ...deps("nib"), github, siteUrl: S.siteUrl, rpcUrl: S.rpcUrl });
   // the recruits: brownies hired at runtime by Dough (lib/hiring.mjs), kept as specs in the store, never as code
   const all = { fudge, crumb, nib, chip };
@@ -87,7 +89,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     all[name] = new Recruit(recruitDeps(spec));
   }
   const off = offList(env); // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
-  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
+  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, youtube, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
   // a hire is saved and the service restarts itself in a moment: the scheduler takes the new jobs at start
   const restartSoon = (why) => { log(`[helpers] ${why}: restarting in 3 seconds so the roster is reloaded`); if (W.requestRestart) setTimeout(() => W.requestRestart(why), 3000); };
   const hire = async (spec) => {
@@ -115,7 +117,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   const names = Object.keys(all);
@@ -155,6 +157,7 @@ async function main() {
   if (!W.x.configured) log("[helpers] X is not configured: Fudge will not post");
   if (!W.telegram.configured) log("[helpers] Telegram is not configured: Crumb will not listen and no alerts go out");
   if (!W.github.configured) log("[helpers] GitHub is not configured: Nib keeps its notes in the store, Chip has no tasks");
+  log(W.youtube?.configured ? "[helpers] YouTube is connected: finished videos go up unlisted, the owner publishes" : "[helpers] YouTube is not configured: videos stay in Telegram");
   if (W.off.length) log(`[helpers] switched off by HELPERS_OFF: ${W.off.join(", ")} (no job runs for them)`);
 
   const started = Date.now();

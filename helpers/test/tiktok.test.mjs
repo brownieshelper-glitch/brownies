@@ -64,7 +64,7 @@ test("connecting: a one-time ticket opens the TikTok login with a state, the cal
     assert.equal(tiktok.connected, true);
     assert.equal(tiktok.tokens().username, "feedthebrownies");
     assert.equal(tiktok.tokens().open_id, "open-1");
-    assert.deepEqual(told, { open_id: "open-1", username: "feedthebrownies", display_name: "Brownies", scope: SCOPES.join(",") });
+    assert.deepEqual(told, { open_id: "open-1", username: "feedthebrownies", display_name: "Brownies", name: "Brownies", scope: SCOPES.join(",") });
     assert.equal(mock.tokens, 1);
     assert.ok(lines.every((l) => !/acc-|ref-|cs\b/.test(l)), "no token in the log");
     // a bad code

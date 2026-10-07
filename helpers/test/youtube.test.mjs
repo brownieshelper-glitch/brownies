@@ -99,3 +99,17 @@ test("an upload is the metadata then the bytes; the privacy is checked; a log li
   const s = await yt.setPrivacy("vid123", "public");
   assert.equal(s.privacyStatus, "public");
 });
+
+test("trending: the most popular videos in a region, as plain rows", async () => {
+  const fetch = makeFetch();
+  fetch.on("GET", /youtube\/v3\/videos\?chart=mostPopular/, () => ({ json: { items: [{ id: "v1", snippet: { title: "A big video", channelTitle: "Someone", tags: ["fun", "cats"], categoryId: "24" }, statistics: { viewCount: "1234567", likeCount: "9999" } }, { id: "v2", snippet: { title: "Quiet" }, statistics: {} }] } }));
+  mockYouTube(fetch);
+  const y = new YouTube({ clientId: "id", clientSecret: "secret", refreshToken: "refresh-1", channelId: "UCtest", fetch });
+  const list = await y.trending({ regionCode: "US", max: 10 });
+  assert.deepEqual(list, [
+    { id: "v1", title: "A big video", channel: "Someone", views: 1234567, likes: 9999, tags: ["fun", "cats"], categoryId: "24", url: "https://www.youtube.com/watch?v=v1" },
+    { id: "v2", title: "Quiet", channel: "", views: 0, likes: 0, tags: [], categoryId: null, url: "https://www.youtube.com/watch?v=v2" },
+  ]);
+  const call = fetch.callsTo("v3/videos?chart=mostPopular")[0];
+  assert.match(call.url, /maxResults=10/); assert.match(call.url, /regionCode=US/); assert.match(call.url, /part=snippet%2Cstatistics/);
+});

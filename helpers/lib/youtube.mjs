@@ -56,6 +56,14 @@ export class YouTube {
     return { json: j, headers: r.headers };
   }
 
+  /// What is trending on YouTube now: the most popular videos in a region, [{ id, title, channel, views, likes, tags, categoryId, url }].
+  async trending({ regionCode = "US", max = 25, categoryId = null } = {}) {
+    const q = new URLSearchParams({ chart: "mostPopular", part: "snippet,statistics", maxResults: String(Math.min(50, Math.max(1, Number(max) || 25))), regionCode });
+    if (categoryId) q.set("videoCategoryId", String(categoryId));
+    const { json } = await this.api("GET", `https://www.googleapis.com/youtube/v3/videos?${q}`);
+    return (json?.items || []).map((v) => ({ id: v.id, title: v.snippet?.title || "", channel: v.snippet?.channelTitle || "", views: Number(v.statistics?.viewCount || 0), likes: Number(v.statistics?.likeCount || 0), tags: (v.snippet?.tags || []).slice(0, 10), categoryId: v.snippet?.categoryId || null, url: `https://www.youtube.com/watch?v=${v.id}` }));
+  }
+
   /// The channel: snippet (title, description), brandingSettings, statistics, the uploads playlist.
   async channel() {
     const { json } = await this.api("GET", `${API}/channels?part=snippet,brandingSettings,statistics,contentDetails&mine=true`);

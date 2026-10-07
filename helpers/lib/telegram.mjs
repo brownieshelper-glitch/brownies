@@ -52,6 +52,16 @@ export class Telegram {
 
   sendChatAction(chatId, action = "typing") { return this.call("sendChatAction", { chat_id: chatId, action }).catch(() => null); }
 
+  /// A picture (png or jpg, up to 10 MB) with a plain-text caption, sent as multipart.
+  async sendPhoto(chatId, { file, caption = "", filename = null } = {}) {
+    const bytes = await readFile(file);
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    if (caption) form.append("caption", String(caption).slice(0, 1000));
+    form.append("photo", new Blob([bytes], { type: /\.jpe?g$/i.test(file) ? "image/jpeg" : "image/png" }), filename || basename(file));
+    return this._send("sendPhoto", { method: "POST", body: form }, 120_000);
+  }
+
   /// A video file (mp4, Telegram takes up to 50 MB from a bot) with a plain-text caption. width, height and
   /// duration (seconds) help the player show it right. The file is read whole, once, and sent as multipart.
   async sendVideo(chatId, { file, caption = "", width = null, height = null, duration = null, filename = null } = {}) {

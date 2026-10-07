@@ -31,7 +31,10 @@ export function makeFetch() {
     const method = (init.method || "GET").toUpperCase();
     const u = String(url);
     let body = null;
-    if (init.body != null) { try { body = JSON.parse(init.body); } catch { body = String(init.body); } }
+    if (init.body != null) {
+      if (typeof FormData !== "undefined" && init.body instanceof FormData) body = Object.fromEntries([...init.body.entries()].map(([k, v]) => [k, typeof v === "object" && v && "size" in v ? { blob: true, size: v.size, type: v.type } : v]));
+      else { try { body = JSON.parse(init.body); } catch { body = String(init.body); } }
+    }
     const call = { method, url: u, body, headers: lower(init.headers) };
     calls.push(call);
     for (const r of routes) {

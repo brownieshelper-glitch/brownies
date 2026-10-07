@@ -44,6 +44,7 @@ helpers/test/pilot.test.mjs
 helpers/test/audio.test.mjs
 helpers/test/sprinkle-youtube.test.mjs
 helpers/test/sprinkle-tiktok.test.mjs
+helpers/test/sprinkle-meme.test.mjs
 helpers/test/season.test.mjs
 helpers/helpers/zest.mjs
 helpers/test/zest.test.mjs

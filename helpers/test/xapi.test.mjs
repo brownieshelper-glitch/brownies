@@ -83,3 +83,29 @@ test("mentions come back oldest first with the author's handle and the newest id
   assert.deepEqual(again.tweets, []);
   assert.equal(again.newestId, "5002", "nothing new keeps the old since id");
 });
+
+test("media upload: initialize, the bytes in chunks, finalize, the processing waited for; a post carries the media ids; a wrong kind of file is refused", async () => {
+  const fetch = makeFetch(), clock = new FakeClock(T0), xm = mockX(fetch), file = tmp();
+  const dir = mkdtempSync(join(tmpdir(), "x-media-"));
+  const png = join(dir, "meme.png"), mp4 = join(dir, "clip.mp4"), txt = join(dir, "notes.txt");
+  writeFileSync(png, Buffer.alloc(3000, 1)); writeFileSync(mp4, Buffer.alloc(9000, 2)); writeFileSync(txt, "x");
+  const up = { inits: [], appends: [], finals: 0, status: 0 };
+  fetch.on("POST", "api.x.com/2/media/upload/initialize", (c) => { up.inits.push(c.body); return { json: { data: { id: `m${up.inits.length}`, media_key: "k" } } }; });
+  fetch.on("POST", /api\.x\.com\/2\/media\/upload\/(m\d+)\/append$/, (c, m) => { up.appends.push({ id: m[1], ...c.body }); return { status: 204 }; });
+  fetch.on("POST", /api\.x\.com\/2\/media\/upload\/(m\d+)\/finalize$/, (c, m) => { up.finals++; return { json: { data: { id: m[1], processing_info: m[1] === "m2" ? { state: "pending", check_after_secs: 1 } : undefined } } }; });
+  fetch.on("GET", /api\.x\.com\/2\/media\/upload\?command=STATUS/, () => { up.status++; return { json: { data: { id: "m2", processing_info: { state: up.status < 2 ? "in_progress" : "succeeded", check_after_secs: 1 } } } }; });
+  const x = new XClient({ clientId: "cid", clientSecret: "sec", accessToken: "access-old", refreshToken: "refresh-old", tokenFile: file, username: "Feedthebrownies", fetch, clock });
+  const slept = [];
+  const a = await x.uploadMedia(png, { sleep: async (ms) => { slept.push(ms); } });
+  assert.deepEqual(a, { mediaId: "m1", type: "image/png", category: "tweet_image", bytes: 3000 });
+  assert.deepEqual(up.inits[0], { media_type: "image/png", total_bytes: 3000, media_category: "tweet_image" });
+  assert.equal(up.appends.length, 1); assert.equal(up.appends[0].segment_index, "0"); assert.equal(up.appends[0].media.size, 3000); assert.equal(up.appends[0].media.type, "image/png");
+  const b = await x.uploadMedia(mp4, { chunkBytes: 4000, sleep: async (ms) => { slept.push(ms); } });
+  assert.equal(b.mediaId, "m2"); assert.equal(b.category, "tweet_video");
+  assert.deepEqual(up.appends.filter((p) => p.id === "m2").map((p) => [p.segment_index, p.media.size]), [["0", 4000], ["1", 4000], ["2", 1000]], "three chunks");
+  assert.equal(up.status, 2, "polled until succeeded"); assert.deepEqual(slept, [1000, 1000]);
+  const posted = await x.post("A picture and a clip.", { mediaIds: [a.mediaId, b.mediaId] });
+  assert.deepEqual(xm.posts.at(-1).media, { media_ids: ["m1", "m2"] }); assert.equal(posted.url, "https://x.com/Feedthebrownies/status/1000");
+  await assert.rejects(() => x.uploadMedia(txt), /X cannot take \.txt files/);
+  assert.equal(up.inits.length, 2, "nothing started for the refused file");
+});

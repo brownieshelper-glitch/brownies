@@ -132,5 +132,18 @@
       },
       "reasoningHeadroom": 8000
     }
+  },
+  "studio": {
+    "_comment": "The studio (lib/studio.mjs): the brownies build and launch coins for other people. The price and the fee slice are the proposal's defaults; the slice is enforced by StudioSplitter (src/StudioSplitter.sol), one per client coin.",
+    "priceEth": 0.2,
+    "feeSliceBps": 1000,
+    "includes": [
+      "a name check, a logo and a banner in the coin's own style",
+      "a one-page site with the story, the links and a live chart",
+      "a short cartoon intro video for X, TikTok and Telegram",
+      "the launch on Programmable on Ethereum, done for you, with the fee contract set at launch",
+      "two weeks of community: a Telegram bot that answers your holders and daily posts on X"
+    ],
+    "contact": "https://t.me/feedthebrownies"
   }
 }

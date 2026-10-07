@@ -30,6 +30,7 @@ import { Admin } from "./lib/admin.mjs";
 import { Recruit } from "./lib/recruit.mjs";
 import { Bakery } from "./lib/bakery.mjs";
 import { JobsApi, totalsView, money as moneyFmt, OPEN as OPEN_JOB_STATES, STATE_LABEL as JOB_STATE } from "./lib/moneyjobs.mjs";
+import { Studio } from "./lib/studio.mjs";
 import { youtubeFromEnv } from "./lib/youtube.mjs";
 import { TikTok, TikTokAuth } from "./lib/tiktok.mjs";
 import { existsSync } from "node:fs";
@@ -175,6 +176,8 @@ export async function build({ env = process.env, configFile = null } = {}) {
   W.admin = new Admin({ W, ring: RING, log, wallets: S.adminWallets, origins, sendSummary: summaryNow });
   // the Bakery: holders bake their own brownies through /bake/* (lib/bakery.mjs); before the launch only the admin wallets may, to test it
   W.jobs = new JobsApi({ store, log }); // the money jobs board, read by the public page through /jobs/*
+  W.studio = new Studio({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, config: config.studio || {}, siteUrl: S.siteUrl, log }); // the studio's intake, /studio/*
+  if (all.zest) all.zest.studio = W.studio; // a studio job's proposal quotes the offer
   W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
   crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
   // TikTok: /tiktok in the owner's chat gives a one-time link; the browser comes back to /tiktok/callback with the code
@@ -203,6 +206,7 @@ async function main() {
     if (req.url.startsWith("/admin/")) return W.admin.handle(req, res);
     if (req.url.startsWith("/bake/")) return W.bakery.handle(req, res);
     if (req.url.startsWith("/jobs/")) return W.jobs.handle(req, res);
+    if (req.url.startsWith("/studio/")) return W.studio.handle(req, res);
     if (req.url.startsWith("/tiktok/")) return W.tiktokAuth.handle(req, res);
     const now = Date.now();
     const body = {

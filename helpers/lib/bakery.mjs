@@ -106,7 +106,8 @@ export class Bakery {
     const PER_PROVIDER = 10; // the newest ten of each provider: every current model, none of the old ones
     let list = null, all = [];
     try {
-      const r = await this.fetch(`${this.openrouterUrl}/models`);
+      // eight seconds at most: a slow catalogue must never hold the page; the last good list or the configured one serves
+      const r = await this.fetch(`${this.openrouterUrl}/models`, { signal: AbortSignal.timeout(8000) });
       if (r.ok) {
         const j = await r.json();
         list = (j.data || []).filter((m) => this.providers.includes(String(m.id).split("/")[0]) && !SKIP_VARIANT.test(m.id) && !SKIP_WORDS.test(`${m.id} ${m.name || ""}`) && textModel(m) && Number(m.pricing?.completion) > 0).map((m) => entry(m.id, m));
@@ -117,7 +118,7 @@ export class Bakery {
         list.sort((a, b) => a.provider.localeCompare(b.provider) || b.out - a.out || a.id.localeCompare(b.id));
         if (!list.length) list = null;
       }
-    } catch (e) { this.log(`[bakery] could not read the model catalogue: ${e.message}`); }
+    } catch (e) { this.log(`[bakery] could not read the model catalogue: ${e.message}`); if (this._catalogue.list) { this._catalogue.at = now - 3_000_000; return this._catalogue.list; } }
     if (!list) list = [];
     // the recommended ones first, in the owner's order, with their notes; the configured defaults join them
     const front = [];

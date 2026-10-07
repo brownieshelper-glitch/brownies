@@ -30,6 +30,7 @@ import { Admin } from "./lib/admin.mjs";
 import { Recruit } from "./lib/recruit.mjs";
 import { Bakery } from "./lib/bakery.mjs";
 import { youtubeFromEnv } from "./lib/youtube.mjs";
+import { TikTok, TikTokAuth } from "./lib/tiktok.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
@@ -70,6 +71,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const x = new XClient({ ...S.x, clock, log });
   const github = new GitHub({ token: S.github.token, repo: S.github.repo, log });
   const youtube = youtubeFromEnv(env, { log }); // the project's channel (lib/youtube.mjs); Sprinkle uploads there when it is configured
+  const tiktok = new TikTok({ clientKey: S.tiktok.clientKey, clientSecret: S.tiktok.clientSecret, redirectUri: `${S.gatewayUrl}/tiktok/callback`, store, clock, log }); // lib/tiktok.mjs; connected by the owner with /tiktok
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
@@ -89,7 +91,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     all[name] = new Recruit(recruitDeps(spec));
   }
   const off = offList(env); // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
-  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, youtube, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
+  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, youtube, tiktok, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
   // a hire or a retirement changes the schedule in place: the retired brownie's jobs are dropped, a new one's are
   // added, and the scheduler is started again, which recomputes every next run (the day's flags keep a slot that
   // already ran from running twice). No process restart, so the pages and the bot keep answering.
@@ -127,7 +129,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, youtube, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   const names = Object.keys(all);
@@ -138,6 +140,13 @@ export async function build({ env = process.env, configFile = null } = {}) {
     if (cmd === "admin") { const code = W.admin?.newCode(); return code ? `Your control room code: ${code}\nIt works for ten minutes at ${S.siteUrl}/admin.html` : "The control room is not ready yet."; }
     if (cmd === "hire") { if (!all.dough) return "There is no hiring brownie yet."; if (!text) return "Tell me the job: /hire <what the new brownie should do>"; const r = await all.dough.onRequest(text); return r ? true : "Dough could not make that hire (budget, ceiling, or an unusable spec). The log says why."; }
     if (cmd === "fire") { if (!all.dough) return "There is no hiring brownie yet."; if (!text) return `Which one? Recruits: ${recruits().map((r) => r.name).join(", ") || "none"}`; const ok = await all.dough.fire(text.toLowerCase().trim()); return ok ? true : `${text} is not a recruit.`; }
+    if (cmd === "tiktok") {
+      if (!W.tiktok.configured) return "TikTok is not set up: TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET are empty in the helpers env.";
+      const sub = text.trim().toLowerCase();
+      if (sub === "status" || (!sub && W.tiktok.connected)) { const t = W.tiktok.tokens(); return t ? `TikTok is connected as @${t.username || t.open_id}.\nScopes: ${t.scope}.\n/tiktok test puts the latest video in your inbox as a draft. /tiktok link connects again.` : "TikTok is not connected. Send /tiktok link."; }
+      if (sub === "test") { if (!all.sprinkle?.tiktokLatest) return "There is no video brownie here."; const r = await all.sprinkle.tiktokLatest(); return r ? true : "No finished video to send, or TikTok refused it. Check the log."; }
+      return `Open this link, log in to TikTok with the Brownies account and allow the app:\n${W.tiktokAuth.link()}\nIt works once, for ten minutes.`;
+    }
     if (cmd === "cap") {
       const [who = "", usd = ""] = text.split(/\s+/);
       if (!all[who.toLowerCase()]) return `Which brownie? /cap <name> <usd a day>. Names: ${names.join(", ")}.`;
@@ -159,6 +168,8 @@ export async function build({ env = process.env, configFile = null } = {}) {
   // the Bakery: holders bake their own brownies through /bake/* (lib/bakery.mjs); before the launch only the admin wallets may, to test it
   W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
   crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
+  // TikTok: /tiktok in the owner's chat gives a one-time link; the browser comes back to /tiktok/callback with the code
+  W.tiktokAuth = new TikTokAuth({ tiktok, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `TikTok is connected as @${me.username || me.open_id}. From now on the vertical copy of every finished video lands in your TikTok inbox as a draft to post from the app. /tiktok test sends the latest one now.`).catch(() => {}); } });
   scheduler.isOff = (name) => W.admin.isPaused(name);
   return W;
 }
@@ -175,12 +186,14 @@ async function main() {
   if (!W.telegram.configured) log("[helpers] Telegram is not configured: Crumb will not listen and no alerts go out");
   if (!W.github.configured) log("[helpers] GitHub is not configured: Nib keeps its notes in the store, Chip has no tasks");
   log(W.youtube?.configured ? "[helpers] YouTube is connected: finished videos go up unlisted, the owner publishes" : "[helpers] YouTube is not configured: videos stay in Telegram");
+  log(!W.tiktok.configured ? "[helpers] TikTok is not configured" : W.tiktok.connected ? `[helpers] TikTok is connected as @${W.tiktok.tokens()?.username || "?"}: vertical videos go to the owner's inbox as drafts` : "[helpers] TikTok app is set; the owner connects the account with /tiktok");
   if (W.off.length) log(`[helpers] switched off by HELPERS_OFF: ${W.off.join(", ")} (no job runs for them)`);
 
   const started = Date.now();
   const health = createServer((req, res) => {
     if (req.url.startsWith("/admin/")) return W.admin.handle(req, res);
     if (req.url.startsWith("/bake/")) return W.bakery.handle(req, res);
+    if (req.url.startsWith("/tiktok/")) return W.tiktokAuth.handle(req, res);
     const now = Date.now();
     const body = {
       ok: true, mode: S.mode, uptimeSeconds: Math.round((now - started) / 1000), reports: gateway.reports, thoughts: brain.calls,

@@ -2,7 +2,7 @@
 
 > Inference credits on Ethereum (chain id 1). BROWNIE is a coin launched through Programmable with a 2% tax on every
 > buy and sell. 35% of the tax pays for AI for the people who stake BROWNIE, as SUGAR, and 30% feeds the AI helpers. 1 SUGAR pays for 1 dollar
-> of AI on the Brownies gateway, which speaks the OpenAI API and serves the OpenRouter catalogue.
+> of AI on the Brownies gateway, which speaks the OpenAI API and serves the OpenRouter catalogue plus Ambient's models paid per request (ids starting with ambient/).
 
 ## Facts
 

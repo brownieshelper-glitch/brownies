@@ -40,6 +40,12 @@ for (const f of [process.env.BROWNIES_GATEWAY_ENV, new URL("./.env", import.meta
     if (m && m[2] !== "" && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^"(.*)"$/, "$1");
   }
 }
+import { Wallet as PantryWallet, JsonRpcProvider as PantryProvider } from "ethers";
+import { X402Payer } from "./x402.mjs";
+import { Ambient, foldSse } from "./ambient.mjs";
+import { RelayBridge } from "./bridge.mjs";
+import { Pantry } from "./pantry.mjs";
+
 const cfg = {
   port: Number(process.env.PORT || 8790),
   rpcUrl: process.env.RPC_URL || "https://ethereum-rpc.publicnode.com",
@@ -60,6 +66,12 @@ const cfg = {
   claimEverySeconds: Number(process.env.CLAIM_EVERY_SECONDS || 300),
   priceMultiplier: Number(process.env.PRICE_MULTIPLIER || 1),
   minBalanceMicro: 10_000, // a request needs at least one cent of balance
+  // the pantry: the wallet that pays Ambient per request over x402 with USDC on Base; empty = Ambient's models are not offered
+  pantryKey: process.env.PANTRY_PRIVATE_KEY || "",
+  baseRpcUrl: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+  x402MaxUsd: Number(process.env.X402_MAX_USD_PER_REQUEST || 2),
+  pantryBridgeMinUsdc: Number(process.env.PANTRY_BRIDGE_MIN_USDC || 20),
+  pantryEverySeconds: Number(process.env.PANTRY_EVERY_SECONDS || 600),
   // the key the brownies send with their reports; under 24 characters counts as not set, and the log stays closed
   teamLogKey: (process.env.TEAM_LOG_KEY || "").length >= 24 ? process.env.TEAM_LOG_KEY : "",
 };
@@ -71,6 +83,17 @@ if (!cfg.live) console.log("[gateway] SUGAR_ADDRESS not set: running without the
 const ledger = new Ledger(cfg.dbPath);
 const chain = cfg.live ? new Chain(cfg, ledger) : null;
 const team = new TeamLog(ledger.db);
+
+// ---- the pantry and Ambient: inference paid per request, no account anywhere ----
+let pantry = null, ambient = null;
+if (/^0x[0-9a-fA-F]{64}$/.test(cfg.pantryKey)) {
+  const payer = new X402Payer({ privateKey: cfg.pantryKey, chainId: 8453, maxMicro: Math.round(cfg.x402MaxUsd * 1e6), log: console.log });
+  ambient = new Ambient({ payer, log: console.log });
+  // the bridge moves the fees' USDC from Ethereum to Base; only when this gateway's chain is Ethereum
+  const bridge = cfg.chainId === 1 ? new RelayBridge({ wallet: new PantryWallet(cfg.pantryKey, new PantryProvider(cfg.rpcUrl, 1, { staticNetwork: true })), log: console.log }) : null;
+  pantry = new Pantry({ privateKey: cfg.pantryKey, ethRpcUrl: cfg.rpcUrl, baseRpcUrl: cfg.baseRpcUrl, bridge, payer, bridgeMinUsdc: cfg.pantryBridgeMinUsdc, everySeconds: cfg.pantryEverySeconds, log: console.log });
+  console.log(`[gateway] pantry ${pantry.address}: Ambient's models offered, paid per request on Base${bridge ? ", USDC bridged from Ethereum by Relay" : ""}`);
+}
 
 // ---- helpers ----
 const json = (res, status, body) => {
@@ -117,6 +140,11 @@ async function models() {
   const body = await r.json();
   const byId = new Map();
   for (const m of body.data || []) byId.set(m.id, m);
+  if (ambient) {
+    const extra = await ambient.models();
+    body.data = [...(body.data || []).filter((m) => !ambient.isOurs(m.id)), ...extra];
+    for (const m of extra) byId.set(m.id, m);
+  }
   modelsCache = { at: Date.now(), body, byId };
   return modelsCache;
 }
@@ -134,7 +162,6 @@ function worstCaseMicro(model, body) {
 
 // ---- the proxy ----
 async function chatCompletions(req, res) {
-  if (!cfg.openrouterKey) throw err(503, "upstream_unconfigured", "The gateway has no upstream key yet.");
   const who = authed(req);
   const pay = payer(req, who);
   const raw = await readBody(req);
@@ -148,6 +175,9 @@ async function chatCompletions(req, res) {
   if (!body.max_tokens && !body.max_completion_tokens) body.max_tokens = 1024;
   const worst = worstCaseMicro(model, body);
   if (worst > pay.availableMicro) throw err(402, "insufficient_balance", `This request could cost up to ${dollars(worst)} USD and ${pay.grant ? "the grant's room today" : "the balance"} is ${dollars(pay.availableMicro)} USD. Lower max_tokens${pay.grant ? "" : " or activate more SUGAR"}.`);
+
+  if (ambient && ambient.isOurs(body.model)) return ambientChat({ res, who, pay, body });
+  if (!cfg.openrouterKey) throw err(503, "upstream_unconfigured", "The gateway has no upstream key yet.");
 
   body.usage = { include: true }; // OpenRouter returns usage.cost (dollars) in the final chunk or the body
   const upstream = await fetch(`${cfg.openrouterUrl}/chat/completions`, {
@@ -200,12 +230,49 @@ async function chatCompletions(req, res) {
   json(res, 200, j);
 }
 
+/// Ambient over x402: the quote is the price (input plus the output bound), the pantry pays it when JumpGate asks,
+/// the caller is charged exactly what was paid (times the multiplier). Streams pass through; a plain request gets
+/// the stream folded into one answer.
+async function ambientChat({ res, who, pay, body }) {
+  const up = ambient.body(body);
+  let quote;
+  try { quote = await ambient.quote(up); } catch (e) { throw err(502, "upstream", e.message); }
+  const worst = Math.ceil(quote.maxMicro * cfg.priceMultiplier);
+  if (worst > pay.availableMicro) throw err(402, "insufficient_balance", `This request costs up to ${dollars(worst)} USD and ${pay.grant ? "the grant's room today" : "the balance"} is ${dollars(pay.availableMicro)} USD. Lower max_tokens or add balance.`);
+  let out;
+  try { out = await ambient.chat(body, { quote }); } catch (e) { throw err(502, "upstream", `Ambient: ${e.message}`); }
+  const { response: upstream, paid } = out;
+  if (!upstream.ok) {
+    const t = await upstream.text();
+    res.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") || "text/plain", "access-control-allow-origin": "*" });
+    res.end(t);
+    return;
+  }
+  const micro = Math.ceil((paid ? paid.micro : quote.micro) * cfg.priceMultiplier);
+  const info = { model: body.model, upstream: "ambient", upstreamModel: out.upstreamModel, paidMicro: paid?.micro ?? 0, tx: paid?.settlement?.transaction || null, promptTokens: quote.inputTokens, maxCompletionTokens: quote.outputTokens };
+  const charge = () => { if (micro > 0) { if (pay.grant) ledger.chargeVia(pay.beneficiary, who.wallet, micro, info); else ledger.charge(who.beneficiary, micro, info); } };
+  if (body.stream) {
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", "access-control-allow-origin": "*" });
+    try {
+      const reader = upstream.body.getReader();
+      const dec = new TextDecoder();
+      while (true) { const { value, done } = await reader.read(); if (done) break; res.write(dec.decode(value, { stream: true })); }
+    } finally { res.end(); charge(); } // paid is paid, whatever the client did with the stream
+    return;
+  }
+  const j = foldSse(await upstream.text(), { model: body.model });
+  charge();
+  j.brownies = { charged_usd: dollars(micro), paid_usdc: paid ? dollars(paid.micro) : null, upstream: "ambient", balance_usd: dollars(pay.grant ? (ledger.grantRoom(pay.beneficiary, who.wallet)?.roomMicro ?? 0) : ledger.balance(who.beneficiary).availableMicro) };
+  if (pay.grant) j.brownies.paid_by = pay.grant.from;
+  json(res, 200, j);
+}
+
 // ---- routes ----
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   try {
     if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, x-brownies-pay-from", "access-control-allow-methods": "GET, POST, OPTIONS" }); return res.end(); }
-    if (url.pathname === "/health") return json(res, 200, { ok: true, live: cfg.live, chainId: cfg.chainId, sugar: cfg.sugarAddress || null, lastBlock: ledger.lastBlock, upstream: Boolean(cfg.openrouterKey) });
+    if (url.pathname === "/health") return json(res, 200, { ok: true, live: cfg.live, chainId: cfg.chainId, sugar: cfg.sugarAddress || null, lastBlock: ledger.lastBlock, upstream: Boolean(cfg.openrouterKey), pantry: pantry ? pantry.view() : null });
     if ((url.pathname.startsWith("/v1/") || url.pathname === "/api/protocol/index-tx") && !cfg.live) throw err(503, "not_launched", "The coin is not launched yet.");
     if (url.pathname === "/v1/models" && req.method === "GET") { const m = await models(); return json(res, 200, m.body); }
     if (url.pathname === "/v1/key" && req.method === "GET") {
@@ -290,6 +357,7 @@ const server = createServer(async (req, res) => {
 server.listen(cfg.port, () => {
   console.log(`[gateway] listening on :${cfg.port}, chain ${cfg.chainId}, SUGAR ${cfg.sugarAddress || "not set"}, upstream ${cfg.openrouterKey ? "set" : "NOT SET"}`);
   if (chain) chain.start({ claimEverySeconds: cfg.claimEverySeconds });
+  if (pantry) pantry.start();
 });
 
-export { server, ledger, chain, team, beneficiaryToWallet };
+export { server, ledger, chain, team, pantry, ambient, beneficiaryToWallet };

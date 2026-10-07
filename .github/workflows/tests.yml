@@ -35,7 +35,7 @@ jobs:
           cache-dependency-path: gateway/package-lock.json
       - run: npm ci
         working-directory: gateway
-      - run: node --test test/core.test.mjs test/team.test.mjs test/keeper.test.mjs
+      - run: node --test test/core.test.mjs test/team.test.mjs test/keeper.test.mjs test/grants.test.mjs test/x402.test.mjs test/ambient.test.mjs test/bridge.test.mjs
         working-directory: gateway
 
   contracts:

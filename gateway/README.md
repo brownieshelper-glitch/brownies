@@ -48,3 +48,14 @@ anyone may do; the keeper just makes sure somebody does:
 Every transaction is simulated first; a failing simulation is logged once an hour and skipped. Under
 `KEEPER_FLOOR_ETH` of balance the keeper sends nothing and asks for a refill in the log. Tests: `test/keeper.test.mjs`
 (fake contracts) and `bash smoke/eth-keeper-check.sh` (a mainnet fork with the coin launched the real way).
+
+Pantry and Ambient (x402)
+-------------------------
+With PANTRY_PRIVATE_KEY set, the gateway also offers Ambient's open models (ids starting with `ambient/`, the
+alias `ambient/large` kept) and pays each request itself: JumpGate quotes the price (input tokens plus the output
+bound), answers 402 with x402 v2 payment requirements, and the pantry signs an EIP-3009 USDC transfer on Base for
+exactly that amount (x402.mjs); the facilitator pays the gas. The caller is charged what was paid, times
+PRICE_MULTIPLIER. The pantry (pantry.mjs) reads its USDC on Ethereum (where the coin's fees arrive) and on Base
+every PANTRY_EVERY_SECONDS and, from PANTRY_BRIDGE_MIN_USDC up with ETH for gas, moves it to Base with Relay
+(bridge.mjs, a quote without referrer, approve + deposit, the status polled). X402_MAX_USD_PER_REQUEST caps one
+payment. GET /health shows the pantry's address and balances. Nothing is bought ahead and no account exists anywhere.

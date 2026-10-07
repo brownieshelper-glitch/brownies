@@ -104,16 +104,19 @@
   function paintForm() {
     const st = $("bakeStatus");
     const hold = U.mine.hold != null ? `${Math.floor(Number(U.mine.hold)).toLocaleString("en-US")} BROWNIE` : "";
+    $("bakeWho").textContent = B.short(U.mine.wallet || U.wallet || "");
     if (U.mine.canBake) {
-      st.textContent = U.mine.trial ? "You are on the admin list. This bake is a trial before the launch." : `This wallet holds ${hold}. You can bake.`;
+      st.textContent = U.mine.trial ? "This wallet is on the admin list. This bake is a trial before the launch." : `This wallet holds ${hold}. You can bake.`;
       st.className = "bake-status ok";
       $("bakeForm").hidden = false;
     } else {
-      st.textContent = `${K.cap(U.mine.why || "the Bakery is closed for now")}.${hold ? ` This wallet holds ${hold}.` : ""}`;
+      const why = K.cap(U.mine.why || "the Bakery is closed for now");
+      st.textContent = `${why}.${hold ? ` This wallet holds ${hold}.` : ""}${/opens with the launch/.test(why) ? " Until then only the admin wallet can bake, as a trial." : ""}`;
       st.className = "bake-status";
       $("bakeForm").hidden = true;
     }
   }
+  $("btnSwitch").onclick = () => { signOut(false); gateHint("Connect the other wallet, top right, then sign in again."); };
 
   // ---- baking ----
   $("bakeForm").onsubmit = async (ev) => {

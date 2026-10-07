@@ -135,6 +135,9 @@ export async function build({ env = process.env, configFile = null } = {}) {
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
+  // bounties, hackathons and audit contests (helpers/contests.mjs, hidden with Zest): Chip prepares the entries, the owner approves
+  const contestsFile = new URL("./helpers/contests.mjs", import.meta.url);
+  if (existsSync(contestsFile)) { const { Contests } = await import(contestsFile); chip.contests = new Contests({ chip, github, store, clock, telegram, ownerChatId: S.telegram.ownerChatId, log, siteUrl: S.siteUrl }); }
   const names = Object.keys(all);
   const hidden = names.filter((n) => all[n].hidden);
   W.hidden = hidden;

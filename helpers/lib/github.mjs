@@ -26,6 +26,18 @@ export class GitHub {
     return j;
   }
   R(path = "") { return `/repos/${this.repo}${path}`; }
+  get owner() { return String(this.repo || "").split("/")[0]; }
+  get name() { return String(this.repo || "").split("/")[1] || ""; }
+  /// The same token and fetch, another repository (a bounty's upstream, our fork of it).
+  forRepo(repo) { return new GitHub({ token: this.token, repo, fetch: this.fetch, log: this.log }); }
+  /// Whether the repository answers (a fork that is not there yet does not).
+  async exists() { return Boolean(await this.api("GET", this.R(), null, { allow404: true })); }
+  /// Forks this repository under the token's account. GitHub makes the fork in the background: poll exists() on it.
+  async fork() { const j = await this.api("POST", this.R("/forks"), {}); return { fullName: j.full_name, url: j.html_url }; }
+  /// Brings a fork's branch level with its upstream. Ignored when GitHub refuses (an unrelated history, nothing to do).
+  async mergeUpstream(branch) { return this.api("POST", this.R("/merge-upstream"), { branch }).catch(() => null); }
+  /// One issue: title, body, labels, state, url.
+  async issue(number) { const i = await this.api("GET", this.R(`/issues/${number}`)); return { number: i.number, title: i.title, body: i.body || "", state: i.state, url: i.html_url, labels: (i.labels || []).map((l) => (typeof l === "string" ? l : l.name)) }; }
 
   async defaultBranch() {
     if (!this.info) this.info = await this.api("GET", this.R());

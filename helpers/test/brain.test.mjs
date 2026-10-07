@@ -26,7 +26,8 @@ test("prelaunch: the call goes to OpenRouter with usage accounting, the cost is 
   await assert.rejects(() => W.brain.chat("nib", { prompt: "No." }), (e) => e instanceof BudgetError && e.helper === "nib");
   assert.equal(W.or.calls.length, 3);
   assert.equal(W.alerts.sent.filter((a) => a.topic === "budget:nib").length, 1);
-  assert.match(W.alerts.sent[0].text, /Nib is out of budget: daily cap/);
+  assert.match(W.alerts.sent.find((a) => a.topic === "budget:nib").text, /Nib is out of budget: daily cap/);
+  assert.ok(W.alerts.sent.some((a) => a.topic.startsWith("nearcap:nib")), "the 80% warning came before the cap");
   // a new day, a new budget
   await W.clock.advance(24 * 3_600_000);
   assert.equal((await W.brain.canSpend("nib")).ok, true);

@@ -47,7 +47,7 @@ test("Fudge stops at its daily dollar cap and the owner is told once", async () 
   const budgetAlerts = W.alerts.sent.filter((a) => a.topic === "budget:fudge");
   assert.equal(budgetAlerts.length, 1);
   assert.match(budgetAlerts[0].text, /Fudge is out of budget/);
-  assert.equal(W.tg.sent.filter((m) => String(m.chat_id) === "999").length, 1, "one Telegram alert to the owner");
+  assert.equal(W.tg.sent.filter((m) => String(m.chat_id) === "999").length, 2, "two Telegram lines to the owner: the 80% warning, then the cap");
   await W.fudge.post();
   assert.equal(W.alerts.sent.filter((a) => a.topic === "budget:fudge").length, 1, "not alerted again within the hour");
 });

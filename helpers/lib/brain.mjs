@@ -98,8 +98,12 @@ export class Brain {
   }
 
   /// One chat completion. Returns { text, costMicro, model, usage }. Throws BudgetError when the helper cannot pay.
-  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning = DEFAULT_REASONING } = {}) {
+  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning } = {}) {
     await this.budgetOrThrow(helper);
+    // the effort: the call's own, else the brownie's config (a thinker like Chip gets medium with more headroom), else low
+    const cfg = this.helpers[helper] || {};
+    if (reasoning === undefined) reasoning = cfg.reasoning ?? DEFAULT_REASONING;
+    const headroom = Number.isFinite(cfg.reasoningHeadroom) ? cfg.reasoningHeadroom : REASONING_HEADROOM;
     const list = [];
     if (system) list.push({ role: "system", content: system });
     list.push(...messages);
@@ -107,7 +111,7 @@ export class Brain {
     // Claude 5 models think before they answer and that thinking is counted inside max_tokens. OpenRouter refuses
     // to switch it off, but "effort: low" leaves it at zero tokens on these jobs (measured), so that is the default;
     // a call may ask for more. The headroom stays as a belt to the braces.
-    const body = { model: this.model(helper), messages: list, max_tokens: maxTokens + REASONING_HEADROOM, temperature, usage: { include: true } };
+    const body = { model: this.model(helper), messages: list, max_tokens: maxTokens + headroom, temperature, usage: { include: true } };
     if (reasoning) body.reasoning = reasoning;
     const j = this.mode === "live" ? await this._viaGateway(helper, body) : await this._viaOpenRouter(helper, body);
     if (j?.choices?.[0]?.finish_reason === "length") this.log(`[brain] ${helper}'s answer was cut at ${body.max_tokens} tokens (${j.usage?.completion_tokens_details?.reasoning_tokens ?? "?"} of them thinking)`);
@@ -118,7 +122,9 @@ export class Brain {
     const now = this.clock.now();
     this.store.addSpend(helper, costMicro, now);
     this.calls++;
-    if (this.store.spentToday(helper, now).micro >= this.capMicro(helper)) await this.alerts?.budget(helper, `daily cap of ${(this.capMicro(helper) / 1e6).toFixed(2)} USD reached`);
+    const spentNow = this.store.spentToday(helper, now).micro, capNow = this.capMicro(helper);
+    if (spentNow >= capNow) await this.alerts?.budget(helper, `daily cap of ${(capNow / 1e6).toFixed(2)} USD reached`);
+    else if (spentNow >= 0.8 * capNow) await this.alerts?.nearCap?.(helper, spentNow, capNow, now);
     if (this.mode === "live") this.balanceCache.delete(helper);
     return { text: typeof text === "string" ? text : JSON.stringify(text), costMicro, model: body.model, usage };
   }

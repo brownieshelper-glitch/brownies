@@ -98,7 +98,7 @@ export class Brain {
   }
 
   /// One chat completion. Returns { text, costMicro, model, usage }. Throws BudgetError when the helper cannot pay.
-  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning } = {}) {
+  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning, plugins = null } = {}) {
     await this.budgetOrThrow(helper);
     // the effort: the call's own, else the brownie's config (a thinker like Chip gets medium with more headroom), else low
     const cfg = this.helpers[helper] || {};
@@ -113,6 +113,7 @@ export class Brain {
     // a call may ask for more. The headroom stays as a belt to the braces.
     const body = { model: this.model(helper), messages: list, max_tokens: maxTokens + headroom, temperature, usage: { include: true } };
     if (reasoning) body.reasoning = reasoning;
+    if (Array.isArray(plugins) && plugins.length) body.plugins = plugins; // OpenRouter plugins, e.g. [{ id: "web" }] for a web search before the answer
     const j = this.mode === "live" ? await this._viaGateway(helper, body) : await this._viaOpenRouter(helper, body);
     if (j?.choices?.[0]?.finish_reason === "length") this.log(`[brain] ${helper}'s answer was cut at ${body.max_tokens} tokens (${j.usage?.completion_tokens_details?.reasoning_tokens ?? "?"} of them thinking)`);
     const text = j?.choices?.[0]?.message?.content ?? "";

@@ -11,6 +11,7 @@
 //   GET  /admin/log?n=200                  the last lines of the service log
 //   POST /admin/logout
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { applyAction as jobAction, totalsView as jobTotals, STATE_LABEL as JOB_STATE } from "./moneyjobs.mjs";
 import { verifyMessage, getAddress, isAddress } from "ethers";
 import { cap } from "./facts.mjs";
 
@@ -105,6 +106,7 @@ export class Admin {
       helpers: list,
       approvals: store.pendingApprovals().map((a) => ({ id: a.id, helper: a.helper, title: a.title, url: a.url, at: nowIso(a.at) })),
       videos: Number(store.getMeta("sprinkle:videos", 0)) || 0,
+      jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => ({ ...j, stateLabel: JOB_STATE[j.state] || j.state })) },
       group: store.getMeta("tg:group:auto") || this.W.S.telegram.groupChatId || "",
       reports: this.W.gateway.reports, thoughts: brain.calls,
     };
@@ -117,6 +119,15 @@ export class Admin {
     this.log(`[admin] ${action}${helper ? " " + helper : ""}${text ? ": " + String(text).slice(0, 80) : ""}`);
     switch (action) {
       case "summary": { if (!this.sendSummary) return { ok: false, error: "no summary here" }; await this.sendSummary(); return { ok: true }; }
+      case "job": {
+        const now = this.W.clock.now();
+        if (String(value) === "pick" && helpers.zest?.pick) {
+          const r = await helpers.zest.pick(Number(id));
+          return r.error ? { ok: false, error: r.error } : { ok: true, job: r.job, note: `Picked for ${cap(r.helper)}${r.handed ? "; the draft is in your Telegram" : ""}.` };
+        }
+        const r = jobAction(store, { id: Number(id), action: String(value || ""), text, value: text, by: "owner", now });
+        return r.error ? { ok: false, error: r.error } : { ok: true, job: r.job, note: `Job ${r.job.id} is now ${JOB_STATE[r.job.state]}.` };
+      }
       case "approve": case "reject": {
         const a = store.approval(Number(id));
         if (!a) return { ok: false, error: "no such approval" };

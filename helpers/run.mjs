@@ -29,6 +29,7 @@ import { sendSummary } from "./lib/summary.mjs";
 import { Admin } from "./lib/admin.mjs";
 import { Recruit } from "./lib/recruit.mjs";
 import { Bakery } from "./lib/bakery.mjs";
+import { JobsApi, totalsView, money as moneyFmt, OPEN as OPEN_JOB_STATES, STATE_LABEL as JOB_STATE } from "./lib/moneyjobs.mjs";
 import { youtubeFromEnv } from "./lib/youtube.mjs";
 import { TikTok, TikTokAuth } from "./lib/tiktok.mjs";
 import { existsSync } from "node:fs";
@@ -132,6 +133,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
+  if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
   const names = Object.keys(all);
   const hidden = names.filter((n) => all[n].hidden);
   W.hidden = hidden;
@@ -146,6 +148,12 @@ export async function build({ env = process.env, configFile = null } = {}) {
       if (sub === "status" || (!sub && W.tiktok.connected)) { let t = W.tiktok.tokens(); if (t && !t.display_name) { try { const me = await W.tiktok.me(); W.tiktok.saveTokens({ ...t, display_name: me.display_name || null }); t = W.tiktok.tokens(); } catch { /* shown by id */ } } return t ? `TikTok is connected (${t.display_name || t.username || t.open_id}).\nScopes: ${t.scope}.\n/tiktok test puts the latest video in your inbox as a draft. /tiktok link connects again.` : "TikTok is not connected. Send /tiktok link."; }
       if (sub === "test") { if (!all.sprinkle?.tiktokLatest) return "There is no video brownie here."; const r = await all.sprinkle.tiktokLatest(); return r ? true : "No finished video to send, or TikTok refused it. Check the log."; }
       return `Open this link, log in to TikTok with the Brownies account and allow the app:\n${W.tiktokAuth.link()}\nIt works once, for ten minutes.`;
+    }
+    if (cmd === "zest") { if (!all.zest) return "There is no scout here."; const r = await all.zest.onRequest(text || "hunt"); return r ? true : "Zest could not scout now (budget or an error). Check the log."; }
+    if (cmd === "jobs") {
+      const t = totalsView(store);
+      const open = store.moneyJobs({ limit: 300 }).filter((j) => j.state === "found" || OPEN_JOB_STATES.has(j.state)).slice(0, 12);
+      return [`The board: ${t.found} found and not picked, ${t.open} in progress, ${t.won} won, ${t.paid} paid, ${moneyFmt(t.earnedUsd)} earned.`, ...open.map((j) => `${j.id}. [${JOB_STATE[j.state]}] ${j.title}${j.expectedUsd ? `, up to ${moneyFmt(j.expectedUsd)}` : ""}${j.ownerAction ? ` -> you: ${j.ownerAction}` : ""}`), `Pick: /zest pick <number>. Everything: ${S.siteUrl}/jobs.html`].join("\n");
     }
     if (cmd === "cap") {
       const [who = "", usd = ""] = text.split(/\s+/);
@@ -166,6 +174,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const origins = [S.siteUrl, "https://feedthebrownies.com", "https://www.feedthebrownies.com", /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/, ...S.adminOrigins];
   W.admin = new Admin({ W, ring: RING, log, wallets: S.adminWallets, origins, sendSummary: summaryNow });
   // the Bakery: holders bake their own brownies through /bake/* (lib/bakery.mjs); before the launch only the admin wallets may, to test it
+  W.jobs = new JobsApi({ store, log }); // the money jobs board, read by the public page through /jobs/*
   W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
   crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
   // TikTok: /tiktok in the owner's chat gives a one-time link; the browser comes back to /tiktok/callback with the code
@@ -193,6 +202,7 @@ async function main() {
   const health = createServer((req, res) => {
     if (req.url.startsWith("/admin/")) return W.admin.handle(req, res);
     if (req.url.startsWith("/bake/")) return W.bakery.handle(req, res);
+    if (req.url.startsWith("/jobs/")) return W.jobs.handle(req, res);
     if (req.url.startsWith("/tiktok/")) return W.tiktokAuth.handle(req, res);
     const now = Date.now();
     const body = {

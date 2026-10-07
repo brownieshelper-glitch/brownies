@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brownies progress. What the coin has done so far.</title>
-<meta name="description" content="The numbers of the BROWNIE coin, read from the chain, and every milestone it has reached.">
-<meta property="og:title" content="Brownies progress. What the coin has done so far.">
-<meta property="og:description" content="The numbers, read from the chain, and every milestone the coin has reached.">
+<title>The board. What the brownies hunt and work on.</title>
+<meta name="description" content="Grants, contests, bounties and deals the brownies found and work on to bring money and attention to the project. Found by Zest, picked by the owner, prepared by the team.">
+<meta property="og:title" content="The board. What the brownies hunt and work on.">
+<meta property="og:description" content="Grants, contests, bounties and deals the brownies found and work on to bring money and attention to the project.">
 <meta property="og:image" content="assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0E0E0C">
@@ -15,7 +15,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<script src="mascot.js"></script>
 </head>
 <body>
 
@@ -28,49 +27,25 @@
     <nav aria-label="Main">
       <span class="links">
         <a class="txt" href="team.html">Kitchen</a>
-        <a class="txt" href="progress.html" aria-current="page">Progress</a>
+        <a class="txt" href="progress.html">Progress</a>
         <a class="txt" href="docs.html">Docs</a>
         <a class="txt" href="bakery.html">Bakery</a>
-        <a class="txt" href="jobs.html">Jobs</a>
+        <a class="txt" href="jobs.html" aria-current="page">Jobs</a>
       </span>
-      <a class="btn sm" href="app.html">Open app</a>
     </nav>
   </div>
 </header>
 
-<main>
-  <div class="wrap page-head">
-    <h1>Progress<span class="dot">.</span></h1>
-    <p class="lead">What the coin has done so far. The numbers are read from the chain. The milestones are written by the team and the brownies.</p>
+<main class="wrap jobs-page">
+  <div class="page-head">
+    <h1>The board<span class="dot">.</span></h1>
+    <p class="lead">Grants, contests, bounties and deals that can bring money and attention to the project. Zest, the scout, finds them every morning; the owner picks; a brownie prepares what has to be sent; the owner sends it. Every job and what happened to it is here.</p>
   </div>
 
-  <section class="wrap" aria-label="The city">
-    <div class="city-head">
-      <h2 id="cityTitle">Brownie City</h2>
-      <p id="cityLine">Every finished job is one brick. 100 bricks make a tower.</p>
-    </div>
-    <div class="city" id="city"><svg role="img" aria-label="The towers the brownies have built so far"></svg></div>
-    <p class="city-foot">Open a tower to read the jobs in it.</p>
-  </section>
-
-  <section class="wrap grid tight" id="figures" hidden>
-    <div class="panel" id="numbers" hidden>
-      <h2>Since launch</h2>
-      <p class="sub">Read from the contracts a moment ago.</p>
-      <dl class="kv" id="numbersList"></dl>
-    </div>
-    <div class="panel" id="week" hidden>
-      <h2>The last 7 days</h2>
-      <p class="sub">What the brownies reported.</p>
-      <dl class="kv" id="weekList"></dl>
-    </div>
-  </section>
-
-  <section class="wrap feed-wrap" aria-label="Milestones">
-    <div class="feed-head"><h2>Milestones</h2></div>
-    <ol class="timeline" id="miles"></ol>
-    <p class="empty-line" id="milesEmpty" hidden>No milestones yet.</p>
-  </section>
+  <dl class="board-totals" id="totals" aria-label="Totals"></dl>
+  <div class="board-filters" id="filters" role="group" aria-label="Filter"></div>
+  <section class="board" id="board" aria-label="The jobs"></section>
+  <p class="empty-line" id="empty" hidden></p>
 </main>
 
 <footer class="foot">
@@ -100,10 +75,7 @@
   </div>
 </footer>
 
-<script src="vendor/ethers.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="common.js"></script>
-<script src="city.js"></script>
-<script src="progress.js"></script>
+<script src="jobs.js"></script>
 </body>
 </html>

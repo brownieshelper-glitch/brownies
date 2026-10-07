@@ -10,6 +10,12 @@ import { localParts } from "./clock.mjs";
 /// Posts are compared by this: lower case, ASCII letters and digits only, so "Hello, world!" equals "hello world".
 export const textKey = (s) => createHash("sha256").update(String(s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()).digest("hex");
 
+/// A money_jobs row as the code reads it.
+function moneyRow(r) {
+  let log = []; try { log = JSON.parse(r.log || "[]"); } catch { log = []; }
+  return { id: Number(r.id), createdAt: Number(r.created_at), updatedAt: Number(r.updated_at), kind: r.kind, title: r.title, url: r.url, ref: r.ref, source: r.source, helper: r.helper, state: r.state, score: Number(r.score), effort: r.effort, expectedUsd: Number(r.expected_usd) || 0, earnedUsd: Number(r.earned_usd) || 0, deadline: r.deadline, summary: r.summary, nextStep: r.next_step, ownerAction: r.owner_action, log };
+}
+
 export class Store {
   constructor(path = ":memory:", { tz = "UTC" } = {}) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -28,6 +34,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS approvals (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, helper TEXT NOT NULL, kind TEXT NOT NULL, ref TEXT NOT NULL, title TEXT NOT NULL, url TEXT, state TEXT NOT NULL DEFAULT 'pending', note TEXT, chat_id TEXT, message_id TEXT, decided_at INTEGER);
       CREATE TABLE IF NOT EXISTS batches (chat TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS alerts (topic TEXT PRIMARY KEY, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS money_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, url TEXT, ref TEXT, source TEXT NOT NULL, helper TEXT, state TEXT NOT NULL DEFAULT 'found', score INTEGER NOT NULL DEFAULT 0, effort TEXT, expected_usd REAL NOT NULL DEFAULT 0, earned_usd REAL NOT NULL DEFAULT 0, deadline TEXT, summary TEXT, next_step TEXT, owner_action TEXT, log TEXT NOT NULL DEFAULT '[]');
+      CREATE UNIQUE INDEX IF NOT EXISTS money_jobs_ref ON money_jobs(ref);
     `);
     const p = (sql) => this.db.prepare(sql);
     this.q = {
@@ -63,6 +71,12 @@ export class Store {
       resetBatch: p("DELETE FROM batches WHERE chat = ?"),
       lastAlert: p("SELECT at FROM alerts WHERE topic = ?"),
       setAlert: p("INSERT INTO alerts(topic, at) VALUES(?, ?) ON CONFLICT(topic) DO UPDATE SET at = excluded.at"),
+      addMoneyJob: p("INSERT OR IGNORE INTO money_jobs(created_at, updated_at, kind, title, url, ref, source, helper, state, score, effort, expected_usd, deadline, summary, next_step, owner_action, log) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+      moneyJob: p("SELECT * FROM money_jobs WHERE id = ?"),
+      moneyJobByRef: p("SELECT * FROM money_jobs WHERE ref = ?"),
+      moneyJobs: p("SELECT * FROM money_jobs ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?"),
+      moneyJobsByState: p("SELECT * FROM money_jobs WHERE state = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?"),
+      moneyTotals: p("SELECT state, COUNT(*) AS n, SUM(expected_usd) AS expected, SUM(earned_usd) AS earned FROM money_jobs GROUP BY state"),
     };
   }
 
@@ -126,6 +140,32 @@ export class Store {
   // ---- alerts: at most one per topic per hour ----
   lastAlert(topic) { const r = this.q.lastAlert.get(topic); return r ? Number(r.at) : 0; }
   setAlert(topic, at) { this.q.setAlert.run(topic, at); }
+
+  // ---- money jobs: the opportunities the brownies hunt and the work that brings money in (lib/moneyjobs.mjs) ----
+  /// Adds a job; null when one with the same ref (the normalized URL) is on the board already.
+  addMoneyJob({ at, kind, title, url = null, ref = null, source, helper = null, state = "found", score = 0, effort = null, expectedUsd = 0, deadline = null, summary = null, nextStep = null, ownerAction = null, note = null }) {
+    const log = note ? [{ at, by: source, text: String(note).slice(0, 400) }] : [];
+    const r = this.q.addMoneyJob.run(at, at, kind, title, url, ref, source, helper, state, Math.round(Number(score) || 0), effort, Number(expectedUsd) || 0, deadline, summary, nextStep, ownerAction, JSON.stringify(log));
+    return r.changes > 0 ? Number(r.lastInsertRowid) : null;
+  }
+  moneyJob(id) { const r = this.q.moneyJob.get(Number(id)); return r ? moneyRow(r) : null; }
+  moneyJobByRef(ref) { const r = this.q.moneyJobByRef.get(String(ref)); return r ? moneyRow(r) : null; }
+  moneyJobs({ state = null, limit = 200, offset = 0 } = {}) { return (state ? this.q.moneyJobsByState.all(state, limit, offset) : this.q.moneyJobs.all(limit, offset)).map(moneyRow); }
+  /// Changes the named fields and appends a log line. Returns the job, or null when there is none.
+  updateMoneyJob(id, patch = {}, { at, by = "system", note = null } = {}) {
+    const job = this.moneyJob(id);
+    if (!job) return null;
+    const cols = { kind: "kind", title: "title", url: "url", helper: "helper", state: "state", score: "score", effort: "effort", expectedUsd: "expected_usd", earnedUsd: "earned_usd", deadline: "deadline", summary: "summary", nextStep: "next_step", ownerAction: "owner_action" };
+    const sets = [], vals = [];
+    for (const [k, col] of Object.entries(cols)) if (patch[k] !== undefined) { sets.push(`${col} = ?`); vals.push(patch[k]); }
+    const log = job.log.slice(-40);
+    if (note) log.push({ at, by, text: String(note).slice(0, 400) });
+    sets.push("log = ?", "updated_at = ?"); vals.push(JSON.stringify(log), at);
+    this.db.prepare(`UPDATE money_jobs SET ${sets.join(", ")} WHERE id = ?`).run(...vals, Number(id));
+    return this.moneyJob(id);
+  }
+  /// Per state: how many, the expected and the earned dollars.
+  moneyTotals() { const by = {}; for (const r of this.q.moneyTotals.all()) by[r.state] = { n: Number(r.n), expectedUsd: Number(r.expected) || 0, earnedUsd: Number(r.earned) || 0 }; return by; }
 
   // ---- Nib's latest note, where Fudge and Crumb read it ----
   get latestNote() { const v = this.getMeta("note:latest"); return v ? JSON.parse(v) : null; }

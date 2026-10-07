@@ -166,7 +166,9 @@
     row("Spent today", `${Number(b.spentTodayUsd || 0).toFixed(4)} USD of ${Number(b.capUsd || 0).toFixed(2)}`);
     row("Model", /haiku/i.test(b.model) ? "Claude Haiku 4.5" : /sonnet/i.test(b.model) ? "Claude Sonnet 5.5" : b.model || "");
     if (b.wallet) row("Its wallet", B.short(b.wallet));
-    if (!b.telegram) row("Telegram", "not linked yet");
+    row("Telegram", b.telegram ? "linked, drafts and answers go there" : "not linked yet");
+    $("btnLink").hidden = Boolean(b.telegram); $("btnUnlink").hidden = !b.telegram;
+    if (b.telegram) { $("linkHint").hidden = true; stopLinkPoll(); }
     // feed it
     const text = $("fundText"), fundBtn = $("btnFund"), revoke = $("btnRevoke"), ff = $("fundFacts");
     if (!live || !b.wallet) {
@@ -255,6 +257,28 @@
       $("fundFacts").hidden = true; $("btnRevoke").hidden = true; $("fundHint").hidden = true; $("btnFund").textContent = "Set the grant";
       toast(`${b.title} is no longer fed.`);
     } catch (e) { toast(explainError(e), "err"); }
+  };
+
+  // Telegram: a code from the Bakery, sent to the bot as /link <code>; the page looks again every few seconds until linked
+  let linkTimer = null;
+  function stopLinkPoll() { if (linkTimer) { clearInterval(linkTimer); linkTimer = null; } }
+  $("btnLink").onclick = async () => {
+    const b = shown; if (!b) return;
+    const r = await api("/link", { method: "POST", body: { name: b.name } });
+    if (!r.ok) return toast(r.body?.error || "Could not make a code.", "err");
+    const h = $("linkHint");
+    h.textContent = `Open ${r.body.bot} on Telegram and send it this message within ten minutes: /link ${r.body.code}`;
+    h.hidden = false;
+    stopLinkPoll();
+    let tries = 0;
+    linkTimer = setInterval(async () => { tries++; if (tries > 120 || $("mine").hidden) return stopLinkPoll(); await refresh(); }, 5000);
+  };
+  $("btnUnlink").onclick = async () => {
+    const b = shown; if (!b) return;
+    const r = await api("/unlink", { method: "POST", body: { name: b.name } });
+    if (!r.ok) return toast(r.body?.error || "Could not unlink.", "err");
+    toast("Telegram unlinked. Drafts stay in its feed.");
+    await refresh();
   };
 
   $("askForm").onsubmit = async (ev) => {

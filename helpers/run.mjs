@@ -142,6 +142,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   W.admin = new Admin({ W, ring: RING, log, wallets: S.adminWallets, origins, sendSummary: summaryNow });
   // the Bakery: holders bake their own brownies through /bake/* (lib/bakery.mjs); before the launch only the admin wallets may, to test it
   W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
+  crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
   scheduler.isOff = (name) => W.admin.isPaused(name);
   return W;
 }

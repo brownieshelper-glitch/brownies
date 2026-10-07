@@ -96,6 +96,8 @@
         return ok(b);
       }
       if (path === "/ask") { const b = state.mine[0]; if (!b) return { ok: false, status: 400, body: { error: "that is not one of your brownies" } }; b.asksLeft = Math.max(0, b.asksLeft - 1); setTimeout(() => { b.feed.unshift({ at: Date.now(), task: "ask", title: String(body.text).slice(0, 60), text: "Done. " + String(body.text), kind: "note" }); b.outputs++; }, 800); return ok({ started: true, left: b.asksLeft }); }
+      if (path === "/link") { const b = state.mine[0]; if (!b) return { ok: false, status: 400, body: { error: "that is not one of your brownies" } }; return ok({ code: "123456", bot: "@feedthebrownies_bot", expiresAt: Date.now() + 600e3, name: b.name }); }
+      if (path === "/unlink") { const b = state.mine[0]; if (b) b.telegram = false; return ok({ unlinked: true }); }
       if (path === "/retire") { const b = state.mine[0]; state.mine = []; state.shelf = state.shelf.filter((x) => x !== b && x.name !== b?.name); return ok({ retired: true }); }
       return { ok: false, status: 404, body: { error: "no such route" } };
     };

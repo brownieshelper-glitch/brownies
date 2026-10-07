@@ -143,7 +143,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     if (cmd === "tiktok") {
       if (!W.tiktok.configured) return "TikTok is not set up: TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET are empty in the helpers env.";
       const sub = text.trim().toLowerCase();
-      if (sub === "status" || (!sub && W.tiktok.connected)) { const t = W.tiktok.tokens(); return t ? `TikTok is connected as @${t.username || t.open_id}.\nScopes: ${t.scope}.\n/tiktok test puts the latest video in your inbox as a draft. /tiktok link connects again.` : "TikTok is not connected. Send /tiktok link."; }
+      if (sub === "status" || (!sub && W.tiktok.connected)) { let t = W.tiktok.tokens(); if (t && !t.display_name) { try { const me = await W.tiktok.me(); W.tiktok.saveTokens({ ...t, display_name: me.display_name || null }); t = W.tiktok.tokens(); } catch { /* shown by id */ } } return t ? `TikTok is connected (${t.display_name || t.username || t.open_id}).\nScopes: ${t.scope}.\n/tiktok test puts the latest video in your inbox as a draft. /tiktok link connects again.` : "TikTok is not connected. Send /tiktok link."; }
       if (sub === "test") { if (!all.sprinkle?.tiktokLatest) return "There is no video brownie here."; const r = await all.sprinkle.tiktokLatest(); return r ? true : "No finished video to send, or TikTok refused it. Check the log."; }
       return `Open this link, log in to TikTok with the Brownies account and allow the app:\n${W.tiktokAuth.link()}\nIt works once, for ten minutes.`;
     }
@@ -169,7 +169,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
   crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
   // TikTok: /tiktok in the owner's chat gives a one-time link; the browser comes back to /tiktok/callback with the code
-  W.tiktokAuth = new TikTokAuth({ tiktok, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `TikTok is connected as @${me.username || me.open_id}. From now on the vertical copy of every finished video lands in your TikTok inbox as a draft to post from the app. /tiktok test sends the latest one now.`).catch(() => {}); } });
+  W.tiktokAuth = new TikTokAuth({ tiktok, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `TikTok is connected (${me.name}). From now on the vertical copy of every finished video lands in your TikTok inbox as a draft to post from the app. /tiktok test sends the latest one now.`).catch(() => {}); } });
   scheduler.isOff = (name) => W.admin.isPaused(name);
   return W;
 }
@@ -186,7 +186,7 @@ async function main() {
   if (!W.telegram.configured) log("[helpers] Telegram is not configured: Crumb will not listen and no alerts go out");
   if (!W.github.configured) log("[helpers] GitHub is not configured: Nib keeps its notes in the store, Chip has no tasks");
   log(W.youtube?.configured ? "[helpers] YouTube is connected: finished videos go up unlisted, the owner publishes" : "[helpers] YouTube is not configured: videos stay in Telegram");
-  log(!W.tiktok.configured ? "[helpers] TikTok is not configured" : W.tiktok.connected ? `[helpers] TikTok is connected as @${W.tiktok.tokens()?.username || "?"}: vertical videos go to the owner's inbox as drafts` : "[helpers] TikTok app is set; the owner connects the account with /tiktok");
+  log(!W.tiktok.configured ? "[helpers] TikTok is not configured" : W.tiktok.connected ? `[helpers] TikTok is connected (${W.tiktok.tokens()?.display_name || W.tiktok.tokens()?.username || "the Brownies account"}): vertical videos go to the owner's inbox as drafts` : "[helpers] TikTok app is set; the owner connects the account with /tiktok");
   if (W.off.length) log(`[helpers] switched off by HELPERS_OFF: ${W.off.join(", ")} (no job runs for them)`);
 
   const started = Date.now();

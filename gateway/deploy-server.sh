@@ -32,7 +32,7 @@ fi
 echo "== server reachable: $($SSH 'echo yes && node --version')"
 
 # ---- code ----
-tar czf - gateway/server.mjs gateway/ledger.mjs gateway/chain.mjs gateway/auth.mjs gateway/teamlog.mjs gateway/package.json gateway/package-lock.json \
+tar czf - gateway/server.mjs gateway/ledger.mjs gateway/chain.mjs gateway/auth.mjs gateway/teamlog.mjs gateway/x402.mjs gateway/ambient.mjs gateway/bridge.mjs gateway/pantry.mjs gateway/package.json gateway/package-lock.json \
   | $SSH 'mkdir -p /srv/brownies /var/lib/brownies /etc/brownies && tar xzf - -C /srv/brownies && cd /srv/brownies/gateway && npm ci --omit=dev --no-audit --no-fund 2>&1 | tail -1'
 echo "== code copied and dependencies installed"
 

@@ -72,7 +72,7 @@
       <p>BROWNIE is a coin on Ethereum, launched through Programmable. Every buy and every sell pays a 2% tax. That tax is the only money in the system.</p>
       <p>35% of the tax pays for AI for the people who stake BROWNIE. They receive it as SUGAR. One SUGAR pays for one dollar of AI on the Brownies gateway.</p>
       <p>30% of the tax feeds the brownies. They are four AI helpers that work for the coin.</p>
-      <p>The gateway speaks the OpenAI API and serves every model on OpenRouter. Your wallet is your account, and a signature from it is your API key.</p>
+      <p>The gateway speaks the OpenAI API and serves every model on OpenRouter, plus Ambient's open models paid per request with USDC on Base (ids that start with <code>ambient/</code>). Your wallet is your account, and a signature from it is your API key.</p>
     </section>
 
     <section id="coin">
@@ -182,7 +182,7 @@ console.log(reply.choices[0].message.content);</code></pre>
       </div>
 
       <h3>What a request costs</h3>
-      <p>Each request costs what OpenRouter charges for that model. The gateway adds nothing. The price of every model is in <code>GET /v1/models</code>.</p>
+      <p>Each request costs what OpenRouter charges for that model. The gateway adds nothing. The price of every model is in <code>GET /v1/models</code>. An <code>ambient/</code> model is paid per request: its price is the input plus the output bound you set with <code>max_tokens</code>, so set it to what you need.</p>
       <p>Always send <code>max_tokens</code>. Before a request runs, the gateway checks that your balance covers the most it could cost. Without <code>max_tokens</code> it assumes 1024.</p>
 
       <h3>Errors</h3>
@@ -265,7 +265,7 @@ console.log(reply.choices[0].message.content);</code></pre>
       <h3>The switch</h3>
       <p>The Brownies team can switch the program off and on at any time. Off means every tax payment claimed from then on goes to the team's wallet instead of the split. Everything already paid stays paid, and SUGAR already in your hands keeps working. The switch is an event on the chain, so everyone sees it the moment it is used.</p>
       <h3>The wallet that pays for the AI</h3>
-      <p>The dollars for AI go to a wallet the Brownies team controls. The team uses them to buy model usage from OpenRouter. This step is done by people, not by a contract.</p>
+      <p>The dollars for AI land as USDC in the pantry wallet. For Ambient's models the pantry pays each request itself: the USDC moves from Ethereum to Base and is spent per call, with no account and no person in between. OpenRouter's models are still bought by the Brownies team with those dollars; that step is done by people, not by a contract.</p>
       <h3>The team vault</h3>
       <p>The Brownies team owns the team vault. The team chooses the brownies, their wallets and their shares, and can veto a skill before it is paid. A brownie's daily share goes to the wallet the team sets for it, as AI credit that cannot be sold.</p>
       <p>The team cannot change the daily release or the payout limits, and has no way to send the vault's SUGAR to an address of its choice. The team can replace the contract that approves skill payouts, but only 7 days after announcing it on the chain.</p>

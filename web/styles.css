@@ -691,3 +691,28 @@ textarea.prompt:focus { border-color: var(--bone); }
 .legal-page { padding-top: 44px; padding-bottom: 88px; }
 .legal-page .prose section { padding-top: 36px; }
 .legal-page .prose h2 { font-size: clamp(24px, 2.8vw, 32px); }
+
+/* the board */
+.board-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 6px 0 26px; }
+.board-totals div { border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; min-width: 0; }
+.board-totals dt { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.board-totals dd { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; margin-top: 4px; }
+.board-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.board-filters button { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+.board-filters button[aria-pressed="true"] { background: var(--bone); color: var(--ink); border-color: var(--bone); }
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; padding-bottom: 40px; }
+.job-card { border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.job-card.done { opacity: 0.7; }
+.job-card .tags { display: flex; gap: 8px; flex-wrap: wrap; font-family: var(--mono); font-size: 12.5px; }
+.job-card .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
+.job-card .tags .state { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+.job-card h3 { font-size: 22px; letter-spacing: -0.03em; line-height: 1.15; overflow-wrap: anywhere; }
+.job-card h3 a { text-decoration: none; color: inherit; }
+.job-card h3 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.job-card .nums { font-family: var(--mono); font-size: 13px; color: var(--muted); line-height: 1.5; }
+.job-card .why, .job-card .next { font-size: 15.5px; line-height: 1.45; }
+.job-card .next b { font-weight: 600; }
+.job-card .you { font-size: 15px; line-height: 1.4; padding: 10px 12px; border-radius: 12px; background: var(--bone); color: var(--ink); }
+.job-card .log { font-family: var(--mono); font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; overflow-wrap: anywhere; }
+.admin-job .meta b { font-weight: 600; }
+@media (max-width: 720px) { .board { grid-template-columns: 1fr; } .board-totals dd { font-size: 24px; } }

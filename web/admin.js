@@ -90,11 +90,52 @@
       acts.append(yes, no); box.append(acts); li.append(box); ap.append(li);
     }
     $("approvalsEmpty").hidden = s.approvals.length > 0;
+    const jobs = s.jobs || { totals: {}, list: [] };
+    const jt = jobs.totals || {};
+    $("jobsTotals").textContent = `${jt.found || 0} found and not picked, ${jt.open || 0} in progress, ${jt.won || 0} won, ${jt.paid || 0} paid, ${money(jt.earnedUsd)} earned. The public page: jobs.html`;
+    const jl = $("jobsList"); jl.replaceChildren();
+    const DONE = ["won", "paid", "lost", "dropped"];
+    const ORDER = ["waiting_owner", "working", "submitted", "preparing", "picked", "found", "won", "paid", "lost", "dropped"];
+    const list = [...(jobs.list || [])].sort((x, y) => ORDER.indexOf(x.state) - ORDER.indexOf(y.state) || y.updatedAt - x.updatedAt);
+    for (const j of list.filter((x) => !DONE.includes(x.state))) jl.append(jobRow(j));
+    const done = list.filter((x) => DONE.includes(x.state));
+    if (done.length) { const li = el("li"); const d = el("details"); d.append(el("summary", null, `${done.length} finished (won, paid, lost or dropped)`)); const ul = el("ul", "admin-approvals"); for (const j of done) ul.append(jobRow(j)); d.append(ul); li.append(d); jl.append(li); }
+    $("jobsEmpty").hidden = list.length > 0;
     const grid = $("agents"); grid.replaceChildren();
     for (const h of s.helpers) grid.append(card(h));
     if (lg.ok) { const pre = $("adminLog"); const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8; pre.textContent = (lg.body.lines || []).join("\n"); if (atEnd) pre.scrollTop = pre.scrollHeight; }
   }
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  const usd = (n) => "$" + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  function jobRow(j) {
+    const li = el("li", "admin-job");
+    const box = el("div");
+    const meta = el("p", "meta");
+    const parts = [j.kind, j.stateLabel || j.state];
+    if (j.helper) parts.push(cap(j.helper));
+    if (j.score) parts.push(`fit ${j.score}`);
+    if (j.expectedUsd) parts.push(`up to ${usd(j.expectedUsd)}`);
+    if (j.earnedUsd) parts.push(`${usd(j.earnedUsd)} earned`);
+    if (j.deadline) parts.push(`by ${j.deadline}`);
+    meta.append(el("b", null, `#${j.id}`), document.createTextNode(` ${parts.join(", ")}, ${when(new Date(j.updatedAt).toISOString())}`));
+    box.append(meta, el("p", "what", j.title));
+    if (j.summary) box.append(el("p", "role", j.summary));
+    if (j.nextStep) box.append(el("p", "role", `Next: ${j.nextStep}`));
+    if (j.ownerAction) box.append(el("p", "what", `You: ${j.ownerAction}`));
+    if (j.url) { const l = el("a", "link", "Open the page"); l.href = j.url; l.target = "_blank"; l.rel = "noopener nofollow"; box.append(l); }
+    const acts = el("div", "admin-row");
+    const act = (label, value, ask = null, ghost = true) => { const b = el("button", "btn sm" + (ghost ? " ghost" : ""), label); b.onclick = () => { let text = ""; if (ask) { text = prompt(ask) || ""; if (!text.trim()) return; } command({ action: "job", id: j.id, value, text }); }; acts.append(b); };
+    if (j.state === "found") act("Pick", "pick", null, false);
+    if (["picked", "preparing", "waiting_owner"].includes(j.state)) act("Submitted", "submit", null, false);
+    if (["picked", "preparing", "waiting_owner", "submitted"].includes(j.state)) act("In progress", "start");
+    if (["submitted", "working", "waiting_owner", "picked", "preparing"].includes(j.state)) { act("Won", "won", "How much did it win, in dollars? (leave empty if unknown)"); act("Lost", "lost"); }
+    if (["won", "working", "submitted"].includes(j.state)) act("Paid", "paid", "How much was paid, in dollars?");
+    if (!["dropped", "paid", "lost"].includes(j.state)) act("Drop", "drop");
+    act("Note", "note", "A note for the log");
+    box.append(acts); li.append(box);
+    return li;
+  }
 
   function card(h) {
     const art = el("article", "admin-card" + (h.paused ? " paused" : "") + (h.hidden ? " hidden-helper" : ""));
@@ -161,6 +202,11 @@
         { name: "glaze", title: "Glaze", role: "business development. Prepares everything the team has to send", hidden: true, paused: false, model: "anthropic/claude-sonnet-5.5", capUsd: 1.5, spentTodayUsd: 0.0204, callsToday: 1, lastJob: { at: t0 - 3 * 3600e3, job: "deal", ok: true, note: "Draft 1: Ask Programmable to index BROWNIE" }, jobs: [job("glaze-task", [10], null, 13 * 3600e3)], canAsk: true },
       ],
       approvals: [{ id: 2, helper: "chip", title: "Add a FAQ page from the questions people ask", url: "https://github.com/brownieshelper-glitch/brownies/pull/3", at: new Date(t0 - 40 * 60e3).toISOString() }],
+      jobs: { totals: { found: 1, open: 1, won: 0, paid: 1, earnedUsd: 4500, expectedOpenUsd: 25000 }, list: [
+        { id: 1, kind: "grant", state: "waiting_owner", stateLabel: "waiting for the owner", title: "Example Builder Grants, round 3", url: "https://example.org/1", helper: "glaze", score: 82, expectedUsd: 5000, deadline: "2026-10-31", summary: "Open-source Ethereum tooling fits the round.", nextStep: "Fill the form.", ownerAction: "Send what Glaze prepared; it is in your Telegram.", updatedAt: t0 - 20 * 60e3 },
+        { id: 3, kind: "bounty", state: "found", stateLabel: "found", title: "Audit contest X", url: "https://example.org/3", score: 70, expectedUsd: 20000, deadline: "2026-10-20", summary: "Solidity contest, two weeks.", nextStep: "Register before the start.", updatedAt: t0 - 3 * 3600e3 },
+        { id: 5, kind: "grant", state: "paid", stateLabel: "paid", title: "Small tooling grant", url: "https://example.org/5", helper: "glaze", score: 75, expectedUsd: 4500, earnedUsd: 4500, summary: "Paid for the open-source gateway.", updatedAt: t0 - 2 * 86400e3 },
+      ] },
     };
     const lines = ["[helpers] running", "[crumb] answering in the group -1004498393263 \"Brownies\" from now on", "[chip] a pull request waits for the owner", "[glaze] deal: Draft 1: Ask Programmable to index BROWNIE", "[admin] login (code)"].map((l, i) => `${new Date(t0 - (5 - i) * 60e3).toISOString()} ${l}`);
     return async (path) => {

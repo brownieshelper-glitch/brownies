@@ -434,7 +434,7 @@ async function pages() {
   ok("bake demo: the fund panel asks for one signature and shows no grant yet", await p.ev(`!document.getElementById("btnFund").hidden && document.getElementById("btnFund").textContent === "Sign once and set the grant" && document.getElementById("btnRevoke").hidden`));
   await p.ev(`document.getElementById("btnFund").click()`);
   await wait(() => p.ev(`!document.getElementById("fundFacts").hidden`));
-  ok("bake demo: the grant is set and shown, and can be stopped", await p.ev(`document.getElementById("fundFacts").textContent.includes("0.50 USD a day") && !document.getElementById("btnRevoke").hidden`));
+  ok("bake demo: the grant is set and shown, and can be stopped", await p.ev(`document.getElementById("fundFacts").textContent.includes("1.00 USD a day") && !document.getElementById("btnRevoke").hidden`));
   await p.ev(`document.getElementById("inAsk").value = "Write one line about SUGAR."; document.getElementById("askForm").requestSubmit();`);
   await wait(() => p.ev(`document.querySelectorAll("#mineFeed li").length === 1`), 5000);
   ok("bake demo: an instruction lands in the feed and counts down", await p.ev(`document.querySelectorAll("#mineFeed li").length === 1 && document.getElementById("askHint").textContent.startsWith("2 instructions left")`));

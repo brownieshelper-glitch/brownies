@@ -106,7 +106,7 @@ export class Admin {
       helpers: list,
       approvals: store.pendingApprovals().map((a) => ({ id: a.id, helper: a.helper, title: a.title, url: a.url, at: nowIso(a.at) })),
       videos: Number(store.getMeta("sprinkle:videos", 0)) || 0,
-      jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => ({ ...j, stateLabel: JOB_STATE[j.state] || j.state })) },
+      jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => { let draft = null; try { draft = JSON.parse(store.getMeta(`job:${j.id}:draft`) || "null"); } catch { draft = null; } return { ...j, stateLabel: JOB_STATE[j.state] || j.state, draft }; }) },
       group: store.getMeta("tg:group:auto") || this.W.S.telegram.groupChatId || "",
       reports: this.W.gateway.reports, thoughts: brain.calls,
     };

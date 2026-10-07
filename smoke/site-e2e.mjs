@@ -427,10 +427,10 @@ async function pages() {
   ok("bakery demo: a brownie with no work yet says so, one with work shows the latest", await p.ev(`(() => { const c = [...document.querySelectorAll("#shelf .baked-card")]; const rook = c.find((x) => x.querySelector("h3").textContent === "Rook"); const sage = c[0]; return rook.querySelector(".count").textContent === "No job done yet" && !rook.querySelector(".latest") && sage.querySelector(".latest .what").textContent.startsWith("Quiet day."); })()`));
   await p.go(`${SITE}/bake.html?demo=form&${QS.slice(1)}`);
   await wait(() => p.ev(`!document.getElementById("formWrap").hidden`));
-  ok("bake demo: a holder who may bake sees the form with the five menu jobs and their hours", await p.ev(`document.getElementById("bakeStatus").textContent === "This wallet holds 24,500 BROWNIE. You can bake." && document.querySelectorAll("#jobMenu li.job").length === 5 && document.querySelector("#jobMenu li.job select.job-hour").value === "9" && document.getElementById("inModel").options.length === 2`));
+  ok("bake demo: a holder who may bake sees the form with the five menu jobs and their hours", await p.ev(`document.getElementById("bakeStatus").textContent === "This wallet holds 24,500 BROWNIE. You can bake." && document.querySelectorAll("#jobMenu li.job").length === 5 && document.querySelector("#jobMenu li.job select.job-hour").value === "9" && document.getElementById("inModel").options.length >= 6 && document.querySelectorAll("#inModel optgroup").length >= 4`));
   await p.ev(`document.getElementById("inName").value = "Sage"; document.getElementById("inRole").value = "watches the coin for me and explains what moved"; document.getElementById("inPersonality").value = "calm, a little dry"; document.querySelector("#jobMenu li.job input").checked = true; document.querySelector("#jobMenu li.job select.job-hour").value = "7"; document.getElementById("bakeForm").requestSubmit();`);
   await wait(() => p.ev(`!document.getElementById("mine").hidden`));
-  ok("bake demo: the form bakes it and the page shows the brownie with its job at the chosen hour", await p.ev(`document.getElementById("mineName").textContent === "Sage" && document.getElementById("mineJobs").textContent.includes("Daily watch, at 7:00") && document.getElementById("mineFace").querySelector("svg") && document.getElementById("mineFeedEmpty").textContent === "Nothing yet. Its first job runs at 7:00."`));
+  ok("bake demo: the form bakes it and the page shows the brownie with its job at the chosen hour", await p.ev(`document.getElementById("mineName").textContent === "Sage" && document.getElementById("mineJobs").textContent.includes("Daily watch, at 7:00") && document.getElementById("mineFace").querySelector("svg") && document.getElementById("mineFeedEmpty").textContent === "Nothing yet. It works at 7:00."`));
   ok("bake demo: the fund panel asks for one signature and shows no grant yet", await p.ev(`!document.getElementById("btnFund").hidden && document.getElementById("btnFund").textContent === "Sign once and set the grant" && document.getElementById("btnRevoke").hidden`));
   await p.ev(`document.getElementById("btnFund").click()`);
   await wait(() => p.ev(`!document.getElementById("fundFacts").hidden`));
@@ -463,7 +463,7 @@ async function shots() {
   const p = await openPage(false);
   const list = [["home", `/${QS}`], ["app", `/app.html${QS}`], ["docs", `/docs.html${QS}`], ["team", `/team.html${QS}`], ["progress", `/progress.html${QS}`], ["posts", `/posts.html${QS}`], ["chat", `/chat.html${QS}`], ["bakery", `/bakery.html${QS}`], ["bake", `/bake.html${QS}`], ["bakery-demo", `/bakery.html?demo=1&${QS.slice(1)}`], ["bake-demo", `/bake.html?demo=1&${QS.slice(1)}`], ["bake-form", `/bake.html?demo=form&${QS.slice(1)}`], ["admin", `/admin.html${QS}`]];
   for (const [name, path] of list) {
-    for (const w of [1440, 1024, 768, 375]) {
+    for (const w of [1920, 1440, 1024, 768, 375]) {
       await p.size(w, w === 375 ? 812 : 900, w === 375);
       await p.go(SITE + path);
       if (name === "team" || name === "progress") await sleep(1500);

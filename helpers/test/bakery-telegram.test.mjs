@@ -72,7 +72,7 @@ test("a holder links the chat with a code; drafts and answers reach it; /mybrown
   assert.ok(W.tg.sent.slice(owner).every((m) => String(m.chat_id) !== "999"), "nothing of the holder's went to the owner");
   // how it is doing, its work, an instruction
   a = await say(W, "/mybrownie");
-  assert.match(a.text, /^Sage: a holder's helper that watches the coin\nJobs: Daily watch at 9:00; Evening digest at 20:00\nJobs done: 1\. Spent today: 0\.0010 of 0\.50 USD\.\nLatest: Evening digest, just now\.$/);
+  assert.match(a.text, /^Sage: a holder's helper that watches the coin\nJobs: Daily watch at 9:00; Evening digest at 20:00\nJobs done: 1\. Spent today: 0\.0010 of 1\.00 USD\.\nLatest: Evening digest, just now\.$/);
   a = await say(W, "/mybrownie feed");
   assert.match(a.text, /^Sage's latest work:\n\nEvening digest, just now:\n/);
   a = await say(W, "/mybrownie ask Write one line about SUGAR.");

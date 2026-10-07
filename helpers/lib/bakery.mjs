@@ -36,6 +36,11 @@ const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 const nowIso = (ms) => new Date(ms).toISOString();
 const short = (a) => (a ? a.slice(0, 6) + "..." + a.slice(-4) : "");
 const ago = (at, now) => { const s = Math.max(0, Math.round((now - at) / 1000)); if (s < 60) return "just now"; if (s < 3600) return `${Math.floor(s / 60)} min ago`; if (s < 86400) return `${Math.floor(s / 3600)} h ago`; const d = Math.floor(s / 86400); return `${d} ${d === 1 ? "day" : "days"} ago`; };
+const PROVIDER_NAMES = { anthropic: "Anthropic", openai: "OpenAI", google: "Google", "x-ai": "xAI", deepseek: "DeepSeek", moonshotai: "Moonshot", "z-ai": "Z.ai", "meta-llama": "Meta", mistralai: "Mistral", qwen: "Qwen" };
+// variants (":batch", ":free", ":thinking") are told by the id's colon; the kinds we do not want by words in the id or the name
+const SKIP_VARIANT = /:/;
+const SKIP_WORDS = /\bimage\b|codex|search|online|audio|realtime|\btts\b|transcribe|whisper|embed|-exp\b|preview|\bvision\b|-code\b|nano banana|multi-agent/i;
+const textModel = (m) => (!m.architecture?.output_modalities || m.architecture.output_modalities.includes("text")) && (!m.architecture?.input_modalities || m.architecture.input_modalities.includes("text"));
 const COMMANDS = "Commands: /mybrownie (how it is doing), /mybrownie ask <what to do>, /mybrownie feed (its latest work), /mybrownie unlink, /mybrownie retire.";
 
 /// The jobs a holder can pick without writing instructions. Hours are the holder's choice; these are the defaults.
@@ -57,8 +62,12 @@ export class Bakery {
     this.minHold = Number(config.minHold ?? 10_000);
     this.maxPerWallet = Number(config.maxPerWallet ?? 1);
     this.maxTotal = Number(config.maxTotal ?? 50);
-    this.maxCapUsd = Number(config.maxCapUsd ?? 1);
-    this.defaultCapUsd = Number(config.defaultCapUsd ?? 0.5);
+    this.maxCapUsd = Number(config.maxCapUsd ?? 50);        // live: the holder pays from their own SUGAR
+    this.trialCapUsd = Number(config.trialCapUsd ?? 1);     // before the launch: the team's budget
+    this.defaultCapUsd = Number(config.defaultCapUsd ?? 1);
+    this.providers = Array.isArray(config.providers) && config.providers.length ? config.providers : Object.keys(PROVIDER_NAMES);
+    this.openrouterUrl = String(W.S?.openrouterUrl || "https://openrouter.ai/api/v1").replace(/\/$/, "");
+    this._catalogue = { at: 0, list: null };
     this.asksPerDay = Number(config.asksPerDay ?? 3);
     this.models = Array.isArray(config.models) && config.models.length ? config.models : ["anthropic/claude-haiku-4.5"];
     this.adminWallets = adminWallets.filter(isAddress).map((a) => getAddress(a));
@@ -68,6 +77,37 @@ export class Bakery {
   }
 
   get live() { return this.W.S?.mode === "live"; }
+  /// The most a brownie may spend in a day: the holder's own SUGAR once live, the team's small trial budget before.
+  capUsd() { return this.live ? this.maxCapUsd : Math.min(this.maxCapUsd, this.trialCapUsd); }
+
+  /// The models a holder may pick: OpenRouter's public catalogue, the main providers only, text models with a
+  /// price, no batch, free or image variants; sorted by provider then by price; cached an hour. The configured
+  /// defaults are always in the list, first. When the catalogue cannot be read, the configured list alone.
+  async catalogue() {
+    const now = this.W.clock.now();
+    if (this._catalogue.list && now - this._catalogue.at < 3_600_000) return this._catalogue.list;
+    const entry = (id, m = null) => { const p = String(id).split("/")[0]; return { id, name: String(m?.name || id.split("/").pop()).replace(/^[^:]+:\s*/, ""), provider: PROVIDER_NAMES[p] || p, in: m ? Number((Number(m.pricing.prompt) * 1e6).toFixed(2)) : null, out: m ? Number((Number(m.pricing.completion) * 1e6).toFixed(2)) : null, created: Number(m?.created || 0) }; };
+    const PER_PROVIDER = 10; // the newest ten of each provider: every current model, none of the old ones
+    let list = null, all = [];
+    try {
+      const r = await this.fetch(`${this.openrouterUrl}/models`);
+      if (r.ok) {
+        const j = await r.json();
+        list = (j.data || []).filter((m) => this.providers.includes(String(m.id).split("/")[0]) && !SKIP_VARIANT.test(m.id) && !SKIP_WORDS.test(`${m.id} ${m.name || ""}`) && textModel(m) && Number(m.pricing?.completion) > 0).map((m) => entry(m.id, m));
+        all = list.slice();
+        const byProvider = new Map();
+        for (const m of list.sort((a, b) => b.created - a.created)) { const g = byProvider.get(m.provider) || []; if (g.length < PER_PROVIDER) g.push(m); byProvider.set(m.provider, g); }
+        list = [...byProvider.values()].flat();
+        list.sort((a, b) => a.provider.localeCompare(b.provider) || b.out - a.out || a.id.localeCompare(b.id));
+        if (!list.length) list = null;
+      }
+    } catch (e) { this.log(`[bakery] could not read the model catalogue: ${e.message}`); }
+    if (!list) list = [];
+    for (const id of [...this.models].reverse()) { const i = list.findIndex((m) => m.id === id); const e = i >= 0 ? list.splice(i, 1)[0] : (all.find((m) => m.id === id) || entry(id)); list.unshift(e); }
+    for (const m of list) delete m.created;
+    this._catalogue = { at: now, list };
+    return list;
+  }
   baked() { return this.recruitsFn().filter((r) => r.spec?.baked); }
   ofHolder(wallet) { return this.baked().filter((r) => r.spec.baked.wallet === wallet); }
 
@@ -169,16 +209,17 @@ export class Bakery {
     const may = await this.mayBake(wallet);
     if (!may.ok) throw new Error(may.reason);
     const now = this.W.clock.now();
-    const model = this.models.includes(body.model) ? body.model : this.models[0];
+    const cat = await this.catalogue();
+    const model = cat.some((m) => m.id === body.model) ? body.model : this.models[0];
     const index = Number(this.W.store.getMeta("bakery:nextIndex", 0));
     const raw = {
-      name: body.name, role: body.role, model, dailyCapUsd: body.dailyCapUsd ?? this.defaultCapUsd, hidden: true,
+      name: body.name, role: body.role, model, dailyCapUsd: body.dailyCapUsd ?? Math.min(this.defaultCapUsd, this.capUsd()), hidden: true,
       tools: BAKED_TOOLS, tasks: this.tasks(body.tasks), hiredAt: now, why: `baked by ${wallet}`,
       baked: { wallet, chatId: null, personality: body.personality || "" },
       walletIndex: index,
       payFrom: this.live ? wallet : undefined,
     };
-    const spec = validateSpec(raw, { maxCapUsd: this.maxCapUsd, existing: this.rosterFn().map((h) => h.name), allowedTools: BAKED_TOOLS });
+    const spec = validateSpec(raw, { maxCapUsd: this.capUsd(), existing: this.rosterFn().map((h) => h.name), allowedTools: BAKED_TOOLS });
     this.W.store.setMeta("bakery:nextIndex", index + 1);
     const r = await this.hireFn(spec);
     this.log(`[bakery] ${short(wallet)} baked ${spec.title} (${spec.tasks.map((t) => t.id).join(", ")}; cap ${spec.dailyCapUsd} USD a day${this.live ? "" : "; trial before the launch"})`);
@@ -315,10 +356,10 @@ export class Bakery {
     }
     return out;
   }
-  info() {
+  async info() {
     return {
       on: this.on, live: this.live, minHold: this.minHold, maxPerWallet: this.maxPerWallet, maxTotal: this.maxTotal, total: this.baked().length, room: Math.max(0, this.maxTotal - this.baked().length),
-      maxCapUsd: this.maxCapUsd, defaultCapUsd: this.defaultCapUsd, asksPerDay: this.asksPerDay, models: this.models, tools: BAKED_TOOLS,
+      maxCapUsd: this.capUsd(), liveMaxCapUsd: this.maxCapUsd, trialCapUsd: this.trialCapUsd, defaultCapUsd: Math.min(this.defaultCapUsd, this.capUsd()), asksPerDay: this.asksPerDay, models: await this.catalogue(), tools: BAKED_TOOLS,
       menu: JOB_MENU.map((j) => ({ id: j.id, title: j.title, tool: j.tool, hours: j.hours, text: j.text })),
       message: bakeMessage("<nonce>"), chainId: this.W.config?.chainId || 1, timezone: this.W.config?.timezone || "UTC",
     };
@@ -340,7 +381,7 @@ export class Bakery {
     const json = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
     if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
     try {
-      if (req.method === "GET" && url.pathname === "/bake/info") return json(200, this.info());
+      if (req.method === "GET" && url.pathname === "/bake/info") return json(200, await this.info());
       if (req.method === "GET" && url.pathname === "/bake/feed") return json(200, { brownies: this.feed() });
       if (req.method === "GET" && url.pathname === "/bake/nonce") return json(200, { nonce: this.newNonce(), message: bakeMessage("<nonce>") });
       if (req.method === "POST" && url.pathname === "/bake/login") {

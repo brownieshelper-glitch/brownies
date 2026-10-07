@@ -37,6 +37,21 @@ const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 const nowIso = (ms) => new Date(ms).toISOString();
 const short = (a) => (a ? a.slice(0, 6) + "..." + a.slice(-4) : "");
 const ago = (at, now) => { const s = Math.max(0, Math.round((now - at) / 1000)); if (s < 60) return "just now"; if (s < 3600) return `${Math.floor(s / 60)} min ago`; if (s < 86400) return `${Math.floor(s / 3600)} h ago`; const d = Math.floor(s / 86400); return `${d} ${d === 1 ? "day" : "days"} ago`; };
+/// The models shown first, in this order, each with one line on what it is good at (the owner's ranking, 2026-10-07).
+export const FEATURED = [
+  { id: "anthropic/claude-fable-5.1", good: "the strongest writer and thinker: research, careful notes, anything with numbers" },
+  { id: "openai/gpt-6-astra", good: "OpenAI's top model: a strong second brain for research and long tasks" },
+  { id: "moonshotai/kimi-k3", good: "quick and lively: posts, digests and answers, at a fraction of the price" },
+  { id: "anthropic/claude-opus-5.5", good: "deep and warm: stories and explanations" },
+  { id: "anthropic/claude-sonnet-5.5", good: "reliable everyday writing at a fair price" },
+  { id: "anthropic/claude-haiku-4.5", good: "the cheapest: short answers and quick checks" },
+];
+/// Which model fits which job: the menu ids and the words of a custom job that point to it, in order of priority.
+export const SUGGEST = [
+  { when: ["watch", "note", "faq"], words: "research|analy[sz]|compar|audit|check|verif|number|figure|data|report|code|program|script|debug|math|calculat|precise|accura", model: "anthropic/claude-fable-5.1", why: "it reads figures carefully and never pads a note" },
+  { when: ["posts", "digest"], words: "post|tweet|caption|joke|funny|story|meme|social|digest|summar|headline|hook", model: "moonshotai/kimi-k3", why: "lively writing, fast, at a fraction of the price" },
+  { when: [], words: "translat|italian|spanish|french|german|portuguese|language|multilingual", model: "openai/gpt-6-astra", why: "strong across languages and long tasks" },
+];
 const PROVIDER_NAMES = { anthropic: "Anthropic", openai: "OpenAI", google: "Google", "x-ai": "xAI", deepseek: "DeepSeek", moonshotai: "Moonshot", "z-ai": "Z.ai", "meta-llama": "Meta", mistralai: "Mistral", qwen: "Qwen" };
 // variants (":batch", ":free", ":thinking") are told by the id's colon; the kinds we do not want by words in the id or the name
 const SKIP_VARIANT = /:/;
@@ -104,7 +119,15 @@ export class Bakery {
       }
     } catch (e) { this.log(`[bakery] could not read the model catalogue: ${e.message}`); }
     if (!list) list = [];
-    for (const id of [...this.models].reverse()) { const i = list.findIndex((m) => m.id === id); const e = i >= 0 ? list.splice(i, 1)[0] : (all.find((m) => m.id === id) || entry(id)); list.unshift(e); }
+    // the recommended ones first, in the owner's order, with their notes; the configured defaults join them
+    const front = [];
+    for (const f of [...FEATURED, ...this.models.map((id) => ({ id, good: null }))]) {
+      if (front.some((m) => m.id === f.id)) continue;
+      const i = list.findIndex((m) => m.id === f.id);
+      const e = i >= 0 ? list.splice(i, 1)[0] : (all.find((m) => m.id === f.id) || entry(f.id));
+      front.push({ ...e, featured: true, good: f.good || null });
+    }
+    list = [...front, ...list];
     for (const m of list) delete m.created;
     this._catalogue = { at: now, list };
     return list;
@@ -211,7 +234,7 @@ export class Bakery {
     if (!may.ok) throw new Error(may.reason);
     const now = this.W.clock.now();
     const cat = await this.catalogue();
-    const model = cat.some((m) => m.id === body.model) ? body.model : this.models[0];
+    const model = cat.some((m) => m.id === body.model) ? body.model : (cat[0]?.id || this.models[0]);
     const index = Number(this.W.store.getMeta("bakery:nextIndex", 0));
     const raw = {
       name: body.name, role: body.role, model, dailyCapUsd: body.dailyCapUsd ?? Math.min(this.defaultCapUsd, this.capUsd()), hidden: true,
@@ -364,7 +387,7 @@ export class Bakery {
   async info() {
     return {
       on: this.on, live: this.live, minHold: this.minHold, maxPerWallet: this.maxPerWallet, maxTotal: this.maxTotal, total: this.baked().length, room: Math.max(0, this.maxTotal - this.baked().length),
-      maxCapUsd: this.capUsd(), liveMaxCapUsd: this.maxCapUsd, trialCapUsd: this.trialCapUsd, defaultCapUsd: Math.min(this.defaultCapUsd, this.capUsd()), asksPerDay: this.asksPerDay, models: await this.catalogue(), tools: BAKED_TOOLS,
+      maxCapUsd: this.capUsd(), liveMaxCapUsd: this.maxCapUsd, trialCapUsd: this.trialCapUsd, defaultCapUsd: Math.min(this.defaultCapUsd, this.capUsd()), asksPerDay: this.asksPerDay, models: await this.catalogue(), defaultModel: FEATURED[0].id, suggest: SUGGEST, tools: BAKED_TOOLS,
       menu: JOB_MENU.map((j) => ({ id: j.id, title: j.title, tool: j.tool, hours: j.hours, text: j.text })),
       message: bakeMessage("<nonce>"), chainId: this.W.config?.chainId || 1, timezone: this.W.config?.timezone || "UTC",
     };

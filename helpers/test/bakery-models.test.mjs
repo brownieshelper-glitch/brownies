@@ -34,11 +34,13 @@ test("the catalogue: main providers, text models with a price, no variants, imag
   const b = bakery(W);
   const list = await b.catalogue();
   assert.deepEqual(list.map((m) => m.id), [
-    "anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-5.5", // the configured defaults, first (haiku is not in the catalogue but stays offered)
-    "anthropic/claude-opus-5.5", "deepseek/deepseek-v3.2", "google/gemini-3.8-flash", "openai/gpt-5.5-pro", "openai/gpt-5.5", "x-ai/grok-4.7",
+    "anthropic/claude-fable-5.1", "openai/gpt-6-astra", "moonshotai/kimi-k3", "anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-haiku-4.5", // recommended, in the owner's order, even when the catalogue lacks one
+    "deepseek/deepseek-v3.2", "google/gemini-3.8-flash", "openai/gpt-5.5-pro", "openai/gpt-5.5", "x-ai/grok-4.7",
   ]);
   const opus = list.find((m) => m.id === "anthropic/claude-opus-5.5");
-  assert.deepEqual(opus, { id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", provider: "Anthropic", in: 4, out: 20 });
+  assert.deepEqual(opus, { id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", provider: "Anthropic", in: 4, out: 20, featured: true, good: "deep and warm: stories and explanations" });
+  assert.equal(list[0].featured, true); assert.match(list[0].good, /strongest writer/);
+  assert.equal(list.find((m) => m.id === "x-ai/grok-4.7").featured, undefined, "the rest carries no flag");
   assert.equal(list.find((m) => m.id === "x-ai/grok-4.7").provider, "xAI");
   assert.equal(list.find((m) => m.id === "anthropic/claude-haiku-4.5").in, null, "no price known for a default the catalogue lacks");
   const calls = W.fetch.callsTo("openrouter.ai/api/v1/models").length;
@@ -48,7 +50,9 @@ test("the catalogue: main providers, text models with a price, no variants, imag
   await b.catalogue();
   assert.equal(W.fetch.callsTo("openrouter.ai/api/v1/models").length, calls + 1, "read again after an hour");
   const info = await b.info();
-  assert.equal(info.models.length, 8);
+  assert.equal(info.models.length, 11);
+  assert.equal(info.defaultModel, "anthropic/claude-fable-5.1");
+  assert.equal(info.suggest.length, 3); assert.deepEqual(info.suggest[0].when, ["watch", "note", "faq"]); assert.equal(info.suggest[1].model, "moonshotai/kimi-k3");
   assert.equal(info.maxCapUsd, 1, "before the launch the trial cap");
   assert.equal(info.liveMaxCapUsd, 50);
   assert.equal(info.defaultCapUsd, 1);
@@ -58,8 +62,8 @@ test("without the catalogue the configured list stands; live, the cap is the hol
   const W = makeWorld();
   const b = bakery(W, { withCatalogue: false, mode: "live" });
   const list = await b.catalogue();
-  assert.deepEqual(list.map((m) => m.id), ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-5.5"]);
-  assert.equal(list[0].name, "claude-haiku-4.5");
+  assert.deepEqual(list.map((m) => m.id), ["anthropic/claude-fable-5.1", "openai/gpt-6-astra", "moonshotai/kimi-k3", "anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-haiku-4.5"], "the recommended list stands even without the catalogue");
+  assert.equal(list[0].name, "claude-fable-5.1");
   const info = await b.info();
   assert.equal(info.maxCapUsd, 50);
   assert.equal(info.defaultCapUsd, 1);

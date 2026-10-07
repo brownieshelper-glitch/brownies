@@ -55,11 +55,20 @@
       { id: "note", title: "Weekly note", tool: "feed", hours: [8], text: "Read the latest research note and the facts, and write what a holder should know this week, in a few lines." },
     ];
     const models = [
-      { id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5", provider: "Anthropic", in: 1, out: 5 }, { id: "anthropic/claude-sonnet-5.5", name: "Claude Sonnet 5.5", provider: "Anthropic", in: 2, out: 10 }, { id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", provider: "Anthropic", in: 4, out: 20 },
-      { id: "openai/gpt-5.5", name: "GPT-5.5", provider: "OpenAI", in: 5, out: 30 }, { id: "openai/gpt-5.4-mini", name: "GPT-5.4 Mini", provider: "OpenAI", in: 0.75, out: 4.5 },
-      { id: "google/gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "Google", in: 0.75, out: 3.75 }, { id: "x-ai/grok-4.7", name: "Grok 4.7", provider: "xAI", in: 2, out: 6 }, { id: "deepseek/deepseek-v3.2", name: "DeepSeek V3.2", provider: "DeepSeek", in: 0.28, out: 0.42 },
+      { id: "anthropic/claude-fable-5.1", name: "Claude Fable 5.1", provider: "Anthropic", in: 10, out: 50, featured: true, good: "the strongest writer and thinker: research, careful notes, anything with numbers" },
+      { id: "openai/gpt-6-astra", name: "GPT-6 Astra", provider: "OpenAI", in: 10, out: 50, featured: true, good: "OpenAI's top model: a strong second brain for research and long tasks" },
+      { id: "moonshotai/kimi-k3", name: "Kimi K3", provider: "Moonshot", in: 0.62, out: 15, featured: true, good: "quick and lively: posts, digests and answers, at a fraction of the price" },
+      { id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", provider: "Anthropic", in: 4, out: 20, featured: true, good: "deep and warm: stories and explanations" },
+      { id: "anthropic/claude-sonnet-5.5", name: "Claude Sonnet 5.5", provider: "Anthropic", in: 2, out: 10, featured: true, good: "reliable everyday writing at a fair price" },
+      { id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5", provider: "Anthropic", in: 1, out: 5, featured: true, good: "the cheapest: short answers and quick checks" },
+      { id: "openai/gpt-5.5", name: "GPT-5.5", provider: "OpenAI", in: 5, out: 30 }, { id: "google/gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "Google", in: 0.75, out: 3.75 }, { id: "x-ai/grok-4.7", name: "Grok 4.7", provider: "xAI", in: 2, out: 6 },
     ];
-    const info = { on: true, live: true, minHold: 10000, maxPerWallet: 1, maxTotal: 50, total: 3, room: 47, maxCapUsd: 50, liveMaxCapUsd: 50, trialCapUsd: 1, defaultCapUsd: 1, asksPerDay: 3, models, tools: ["feed", "draft"], menu, timezone: "Europe/Rome", chainId: 1 };
+    const suggest = [
+      { when: ["watch", "note", "faq"], words: "research|analy[sz]|compar|audit|check|verif|number|figure|data|report|code|program|script|debug|math|calculat|precise|accura", model: "anthropic/claude-fable-5.1", why: "it reads figures carefully and never pads a note" },
+      { when: ["posts", "digest"], words: "post|tweet|caption|joke|funny|story|meme|social|digest|summar|headline|hook", model: "moonshotai/kimi-k3", why: "lively writing, fast, at a fraction of the price" },
+      { when: [], words: "translat|italian|spanish|french|german|portuguese|language|multilingual", model: "openai/gpt-6-astra", why: "strong across languages and long tasks" },
+    ];
+    const info = { on: true, live: true, minHold: 10000, maxPerWallet: 1, maxTotal: 50, total: 3, room: 47, maxCapUsd: 50, liveMaxCapUsd: 50, trialCapUsd: 1, defaultCapUsd: 1, asksPerDay: 3, models, defaultModel: models[0].id, suggest, tools: ["feed", "draft"], menu, timezone: "Europe/Rome", chainId: 1 };
     const feedOf = (name, lines) => lines.map(([hoursAgo, task, title, text]) => ({ at: t0 - hoursAgo * H, task, title, text, kind: "note" })).concat([]).sort((a, b) => b.at - a.at);
     const sage = {
       name: "sage", title: "Sage", role: "watches the coin for me and explains what moved, in plain words", personality: "calm, a little dry, likes short sentences", holder, holderShort: B.short(holder),

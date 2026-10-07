@@ -444,6 +444,11 @@ textarea.prompt:focus { border-color: var(--bone); }
   .nav .wrap { height: auto; min-height: 60px; flex-wrap: wrap; row-gap: 0; }
   .nav nav { display: contents; }
   .nav .links { order: 3; flex-basis: 100%; border-top: 1px solid var(--line); margin: 0 calc(var(--gut) * -1); padding: 0 calc(var(--gut) - 10px); }
+  /* five links: the row scrolls sideways on a phone instead of pushing the page wider */
+  .nav .links { overflow-x: auto; scrollbar-width: none; }
+  .nav .links::-webkit-scrollbar { display: none; }
+  .nav .links a.txt { flex: none; white-space: nowrap; }
+  .nav .links a.txt { padding: 10px 9px; font-size: 15px; }
   .nav nav > .btn, .nav nav > .chip { margin-left: auto; }
   .brand span { font-size: 23px; }
   .site-stage { height: auto; min-height: 0; aspect-ratio: 3 / 4; }

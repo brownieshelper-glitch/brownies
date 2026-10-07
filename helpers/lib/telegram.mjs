@@ -48,7 +48,11 @@ export class Telegram {
   /// Takes the buttons off a message once the decision is made.
   clearButtons(chatId, messageId) { return this.call("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }); }
 
-  editMessageText(chatId, messageId, text) { return this.call("editMessageText", { chat_id: chatId, message_id: messageId, text: String(text).slice(0, 4000), disable_web_page_preview: true }); }
+  editMessageText(chatId, messageId, text, { buttons = null } = {}) {
+    const params = { chat_id: chatId, message_id: messageId, text: String(text).slice(0, 4000), disable_web_page_preview: true };
+    if (buttons) params.reply_markup = { inline_keyboard: buttons.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data }))) };
+    return this.call("editMessageText", params);
+  }
 
   sendChatAction(chatId, action = "typing") { return this.call("sendChatAction", { chat_id: chatId, action }).catch(() => null); }
 

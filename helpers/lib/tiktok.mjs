@@ -125,8 +125,8 @@ export class TikTok {
   uploadInbox({ file }) { return this._upload("/post/publish/inbox/video/init/", {}, file); }
 
   /// A direct post. Before the audit TikTok only allows SELF_ONLY; after it, the levels creatorInfo lists.
-  directPost({ file, title, privacy = "SELF_ONLY", disableDuet = false, disableComment = false, disableStitch = false, coverMs = 1000 }) {
-    const post_info = { title: String(title || "").slice(0, 2200), privacy_level: privacy, disable_duet: disableDuet, disable_comment: disableComment, disable_stitch: disableStitch, video_cover_timestamp_ms: coverMs };
+  directPost({ file, title, privacy = "SELF_ONLY", disableDuet = false, disableComment = false, disableStitch = false, brandContent = false, brandOrganic = false, coverMs = 1000 }) {
+    const post_info = { title: String(title || "").slice(0, 2200), privacy_level: privacy, disable_duet: disableDuet, disable_comment: disableComment, disable_stitch: disableStitch, brand_content_toggle: Boolean(brandContent), brand_organic_toggle: Boolean(brandOrganic), video_cover_timestamp_ms: coverMs };
     return this._upload("/post/publish/video/init/", { post_info }, file);
   }
 

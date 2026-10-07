@@ -115,7 +115,7 @@ test("an inbox upload is an init and one PUT with the range; a direct post carri
   const post = await tiktok.directPost({ file, title: "Meet the Brownies #brownies", privacy: "SELF_ONLY" });
   assert.equal(post.publishId, "pub-2");
   assert.match(mock.inits[1].url, /\/post\/publish\/video\/init\//);
-  assert.deepEqual(mock.inits[1].body.post_info, { title: "Meet the Brownies #brownies", privacy_level: "SELF_ONLY", disable_duet: false, disable_comment: false, disable_stitch: false, video_cover_timestamp_ms: 1000 });
+  assert.deepEqual(mock.inits[1].body.post_info, { title: "Meet the Brownies #brownies", privacy_level: "SELF_ONLY", disable_duet: false, disable_comment: false, disable_stitch: false, brand_content_toggle: false, brand_organic_toggle: false, video_cover_timestamp_ms: 1000 });
   assert.deepEqual(TikTok.chunks(3_000_000), { chunkSize: 3_000_000, count: 1 });
   assert.deepEqual(TikTok.chunks(64 * 1024 * 1024), { chunkSize: 64 * 1024 * 1024, count: 1 });
   const big = TikTok.chunks(100 * 1024 * 1024);

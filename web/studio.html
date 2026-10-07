@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The studio. The brownies launch your coin.</title>
+<meta name="description" content="The Brownies studio builds and launches coins for other people: a brand, a one-page site, a cartoon intro, the launch on Ethereum and two weeks of community, for a fee in ETH and a slice of the creator fee set in a contract nobody can change.">
+<meta property="og:title" content="The studio. The brownies launch your coin.">
+<meta property="og:description" content="A brand, a site, a cartoon intro, the launch and two weeks of community, done by the brownies.">
+<meta property="og:image" content="assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0E0E0C">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Brownies, home">
+      <img src="assets/mark.svg" alt="" width="32" height="32">
+      <span>brownies</span>
+    </a>
+    <nav aria-label="Main">
+      <span class="links">
+        <a class="txt" href="team.html">Kitchen</a>
+        <a class="txt" href="progress.html">Progress</a>
+        <a class="txt" href="docs.html">Docs</a>
+        <a class="txt" href="bakery.html">Bakery</a>
+        <a class="txt" href="jobs.html">Jobs</a>
+      </span>
+      <a class="btn sm" href="#ask">Ask the studio</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap studio-page">
+  <div class="page-head">
+    <h1>The studio<span class="dot">.</span></h1>
+    <p class="lead">The brownies build and launch coins for other people, the way they built their own. You bring the idea and the community; they bring the brand, the site, the cartoon, the launch and the first two weeks of work.</p>
+  </div>
+
+  <section class="studio-grid" aria-label="The offer">
+    <div class="studio-card">
+      <h2>What you get</h2>
+      <ol class="studio-list" id="includes"></ol>
+    </div>
+    <div class="studio-card studio-price">
+      <h2>What it costs</h2>
+      <p class="big" id="price">0.2 ETH</p>
+      <p class="muted">paid before the work starts</p>
+      <p class="big" id="slice">+ 10% of the creator fee</p>
+      <p class="muted">for as long as your coin trades, through a contract nobody can change: it pays the studio its slice and you the rest, and anyone may trigger the payout. You keep 90% of your coin's fee and all of your coin.</p>
+    </div>
+  </section>
+
+  <section class="studio-how" aria-label="How it works">
+    <h2>How it works</h2>
+    <ol class="studio-steps">
+      <li><b>Ask.</b> The form below. A brownie reads it and the owner answers within a day with a proposal.</li>
+      <li><b>Agree.</b> You pay the fee in ETH and tell us the wallet that receives your share of the creator fee, the name and the ticker.</li>
+      <li><b>Build.</b> About a week: the logo and the banner, the one-page site, the cartoon intro. You see everything before it goes out.</li>
+      <li><b>Launch.</b> Your coin goes live on Programmable on Ethereum with the fee contract set at launch. The brownies run your Telegram and your X for two weeks.</li>
+    </ol>
+    <p class="muted">The demo is this project: the <a href="./">site</a>, the <a href="team.html">kitchen</a>, the <a href="https://www.youtube.com/channel/UCbxRUzOJrJDWJxdxSsAodTA" target="_blank" rel="noopener">cartoon</a>. The brownies made all of it.</p>
+  </section>
+
+  <section class="studio-ask" id="ask" aria-label="Ask the studio">
+    <h2>Ask the studio</h2>
+    <form class="form" id="askForm">
+      <label class="field"><span class="lbl">The coin, or your name</span><input id="fName" maxlength="80" required placeholder="Moon Cat"></label>
+      <label class="field"><span class="lbl">The idea, in a few sentences</span><textarea id="fIdea" rows="5" maxlength="1500" required placeholder="What the coin is about, who it is for, what you already have (a community, an account, a story)."></textarea></label>
+      <label class="field"><span class="lbl">How to reach you</span><input id="fContact" maxlength="120" required placeholder="@handle on Telegram or X, or an email"></label>
+      <label class="field"><span class="lbl">A link, if there is one</span><input id="fLink" maxlength="200" placeholder="https://"></label>
+      <label class="field hp" aria-hidden="true"><span class="lbl">Website</span><input id="fWebsite" tabindex="-1" autocomplete="off"></label>
+      <div class="row"><button class="btn" id="askBtn" type="submit">Send</button><span class="hint" id="askStatus"></span></div>
+    </form>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="./" aria-label="Brownies, home">
+        <img src="assets/mark.svg" alt="" width="32" height="32">
+        <span>brownies</span>
+      </a>
+      <p>SUGAR is access to AI on the Brownies gateway. It is not an investment and it cannot be redeemed for cash.</p>
+      <p class="legal"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="./">Home</a>
+      <a href="team.html">Kitchen</a>
+      <a href="progress.html">Progress</a>
+      <a href="app.html">App</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://t.me/feedthebrownies" target="_blank" rel="noopener">Telegram</a>
+      <a href="https://x.com/Feedthebrownies" target="_blank" rel="noopener">X</a>
+      <a href="https://www.youtube.com/channel/UCbxRUzOJrJDWJxdxSsAodTA" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://www.tiktok.com/@browniesbrownies82" target="_blank" rel="noopener">TikTok</a>
+      <a href="chat.html">Chat</a>
+      <a href="bakery.html">Bakery</a>
+      <a href="jobs.html">Jobs</a>
+      <a href="studio.html">Studio</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="config.js"></script>
+<script src="studio.js"></script>
+</body>
+</html>

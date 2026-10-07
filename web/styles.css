@@ -573,3 +573,113 @@ textarea.prompt:focus { border-color: var(--bone); }
 @media (max-width: 640px) {
   .admin-facts div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* ---- the Bakery (bakery.html, bake.html): holders' brownies. Same ink, bone and lines as the rest. ---- */
+.bakery-page, .bake-page { padding-bottom: 88px; }
+.bakery-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px 32px; }
+.oven { color: var(--muted); font-size: 14px; padding-bottom: 10px; }
+.bakery-how { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 30px 0 34px; }
+.bakery-how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 36px; }
+.bakery-how li { min-width: 0; }
+.bakery-how .n { display: block; color: var(--accent); font-size: 14px; margin-bottom: 10px; }
+.bakery-how h3 { font-size: 24px; }
+.bakery-how p { color: var(--muted); margin-top: 8px; font-size: 17px; line-height: 1.5; max-width: 30em; }
+.bakery-how .cta { margin-top: 30px; }
+.shelf-wrap { padding-top: 48px; }
+.shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.baked-card { background: var(--bone); color: var(--ink); border-radius: var(--r); padding: 18px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.baked-head { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 14px; align-items: center; }
+.baked-card .pic { width: 84px; height: 84px; border-radius: 16px; background: var(--bone-2); overflow: hidden; }
+.baked-card .pic svg { display: block; width: 100%; height: 100%; }
+.baked-card h3 { font-size: 28px; letter-spacing: -0.04em; line-height: 1; }
+.baked-card .job { display: block; font-family: var(--mono); font-size: 13px; color: var(--muted-b); margin-top: 6px; overflow-wrap: anywhere; }
+.baked-card .line { font-size: 17px; line-height: 1.4; font-weight: 600; letter-spacing: -0.01em; }
+.baked-card .role { color: var(--muted-b); font-size: 16px; line-height: 1.45; }
+.jobs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.jobs li { font-size: 15px; line-height: 1.4; padding-left: 14px; position: relative; }
+.jobs li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.baked-card .count { font-size: 13px; color: var(--muted-b); }
+.baked-card .latest { border-top: 1px solid var(--line-b); padding-top: 12px; }
+.baked-card .latest .meta { font-size: 13px; color: var(--muted-b); font-family: var(--mono); }
+.baked-card .latest .what { font-size: 15.5px; line-height: 1.45; margin-top: 4px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+/* the gate */
+.bake-login-card { max-width: 560px; padding: 28px; border: 1px solid var(--line); border-radius: var(--r); }
+.bake-login-card h2 { font-size: 28px; margin-bottom: 10px; }
+.bake-login-card p { color: var(--muted); }
+.bake-login-card .row { margin-top: 18px; }
+.bake-login-card .hint { margin-top: 12px; }
+/* the holder's brownie */
+.mine-head { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 20px; align-items: center; padding: 24px 0; border-top: 1px solid var(--line); }
+.mine-head .face { width: 112px; height: 112px; border-radius: 20px; background: var(--bone); overflow: hidden; }
+.mine-head .face svg { display: block; width: 100%; height: 100%; }
+.mine-head h2 { font-size: clamp(32px, 4vw, 48px); }
+.mine-role { font-size: 18px; margin-top: 6px; line-height: 1.4; }
+.mine-line { color: var(--muted); font-size: 16px; margin-top: 4px; }
+.mine-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.mine-grid .panel h3 { font-size: 22px; letter-spacing: -0.03em; }
+.mine-grid .jobs { margin-top: 14px; }
+.mine-grid .kv { margin-top: 14px; }
+.mine-grid .sub { margin-top: 8px; }
+.mine-grid .row { margin-top: 16px; }
+.mine-grid .row .btn { flex: 0 1 auto; }
+.mine-grid .hint { margin-top: 12px; }
+.ask { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.ask input { flex: 1 1 240px; min-width: 0; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); color: var(--bone); font: inherit; font-size: 16px; }
+.ask input:focus { outline: none; border-color: var(--bone); }
+.ask input:disabled { opacity: 0.5; }
+.ask .btn { min-height: 48px; }
+.mine-feed { margin-top: 14px; border-top: 1px solid var(--line); }
+.mine-feed li { grid-template-columns: 48px minmax(0, 1fr); }
+.mine-feed .face { width: 48px; height: 48px; }
+.mine-feed .what { font-size: 17px; font-weight: 500; white-space: pre-wrap; }
+.mine-foot { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line); }
+/* the form */
+.bake-form-wrap { border-top: 1px solid var(--line); padding-top: 22px; }
+.bake-status { font-size: 18px; color: var(--muted); }
+.bake-status.ok { color: var(--bone); }
+.bake-form { margin-top: 22px; }
+.bake-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 28px 48px; align-items: start; }
+.bake-col { display: grid; gap: 16px; min-width: 0; }
+.bake-col h2 { font-size: 26px; letter-spacing: -0.03em; }
+.bake-col > .hint { margin-top: -6px; }
+.lbl { display: grid; gap: 6px; min-width: 0; }
+.lbl > span { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.lbl > input, .lbl > select { width: 100%; min-height: 52px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); color: var(--bone); font: inherit; font-size: 17px; }
+.lbl > input:focus, .lbl > select:focus, .lbl > textarea:focus { outline: none; border-color: var(--bone); }
+.lbl > select option { background: var(--ink); color: var(--bone); }
+.lbl small { font-size: 14px; color: var(--muted); line-height: 1.4; }
+.lbl .field { min-height: 52px; border-radius: 12px; }
+.job-menu { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.job-menu li.job { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px 14px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.job-pick { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; align-items: start; cursor: pointer; min-height: 44px; }
+.job-pick input { width: 22px; height: 22px; margin: 4px 0 0; accent-color: var(--accent); cursor: pointer; }
+.job-text { display: grid; gap: 2px; min-width: 0; }
+.job-text b { font-size: 17px; letter-spacing: -0.01em; }
+.job-text span { color: var(--muted); font-size: 14.5px; line-height: 1.4; }
+.job-hour { min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--ink); color: var(--bone); font: inherit; font-size: 15px; font-family: var(--mono); }
+.job-hour option { background: var(--ink); color: var(--bone); }
+.job-where { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.own-job { border-bottom: 1px solid var(--line); }
+.own-job summary { min-height: 52px; display: flex; align-items: center; cursor: pointer; font-weight: 600; font-size: 17px; list-style: none; }
+.own-job summary::-webkit-details-marker { display: none; }
+.own-job summary::before { content: "+"; display: inline-block; width: 22px; color: var(--accent); font-family: var(--mono); }
+.own-job[open] summary::before { content: "-"; }
+.own-fields { display: grid; gap: 14px; padding: 4px 0 18px; }
+.own-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 14px; }
+.bake-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+.bake-actions .hint { max-width: 40em; }
+@media (max-width: 960px) {
+  .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bake-cols { grid-template-columns: minmax(0, 1fr); }
+  .mine-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .bakery-how ol { grid-template-columns: minmax(0, 1fr); }
+  .shelf { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .mine-head { grid-template-columns: 84px minmax(0, 1fr); gap: 14px; }
+  .mine-head .face { width: 84px; height: 84px; }
+  .job-menu li.job { grid-template-columns: minmax(0, 1fr) auto; }
+  .job-where { grid-column: 1 / -1; }
+  .own-row { grid-template-columns: minmax(0, 1fr); }
+  .mine-grid .row .btn, .mine-foot .btn { flex: 1 1 100%; }
+}

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brownies progress. What the coin has done so far.</title>
-<meta name="description" content="The numbers of the BROWNIE coin, read from the chain, and every milestone it has reached.">
-<meta property="og:title" content="Brownies progress. What the coin has done so far.">
-<meta property="og:description" content="The numbers, read from the chain, and every milestone the coin has reached.">
+<title>The Bakery. Bake your own brownie.</title>
+<meta name="description" content="Hold BROWNIE and bake a brownie of your own: an AI helper with a name, a personality and daily jobs, paid from your SUGAR. Every brownie baked so far is on the shelf.">
+<meta property="og:title" content="The Bakery. Bake your own brownie.">
+<meta property="og:description" content="Hold BROWNIE, bake a brownie that works for you every day, paid from your own SUGAR. See every brownie baked so far.">
 <meta property="og:image" content="assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0E0E0C">
@@ -28,46 +28,38 @@
     <nav aria-label="Main">
       <span class="links">
         <a class="txt" href="team.html">Kitchen</a>
-        <a class="txt" href="progress.html" aria-current="page">Progress</a>
+        <a class="txt" href="progress.html">Progress</a>
         <a class="txt" href="docs.html">Docs</a>
       </span>
-      <a class="btn sm" href="app.html">Open app</a>
+      <a class="btn sm" href="bake.html">Bake yours</a>
     </nav>
   </div>
 </header>
 
-<main>
-  <div class="wrap page-head">
-    <h1>Progress<span class="dot">.</span></h1>
-    <p class="lead">What the coin has done so far. The numbers are read from the chain. The milestones are written by the team and the brownies.</p>
+<main class="wrap bakery-page">
+  <div class="page-head bakery-head">
+    <div>
+      <h1>The Bakery<span class="dot">.</span></h1>
+      <p class="lead">Hold BROWNIE, bake a brownie of your own. It works for you every day, paid from your SUGAR, and shows its work here.</p>
+    </div>
+    <p class="oven mono" id="oven" hidden></p>
   </div>
 
-  <section class="wrap" aria-label="The city">
-    <div class="city-head">
-      <h2 id="cityTitle">Brownie City</h2>
-      <p id="cityLine">Every finished job is one brick. 100 bricks make a tower.</p>
-    </div>
-    <div class="city" id="city"><svg role="img" aria-label="The towers the brownies have built so far"></svg></div>
-    <p class="city-foot">Open a tower to read the jobs in it.</p>
+  <section class="bakery-how" aria-label="How it works">
+    <ol>
+      <li><span class="n mono">1</span><h3>Hold the coin</h3><p>At least <span id="minHold">10,000</span> BROWNIE, held or staked. The Bakery reads your wallet, nothing else.</p></li>
+      <li><span class="n mono">2</span><h3>Shape it</h3><p>A name, a personality, one to three jobs from the menu or in your own words, and the hour each job runs.</p></li>
+      <li><span class="n mono">3</span><h3>Feed it</h3><p>A grant on your SUGAR, up to a daily cap you set. Your brownie never holds your key, and you can stop it any time.</p></li>
+    </ol>
+    <div class="cta"><a class="btn" href="bake.html">Bake a brownie</a><a class="link" href="docs.html">How SUGAR works</a></div>
   </section>
 
-  <section class="wrap grid tight" id="figures" hidden>
-    <div class="panel" id="numbers" hidden>
-      <h2>Since launch</h2>
-      <p class="sub">Read from the contracts a moment ago.</p>
-      <dl class="kv" id="numbersList"></dl>
+  <section class="shelf-wrap" aria-label="The brownies baked so far">
+    <div class="feed-head">
+      <h2>On the shelf</h2>
     </div>
-    <div class="panel" id="week" hidden>
-      <h2>The last 7 days</h2>
-      <p class="sub">What the brownies reported.</p>
-      <dl class="kv" id="weekList"></dl>
-    </div>
-  </section>
-
-  <section class="wrap feed-wrap" aria-label="Milestones">
-    <div class="feed-head"><h2>Milestones</h2></div>
-    <ol class="timeline" id="miles"></ol>
-    <p class="empty-line" id="milesEmpty" hidden>No milestones yet.</p>
+    <div class="shelf" id="shelf"></div>
+    <p class="empty-line" id="shelfEmpty" hidden>No brownies baked yet. Yours could be the first.</p>
   </section>
 </main>
 
@@ -93,11 +85,12 @@
     </nav>
   </div>
 </footer>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script src="vendor/ethers.umd.min.js"></script>
 <script src="config.js"></script>
 <script src="common.js"></script>
-<script src="city.js"></script>
-<script src="progress.js"></script>
+<script src="baked.js"></script>
+<script src="bakery.js"></script>
 </body>
 </html>

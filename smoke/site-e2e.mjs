@@ -412,6 +412,39 @@ async function pages() {
   ok("progress: a tower links to the kitchen", await p.ev(`document.querySelectorAll("#city a.tower")[1].getAttribute("href").includes("team.html?") && document.querySelectorAll("#city a.tower")[1].getAttribute("href").includes("tower=2")`));
   ok("progress: milestones, newest first", await p.ev(`(() => { const t = [...document.querySelectorAll("#miles .what")].map((x) => x.textContent); return t.length === 3 && t[0] === "Tip button shipped" && t[2] === "BROWNIE launched on Pons"; })()`));
 
+  // the Bakery: with no Bakery behind the gateway the pages keep their fixed facts; in demo mode a holder bakes,
+  // instructs, feeds and retires a brownie, and the shelf shows it
+  await p.go(`${SITE}/bakery.html${QS}`);
+  await sleep(500);
+  ok("bakery with nothing behind it: the three steps, the fixed minimum, an empty shelf line, no oven count", await p.ev(`document.querySelectorAll(".bakery-how li").length === 3 && document.getElementById("minHold").textContent === "10,000" && !document.getElementById("shelfEmpty").hidden && document.getElementById("oven").hidden && document.querySelectorAll("#shelf .baked-card").length === 0`));
+  await p.go(`${SITE}/bake.html${QS}`);
+  await sleep(500);
+  ok("bake with nothing behind it: the gate says the Bakery is closed, the button is disabled", await p.ev(`!document.getElementById("gate").hidden && document.getElementById("btnSignIn").disabled && document.getElementById("btnSignIn").textContent === "The Bakery is closed right now" && !document.getElementById("gateHint").hidden`));
+  await p.go(`${SITE}/bakery.html?demo=1&${QS.slice(1)}`);
+  await wait(() => p.ev(`document.querySelectorAll("#shelf .baked-card").length === 3`));
+  ok("bakery demo: three brownies on the shelf, newest first, each with a face, its holder and its jobs", await p.ev(`(() => { const c = [...document.querySelectorAll("#shelf .baked-card")]; return c[0].querySelector("h3").textContent === "Sage" && c.every((x) => x.querySelector(".pic svg") && /baked by 0x/.test(x.querySelector(".job").textContent) && x.querySelectorAll(".jobs li").length >= 1); })()`));
+  ok("bakery demo: the oven count", await p.ev(`document.getElementById("oven").textContent === "3 baked, 47 places left" && !document.getElementById("oven").hidden`));
+  ok("bakery demo: a brownie with no work yet says so, one with work shows the latest", await p.ev(`(() => { const c = [...document.querySelectorAll("#shelf .baked-card")]; const rook = c.find((x) => x.querySelector("h3").textContent === "Rook"); const sage = c[0]; return rook.querySelector(".count").textContent === "No job done yet" && !rook.querySelector(".latest") && sage.querySelector(".latest .what").textContent.startsWith("Quiet day."); })()`));
+  await p.go(`${SITE}/bake.html?demo=form&${QS.slice(1)}`);
+  await wait(() => p.ev(`!document.getElementById("formWrap").hidden`));
+  ok("bake demo: a holder who may bake sees the form with the five menu jobs and their hours", await p.ev(`document.getElementById("bakeStatus").textContent === "This wallet holds 24,500 BROWNIE. You can bake." && document.querySelectorAll("#jobMenu li.job").length === 5 && document.querySelector("#jobMenu li.job select.job-hour").value === "9" && document.getElementById("inModel").options.length === 2`));
+  await p.ev(`document.getElementById("inName").value = "Sage"; document.getElementById("inRole").value = "watches the coin for me and explains what moved"; document.getElementById("inPersonality").value = "calm, a little dry"; document.querySelector("#jobMenu li.job input").checked = true; document.querySelector("#jobMenu li.job select.job-hour").value = "7"; document.getElementById("bakeForm").requestSubmit();`);
+  await wait(() => p.ev(`!document.getElementById("mine").hidden`));
+  ok("bake demo: the form bakes it and the page shows the brownie with its job at the chosen hour", await p.ev(`document.getElementById("mineName").textContent === "Sage" && document.getElementById("mineJobs").textContent.includes("Daily watch, at 7:00") && document.getElementById("mineFace").querySelector("svg") && document.getElementById("mineFeedEmpty").textContent === "Nothing yet. Its first job runs at 7:00."`));
+  ok("bake demo: the fund panel asks for one signature and shows no grant yet", await p.ev(`!document.getElementById("btnFund").hidden && document.getElementById("btnFund").textContent === "Sign once and set the grant" && document.getElementById("btnRevoke").hidden`));
+  await p.ev(`document.getElementById("btnFund").click()`);
+  await wait(() => p.ev(`!document.getElementById("fundFacts").hidden`));
+  ok("bake demo: the grant is set and shown, and can be stopped", await p.ev(`document.getElementById("fundFacts").textContent.includes("0.50 USD a day") && !document.getElementById("btnRevoke").hidden`));
+  await p.ev(`document.getElementById("inAsk").value = "Write one line about SUGAR."; document.getElementById("askForm").requestSubmit();`);
+  await wait(() => p.ev(`document.querySelectorAll("#mineFeed li").length === 1`), 5000);
+  ok("bake demo: an instruction lands in the feed and counts down", await p.ev(`document.querySelectorAll("#mineFeed li").length === 1 && document.getElementById("askHint").textContent.startsWith("2 instructions left")`));
+  await p.ev(`window.confirm = () => true; document.getElementById("btnRetire").click()`);
+  await wait(() => p.ev(`!document.getElementById("formWrap").hidden`));
+  ok("bake demo: retiring brings the form back", await p.ev(`document.getElementById("mine").hidden && !document.getElementById("formWrap").hidden`));
+  await p.go(`${SITE}/bake.html?demo=1&${QS.slice(1)}`);
+  await wait(() => p.ev(`!document.getElementById("mine").hidden`));
+  ok("bake demo: a holder with a brownie lands on it, with its feed and a live grant", await p.ev(`document.getElementById("mineName").textContent === "Sage" && document.querySelectorAll("#mineFeed li").length === 3 && document.getElementById("mineFacts").textContent.includes("Jobs done14")`));
+
   // with no deployment and no gateway: the pages still stand, with nothing empty or broken on show
   await p.go(`${SITE}/team.html?${NOGW}`);
   await sleep(600);
@@ -425,7 +458,7 @@ async function pages() {
 
 async function shots() {
   const p = await openPage(false);
-  const list = [["home", `/${QS}`], ["app", `/app.html${QS}`], ["docs", `/docs.html${QS}`], ["team", `/team.html${QS}`], ["progress", `/progress.html${QS}`], ["posts", `/posts.html${QS}`], ["chat", `/chat.html${QS}`], ["admin", `/admin.html${QS}`]];
+  const list = [["home", `/${QS}`], ["app", `/app.html${QS}`], ["docs", `/docs.html${QS}`], ["team", `/team.html${QS}`], ["progress", `/progress.html${QS}`], ["posts", `/posts.html${QS}`], ["chat", `/chat.html${QS}`], ["bakery", `/bakery.html${QS}`], ["bake", `/bake.html${QS}`], ["bakery-demo", `/bakery.html?demo=1&${QS.slice(1)}`], ["bake-demo", `/bake.html?demo=1&${QS.slice(1)}`], ["bake-form", `/bake.html?demo=form&${QS.slice(1)}`], ["admin", `/admin.html${QS}`]];
   for (const [name, path] of list) {
     for (const w of [1440, 1024, 768, 375]) {
       await p.size(w, w === 375 ? 812 : 900, w === 375);

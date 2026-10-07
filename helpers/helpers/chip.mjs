@@ -42,6 +42,7 @@ export class Chip extends Helper {
     this.tg = deps.telegram || null;
     this.ownerChatId = String(deps.ownerChatId || "");
     this.patch = deps.patch || null; // the quality brownie: waits for the checks before a merge (set by run.mjs)
+    this.contests = deps.contests || null; // bounties and contests in other repositories (set by run.mjs when the module is there)
     this.smallMaxLines = this.config.smallMaxLines ?? 60;
     this.reviewers = this.config.reviewers || ["fudge", "crumb", "nib"];
     this.standing = this.config.standingTasks || [];
@@ -207,6 +208,7 @@ export class Chip extends Helper {
   async decide(id, decision, ctx = null) {
     const a = this.store.approval(id);
     if (!a || a.state !== "pending") return false;
+    if (a.kind !== "pr") return this.contests?.decide ? this.contests.decide(id, decision, ctx) : false; // not one of Chip's own pull requests
     const now = this.clock.now();
     const n = Number(a.ref);
     if (decision === "approve") {

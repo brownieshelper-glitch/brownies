@@ -47,3 +47,5 @@ helpers/test/sprinkle-tiktok.test.mjs
 helpers/test/season.test.mjs
 helpers/helpers/zest.mjs
 helpers/test/zest.test.mjs
+helpers/helpers/contests.mjs
+helpers/test/contests.test.mjs

@@ -4,7 +4,7 @@
 // public page (/jobs/*) and by the control room, where the owner acts on it.
 import { createHash } from "node:crypto";
 
-export const KINDS = ["grant", "bounty", "hackathon", "accelerator", "listing", "partnership", "service", "studio", "channel", "other"];
+export const KINDS = ["grant", "bounty", "hackathon", "audit", "accelerator", "listing", "partnership", "service", "studio", "channel", "other"];
 export const STATES = ["found", "picked", "preparing", "waiting_owner", "submitted", "working", "won", "paid", "lost", "dropped"];
 export const OPEN = new Set(["picked", "preparing", "waiting_owner", "submitted", "working"]);
 export const STATE_LABEL = { found: "found", picked: "picked", preparing: "preparing", waiting_owner: "waiting for the owner", submitted: "submitted", working: "in progress", won: "won", paid: "paid", lost: "lost", dropped: "dropped" };

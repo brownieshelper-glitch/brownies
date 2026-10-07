@@ -131,7 +131,7 @@ export class Admin {
       case "approve": case "reject": {
         const a = store.approval(Number(id));
         if (!a) return { ok: false, error: "no such approval" };
-        const owner = helpers[a.helper];
+        const owner = helpers[a.helper] || helpers.chip; // an approval filed by a module (bounties) is decided through Chip
         if (!owner?.decide) return { ok: false, error: `${a.helper} has no decisions to make` };
         await owner.decide(a.id, action === "approve" ? "approve" : "reject");
         return { ok: true };

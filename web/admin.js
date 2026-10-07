@@ -124,6 +124,7 @@
     if (j.nextStep) box.append(el("p", "role", `Next: ${j.nextStep}`));
     if (j.ownerAction) box.append(el("p", "what", `You: ${j.ownerAction}`));
     if (j.url) { const l = el("a", "link", "Open the page"); l.href = j.url; l.target = "_blank"; l.rel = "noopener nofollow"; box.append(l); }
+    if (j.draft && j.draft.text) { const d = el("details"); d.append(el("summary", null, `The draft by ${cap(j.draft.by || "a brownie")}, ready to copy`)); const pre = el("pre", "admin-log"); pre.textContent = j.draft.text; d.append(pre); box.append(d); }
     const acts = el("div", "admin-row");
     const act = (label, value, ask = null, ghost = true) => { const b = el("button", "btn sm" + (ghost ? " ghost" : ""), label); b.onclick = () => { let text = ""; if (ask) { text = prompt(ask) || ""; if (!text.trim()) return; } command({ action: "job", id: j.id, value, text }); }; acts.append(b); };
     if (j.state === "found") act("Pick", "pick", null, false);

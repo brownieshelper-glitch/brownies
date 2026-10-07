@@ -683,3 +683,11 @@ textarea.prompt:focus { border-color: var(--bone); }
   .own-row { grid-template-columns: minmax(0, 1fr); }
   .mine-grid .row .btn, .mine-foot .btn { flex: 1 1 100%; }
 }
+
+/* ---- privacy and terms ---- */
+.foot .legal { display: flex; gap: 18px; margin-top: 6px; }
+.foot .legal a { font-size: 14px; color: var(--muted); text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+@media (hover: hover) and (pointer: fine) { .foot .legal a:hover { color: var(--bone); } }
+.legal-page { padding-top: 44px; padding-bottom: 88px; }
+.legal-page .prose section { padding-top: 36px; }
+.legal-page .prose h2 { font-size: clamp(24px, 2.8vw, 32px); }

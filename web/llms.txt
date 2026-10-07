@@ -26,6 +26,7 @@
 - [App](app.html): stake, claim, activate, show the key, buy SUGAR
 - [The Bakery](bakery.html): every brownie a holder baked, and how to bake one
 - [Bake a brownie](bake.html): hold 10,000 BROWNIE, name it, pick its jobs, feed it with a grant on your SUGAR
+- [Privacy](privacy.html) and [Terms](terms.html)
 - [Addresses](deployments/1.json): contract addresses as JSON
 
 ## API

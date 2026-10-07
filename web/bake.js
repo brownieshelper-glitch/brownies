@@ -36,10 +36,14 @@
     const groups = new Map();
     for (const m of U.info.models || []) {
       const item = typeof m === "string" ? { id: m, name: m.split("/").pop(), provider: m.split("/")[0], in: null, out: null } : m;
-      if (!groups.has(item.provider)) { const g = el("optgroup"); g.label = item.provider; groups.set(item.provider, g); sel.append(g); }
-      const o = el("option", null, item.in != null ? `${item.name} (in $${item.in} / out $${item.out} per M tokens)` : item.name);
-      o.value = item.id; groups.get(item.provider).append(o);
+      const group = item.featured ? "Recommended" : item.provider;
+      if (!groups.has(group)) { const g = el("optgroup"); g.label = group; groups.set(group, g); sel.append(g); }
+      const price = item.in != null ? ` (in $${item.in} / out $${item.out} per M tokens)` : "";
+      const o = el("option", null, item.featured && item.good ? `${item.name}: ${item.good}${price}` : `${item.name}${price}`);
+      o.value = item.id; groups.get(group).append(o);
     }
+    if (U.info.defaultModel && [...sel.options].some((o) => o.value === U.info.defaultModel)) sel.value = U.info.defaultModel;
+    sel.addEventListener("change", () => { sel.dataset.touched = "1"; suggestModel(); });
     $("inCap").value = String(U.info.defaultCapUsd ?? 1);
     $("inCap").max = String(U.info.maxCapUsd ?? 1);
     $("capHint").textContent = live
@@ -60,7 +64,27 @@
       const where = el("span", "job-where mono", j.tool === "draft" ? "to Telegram" : "to its feed");
       li.append(lab, hour, where);
       menu.append(li);
+      cb.addEventListener("change", suggestModel);
     }
+    for (const id of ["ownTitle", "ownText"]) $(id).addEventListener("input", suggestModel);
+  }
+
+  // ---- which model fits the jobs picked: the Bakery's rules, applied as the holder ticks ----
+  function suggestModel() {
+    const rules = U.info?.suggest || [], sel = $("inModel"), hint = $("modelHint");
+    if (!rules.length || !hint) return;
+    const picked = [...document.querySelectorAll("#jobMenu li.job input[type=checkbox]:checked")].map((c) => c.value);
+    const own = `${$("ownTitle").value} ${$("ownText").value}`.trim();
+    let best = null, bestScore = 0;
+    for (const r of rules) {
+      let score = picked.filter((id) => r.when.includes(id)).length;
+      if (own && new RegExp(r.words, "i").test(own)) score += 1;
+      if (score > bestScore) { best = r; bestScore = score; }
+    }
+    if (!picked.length && !own) { hint.textContent = "Pick a job and the best model for it is suggested here."; return; }
+    const r = best || rules[0];
+    if (!sel.dataset.touched && [...sel.options].some((o) => o.value === r.model)) sel.value = r.model;
+    hint.textContent = `Suggested for these jobs: ${modelName(r.model)}, ${r.why}.${sel.value !== r.model ? ` You picked ${modelName(sel.value)} instead.` : ""}`;
   }
 
   // ---- the gate ----

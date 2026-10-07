@@ -14,8 +14,9 @@
 //   POST /bake/create { name, role, personality, model, dailyCapUsd, tasks: [{ menu } | { title, text, tool, hours }] }
 //   POST /bake/ask    { name, text }         (bearer) one instruction now, a few a day
 //   POST /bake/retire { name }               (bearer) ends the holder's brownie
-//   POST /bake/link   { name }               (bearer) a six-digit code; the holder sends /link <code> to the bot in a
-//                                            private chat and that chat gets the brownie's drafts and answers
+//   POST /bake/link   { name }               (bearer) a six-digit code and a deep link (t.me/<bot>?start=link_<code>):
+//                                            opening it and pressing Start sends the code to the bot by itself; or the
+//                                            holder sends /link <code> by hand; that chat then gets the drafts and answers
 //   POST /bake/unlink { name }               (bearer) the chat is forgotten
 //   POST /bake/logout
 //   In Telegram (handed over by Crumb from any private chat): /link <code>, /mybrownie, /mybrownie ask <what>,
@@ -269,7 +270,9 @@ export class Bakery {
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
     const expiresAt = this.W.clock.now() + LINK_TTL;
     this.W.store.setMeta(`bake:link:${code}`, JSON.stringify({ name: r.name, wallet, expiresAt }));
-    return { code, bot: await this.botName(), expiresAt, name: r.name };
+    const bot = await this.botName();
+    const user = bot.startsWith("@") ? bot.slice(1) : null;
+    return { code, bot, url: user ? `https://t.me/${user}?start=link_${code}` : null, expiresAt, name: r.name };
   }
   /// The bot got /link <code> from a chat: that chat is the brownie's holder chat from now on. The recruit, or null.
   consumeLink(code, chatId) {
@@ -302,6 +305,8 @@ export class Bakery {
   async holderCommand(cmd, rest, { chatId } = {}) {
     const chat = String(chatId || "");
     const text = String(rest || "").trim();
+    // the deep link from the page: Telegram sends "/start link_123456" when the holder presses Start; a plain /start is not ours
+    if (cmd === "start") { const m = /^link[_-]?(\d{6})$/i.exec(text); return m ? this.holderCommand("link", m[1], { chatId }) : null; }
     if (cmd === "link") {
       if (!/^\d{6}$/.test(text)) return "Send the six-digit code from the bake page, like this: /link 123456";
       const r = this.consumeLink(text, chat);

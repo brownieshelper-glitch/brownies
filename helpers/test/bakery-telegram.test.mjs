@@ -54,8 +54,9 @@ test("a holder links the chat with a code; drafts and answers reach it; /mybrown
   a = await say(W, "/link abc");
   assert.match(a.text, /six-digit code/);
   // the code from the page
-  const { code, bot, expiresAt } = await bakery.linkCode(admin.address, "sage");
+  const { code, bot, url, expiresAt } = await bakery.linkCode(admin.address, "sage");
   assert.match(code, /^\d{6}$/); assert.equal(bot, "@feedthebrownies_bot"); assert.ok(expiresAt > W.clock.now());
+  assert.equal(url, `https://t.me/feedthebrownies_bot?start=link_${code}`, "the deep link carries the code");
   await assert.rejects(bakery.linkCode(Wallet.createRandom().address, "sage"), /not one of your brownies/);
   a = await say(W, `/link ${code}`);
   assert.match(a.text, /^Linked\. Sage's drafts and answers come to this chat/);
@@ -137,4 +138,19 @@ test("the routes hand out a code and forget the link; an expired code is refused
     W.clock.advance(11 * 60_000);
     assert.equal(bakery.consumeLink(late.body.code, "77"), null, "ten minutes, then the code is gone");
   } finally { await new Promise((r) => server.close(r)); }
+});
+
+test("the deep link: Telegram's /start link_<code> links the chat; a plain /start is answered like any message, not by the Bakery", async () => {
+  const admin = Wallet.createRandom();
+  const { W, all, bakery } = shop({ admins: [admin.address] });
+  await bakery.create(admin.address, { name: "sage", role: "a holder's helper that watches the coin", tasks: [{ menu: "watch" }] });
+  const { code } = await bakery.linkCode(admin.address, "sage");
+  let a = await say(W, `/start link_${code}`);
+  assert.match(a.text, /^Linked\. Sage's drafts/);
+  assert.equal(all.sage.spec.baked.chatId, "4242");
+  a = await say(W, "/start");
+  assert.ok(!/Linked|No brownie is linked|not valid/.test(a.text), "a plain /start is Crumb's greeting, not a Bakery answer: " + a.text);
+  a = await say(W, "/start link_000000");
+  assert.match(a.text, /not valid or has expired/);
+  assert.equal((await bakery.linkCode(admin.address, "sage")).url.startsWith("https://t.me/feedthebrownies_bot?start=link_"), true);
 });

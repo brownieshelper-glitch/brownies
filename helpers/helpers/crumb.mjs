@@ -128,7 +128,7 @@ export class Crumb extends Helper {
       if (typeof reply === "string" && reply) { await this.tg.sendMessage(chatId, reply, { replyTo: m.message_id }); return "command"; }
     }
     // a holder's commands for their baked brownie, in a private chat: /link <code> binds this chat, /mybrownie ... (the Bakery answers, no model)
-    if (m.chat.type === "private" && /^\/(link|mybrownie)\b/i.test(m.text.trim()) && this.onHolderCommand) {
+    if (m.chat.type === "private" && /^\/(link|mybrownie|start)\b/i.test(m.text.trim()) && this.onHolderCommand) {
       const [, cmd, rest = ""] = m.text.trim().match(/^\/(\w+)(?:@\w+)?\s*([\s\S]*)$/) || [];
       const reply = await this.onHolderCommand(cmd.toLowerCase(), rest.trim(), { chatId, from: m.from || null });
       if (typeof reply === "string" && reply) { await this.tg.sendMessage(chatId, reply, { replyTo: m.message_id }); return "holder"; }

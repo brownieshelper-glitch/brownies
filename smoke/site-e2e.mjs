@@ -446,7 +446,7 @@ async function pages() {
   ok("bake demo: a holder with a brownie lands on it, with its feed and a live grant", await p.ev(`document.getElementById("mineName").textContent === "Sage" && document.querySelectorAll("#mineFeed li").length === 3 && document.getElementById("mineFacts").textContent.includes("Jobs done14")`));
   await p.ev(`document.getElementById("btnLink").click()`);
   await wait(() => p.ev(`!document.getElementById("linkHint").hidden`));
-  ok("bake demo: Link Telegram gives a code to send to the bot", await p.ev(`document.getElementById("linkHint").textContent.includes("/link 123456") && document.getElementById("linkHint").textContent.includes("@feedthebrownies_bot") && document.getElementById("btnUnlink").hidden`));
+  ok("bake demo: Link Telegram gives a deep link that opens the bot, and the code to send by hand", await p.ev(`document.getElementById("linkHint").textContent.includes("/link 123456") && document.getElementById("linkHint").textContent.includes("@feedthebrownies_bot") && !document.getElementById("linkOpen").hidden && document.getElementById("linkOpen").href === "https://t.me/feedthebrownies_bot?start=link_123456" && document.getElementById("linkOpen").target === "_blank" && document.getElementById("btnUnlink").hidden`));
 
   // with no deployment and no gateway: the pages still stand, with nothing empty or broken on show
   await p.go(`${SITE}/team.html?${NOGW}`);

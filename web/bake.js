@@ -187,7 +187,7 @@
     if (b.wallet) row("Its wallet", B.short(b.wallet));
     row("Telegram", b.telegram ? "linked, drafts and answers go there" : "not linked yet");
     $("btnLink").hidden = Boolean(b.telegram); $("btnUnlink").hidden = !b.telegram;
-    if (b.telegram) { $("linkHint").hidden = true; stopLinkPoll(); }
+    if (b.telegram) { $("linkHint").hidden = true; $("linkOpen").hidden = true; $("btnLink").textContent = "Link Telegram"; stopLinkPoll(); }
     // feed it
     const text = $("fundText"), fundBtn = $("btnFund"), revoke = $("btnRevoke"), ff = $("fundFacts");
     if (!live || !b.wallet) {
@@ -285,9 +285,13 @@
     const b = shown; if (!b) return;
     const r = await api("/link", { method: "POST", body: { name: b.name } });
     if (!r.ok) return toast(r.body?.error || "Could not make a code.", "err");
-    const h = $("linkHint");
-    h.textContent = `Open ${r.body.bot} on Telegram and send it this message within ten minutes: /link ${r.body.code}`;
+    const h = $("linkHint"), open = $("linkOpen");
+    if (r.body.url) { open.href = r.body.url; open.hidden = false; }
+    h.textContent = r.body.url
+      ? `Press Open Telegram, then Start in the chat: the code goes to the bot by itself. Or send ${r.body.bot} this message yourself: /link ${r.body.code}. It works for ten minutes.`
+      : `Open ${r.body.bot} on Telegram and send it this message within ten minutes: /link ${r.body.code}`;
     h.hidden = false;
+    $("btnLink").textContent = "New code";
     stopLinkPoll();
     let tries = 0;
     linkTimer = setInterval(async () => { tries++; if (tries > 120 || $("mine").hidden) return stopLinkPoll(); await refresh(); }, 5000);

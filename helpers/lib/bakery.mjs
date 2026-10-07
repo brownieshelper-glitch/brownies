@@ -14,22 +14,29 @@
 //   POST /bake/create { name, role, personality, model, dailyCapUsd, tasks: [{ menu } | { title, text, tool, hours }] }
 //   POST /bake/ask    { name, text }         (bearer) one instruction now, a few a day
 //   POST /bake/retire { name }               (bearer) ends the holder's brownie
+//   POST /bake/link   { name }               (bearer) a six-digit code; the holder sends /link <code> to the bot in a
+//                                            private chat and that chat gets the brownie's drafts and answers
+//   POST /bake/unlink { name }               (bearer) the chat is forgotten
 //   POST /bake/logout
+//   In Telegram (handed over by Crumb from any private chat): /link <code>, /mybrownie, /mybrownie ask <what>,
+//   /mybrownie feed, /mybrownie unlink, /mybrownie retire (asks once more).
 //
 // Before the launch there is no coin and no SUGAR: only the admin wallets may bake, so the owner can try it. Live,
 // a wallet needs at least `minHold` BROWNIE held or staked (read from the chain), one brownie per wallet, and the
 // Bakery as a whole holds at most `maxTotal`. The owner hears about every bake and can retire any brownie.
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { verifyMessage, getAddress, isAddress, JsonRpcProvider, Contract, formatUnits } from "ethers";
 import { validateSpec, BAKED_TOOLS } from "./recruit.mjs";
 import { cap } from "./facts.mjs";
 import { cut } from "./text.mjs";
 
 export const bakeMessage = (nonce) => `Brownies bakery login ${nonce}`;
-const SESSION_TTL = 24 * 3_600_000, NONCE_TTL = 10 * 60_000;
+const SESSION_TTL = 24 * 3_600_000, NONCE_TTL = 10 * 60_000, LINK_TTL = 10 * 60_000;
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 const nowIso = (ms) => new Date(ms).toISOString();
 const short = (a) => (a ? a.slice(0, 6) + "..." + a.slice(-4) : "");
+const ago = (at, now) => { const s = Math.max(0, Math.round((now - at) / 1000)); if (s < 60) return "just now"; if (s < 3600) return `${Math.floor(s / 60)} min ago`; if (s < 86400) return `${Math.floor(s / 3600)} h ago`; const d = Math.floor(s / 86400); return `${d} ${d === 1 ? "day" : "days"} ago`; };
+const COMMANDS = "Commands: /mybrownie (how it is doing), /mybrownie ask <what to do>, /mybrownie feed (its latest work), /mybrownie unlink, /mybrownie retire.";
 
 /// The jobs a holder can pick without writing instructions. Hours are the holder's choice; these are the defaults.
 export const JOB_MENU = [
@@ -56,7 +63,7 @@ export class Bakery {
     this.models = Array.isArray(config.models) && config.models.length ? config.models : ["anthropic/claude-haiku-4.5"];
     this.adminWallets = adminWallets.filter(isAddress).map((a) => getAddress(a));
     this.rpcUrl = rpcUrl; this.deploymentJson = deploymentJson; this.fetch = fetch;
-    this._holdOf = holdOf; this._deployment = null;
+    this._holdOf = holdOf; this._deployment = null; this._bot = null;
     this.attempts = new Map();
   }
 
@@ -189,8 +196,8 @@ export class Bakery {
     return ok;
   }
 
-  /// One instruction now, a few a day. Runs in the background; the result lands in the feed.
-  async ask(wallet, name, text) {
+  /// One instruction now, a few a day. Runs in the background; the result lands in the feed (and in the chat it came from).
+  async ask(wallet, name, text, { chatId = null } = {}) {
     const r = this.ofHolder(wallet).find((x) => x.name === String(name || "").toLowerCase());
     if (!r) throw new Error("that is not one of your brownies");
     const t = cut(String(text || "").trim(), 1000);
@@ -200,8 +207,90 @@ export class Bakery {
     if (n >= this.asksPerDay) throw new Error(`${this.asksPerDay} instructions a day; more tomorrow`);
     this.W.store.setMeta(k, n + 1);
     const p = Promise.resolve().then(() => r.onRequest(t));
-    p.then((out) => this.log(`[bakery] ${r.name} did: ${out ? cut(String(out.title || out.text || "done"), 80) : "nothing (budget or an error)"}`)).catch((e) => this.log(`[bakery] ${r.name} failed: ${e.message}`));
+    p.then(async (out) => {
+      this.log(`[bakery] ${r.name} did: ${out ? cut(String(out.title || out.text || "done"), 80) : "nothing (budget or an error)"}`);
+      const tg = this.W.telegram;
+      if (chatId && tg?.configured) await tg.sendMessage(chatId, out?.text ? `${r.title}: ${cut(String(out.text), 3700)}` : `${r.title} could not do that one now (budget or an error).`).catch(() => {});
+    }).catch((e) => this.log(`[bakery] ${r.name} failed: ${e.message}`));
     return { started: true, left: this.asksPerDay - n - 1 };
+  }
+
+  // ---- Telegram: the holder links a private chat with the bot to their brownie ----
+  async botName() {
+    if (this._bot) return this._bot;
+    try { const me = await this.W.telegram?.me?.(); if (me?.username) this._bot = `@${me.username}`; } catch { /* no Telegram */ }
+    return this._bot || "the Brownies bot";
+  }
+  /// A one-time code the holder sends to the bot as /link <code>. Ten minutes.
+  async linkCode(wallet, name) {
+    const r = this.ofHolder(wallet).find((x) => x.name === String(name || "").toLowerCase());
+    if (!r) throw new Error("that is not one of your brownies");
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    const expiresAt = this.W.clock.now() + LINK_TTL;
+    this.W.store.setMeta(`bake:link:${code}`, JSON.stringify({ name: r.name, wallet, expiresAt }));
+    return { code, bot: await this.botName(), expiresAt, name: r.name };
+  }
+  /// The bot got /link <code> from a chat: that chat is the brownie's holder chat from now on. The recruit, or null.
+  consumeLink(code, chatId) {
+    const k = `bake:link:${String(code || "").trim()}`;
+    const raw = this.W.store.getMeta(k);
+    if (!raw) return null;
+    this.W.store.setMeta(k, null);
+    const c = JSON.parse(raw);
+    if (this.W.clock.now() > c.expiresAt) return null;
+    const r = this.recruitsFn().find((x) => x.name === c.name && x.spec?.baked);
+    if (!r) return null;
+    this.setChat(r, String(chatId));
+    return r;
+  }
+  setChat(r, chatId) {
+    r.spec.baked.chatId = chatId || null;
+    if (r.baked) r.baked.chatId = chatId || null;
+    this.W.store.setMeta(`recruit:${r.name}`, JSON.stringify(r.spec));
+  }
+  async unlink(wallet, name) {
+    const r = this.ofHolder(wallet).find((x) => x.name === String(name || "").toLowerCase());
+    if (!r) throw new Error("that is not one of your brownies");
+    this.setChat(r, null);
+    return true;
+  }
+  /// The brownies linked to a chat.
+  ofChat(chatId) { return this.baked().filter((r) => r.spec.baked.chatId && r.spec.baked.chatId === String(chatId)); }
+
+  /// /link <code> and /mybrownie ... from a private chat with the bot (Crumb hands them over). The reply, or null.
+  async holderCommand(cmd, rest, { chatId } = {}) {
+    const chat = String(chatId || "");
+    const text = String(rest || "").trim();
+    if (cmd === "link") {
+      if (!/^\d{6}$/.test(text)) return "Send the six-digit code from the bake page, like this: /link 123456";
+      const r = this.consumeLink(text, chat);
+      if (!r) return "That code is not valid or has expired. Press Link Telegram on feedthebrownies.com/bake.html for a new one.";
+      this.log(`[bakery] ${r.title} is linked to a Telegram chat`);
+      return `Linked. ${r.title}'s drafts and answers come to this chat from now on.\n\n${COMMANDS}`;
+    }
+    if (cmd !== "mybrownie") return null;
+    const mine = this.ofChat(chat);
+    if (!mine.length) return "No brownie is linked to this chat yet. On feedthebrownies.com/bake.html press Link Telegram and send me the code with /link.";
+    // "/mybrownie sage ask ..." names one of several; otherwise the first
+    let r = mine[0], words = text;
+    const first = (text.split(/\s+/)[0] || "").toLowerCase();
+    const named = mine.find((x) => x.name === first);
+    if (named) { r = named; words = text.slice(first.length).trim(); }
+    const [, sub = "", arg = ""] = words.match(/^(\w*)\s*([\s\S]*)$/) || [];
+    const s = sub.toLowerCase();
+    if (!s) return mine.map((x) => this.statusText(x)).join("\n\n");
+    if (s === "feed") { const f = r.feed(5); const now = this.W.clock.now(); return f.length ? `${r.title}'s latest work:\n\n${f.map((e) => `${e.title}, ${ago(e.at, now)}:\n${cut(String(e.text), 600)}`).join("\n\n")}` : `${r.title} has made nothing yet.`; }
+    if (s === "ask") { try { const out = await this.ask(r.spec.baked.wallet, r.name, arg, { chatId: chat }); return `${r.title} is on it. The answer comes here and lands in its feed. ${out.left} ${out.left === 1 ? "instruction" : "instructions"} left today.`; } catch (e) { return e.message; } }
+    if (s === "unlink") { this.setChat(r, null); return `Unlinked. ${r.title}'s drafts stay in its feed on the site.`; }
+    if (s === "retire") { if (!/^yes\b/i.test(arg)) return `Retire ${r.title}? Its jobs stop and it leaves the shelf. Send: /mybrownie retire yes`; const ok = await this.fireFn(r.name); return ok ? `${r.title} is retired.` : "Could not retire it."; }
+    return COMMANDS;
+  }
+  statusText(r) {
+    const { store, clock } = this.W; const now = clock.now();
+    const spent = store.spentToday(r.name, now);
+    const last = r.feed(1)[0];
+    const jobs = r.spec.tasks.map((t) => `${t.title} at ${(t.daily?.hours || []).map((h) => `${h}:00`).join(" and ")}`).join("; ");
+    return `${r.title}: ${r.spec.role}\nJobs: ${jobs}\nJobs done: ${Number(store.getMeta(`recruit:${r.name}:outputs`, 0))}. Spent today: ${(spent.micro / 1e6).toFixed(4)} of ${Number(r.spec.dailyCapUsd).toFixed(2)} USD.${last ? `\nLatest: ${last.title}, ${ago(last.at, now)}.` : ""}`;
   }
 
   // ---- what the pages read ----
@@ -275,6 +364,8 @@ export class Bakery {
         const b = await readJson(req);
         try { return json(200, { retired: await this.retire(wallet, b.name) }); } catch (e) { return json(400, { error: e.message }); }
       }
+      if (req.method === "POST" && url.pathname === "/bake/link") { const b = await readJson(req); try { return json(200, await this.linkCode(wallet, b.name)); } catch (e) { return json(400, { error: e.message }); } }
+      if (req.method === "POST" && url.pathname === "/bake/unlink") { const b = await readJson(req); try { return json(200, { unlinked: await this.unlink(wallet, b.name) }); } catch (e) { return json(400, { error: e.message }); } }
       if (req.method === "POST" && url.pathname === "/bake/logout") { this.logout(req); return json(200, { ok: true }); }
       return json(404, { error: "no such route" });
     } catch (e) {

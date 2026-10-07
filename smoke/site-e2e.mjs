@@ -444,6 +444,9 @@ async function pages() {
   await p.go(`${SITE}/bake.html?demo=1&${QS.slice(1)}`);
   await wait(() => p.ev(`!document.getElementById("mine").hidden`));
   ok("bake demo: a holder with a brownie lands on it, with its feed and a live grant", await p.ev(`document.getElementById("mineName").textContent === "Sage" && document.querySelectorAll("#mineFeed li").length === 3 && document.getElementById("mineFacts").textContent.includes("Jobs done14")`));
+  await p.ev(`document.getElementById("btnLink").click()`);
+  await wait(() => p.ev(`!document.getElementById("linkHint").hidden`));
+  ok("bake demo: Link Telegram gives a code to send to the bot", await p.ev(`document.getElementById("linkHint").textContent.includes("/link 123456") && document.getElementById("linkHint").textContent.includes("@feedthebrownies_bot") && document.getElementById("btnUnlink").hidden`));
 
   // with no deployment and no gateway: the pages still stand, with nothing empty or broken on show
   await p.go(`${SITE}/team.html?${NOGW}`);

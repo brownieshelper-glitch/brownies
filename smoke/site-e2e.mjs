@@ -461,7 +461,7 @@ async function pages() {
 
 async function shots() {
   const p = await openPage(false);
-  const list = [["home", `/${QS}`], ["app", `/app.html${QS}`], ["docs", `/docs.html${QS}`], ["team", `/team.html${QS}`], ["progress", `/progress.html${QS}`], ["posts", `/posts.html${QS}`], ["chat", `/chat.html${QS}`], ["bakery", `/bakery.html${QS}`], ["bake", `/bake.html${QS}`], ["bakery-demo", `/bakery.html?demo=1&${QS.slice(1)}`], ["bake-demo", `/bake.html?demo=1&${QS.slice(1)}`], ["bake-form", `/bake.html?demo=form&${QS.slice(1)}`], ["admin", `/admin.html${QS}`]];
+  const list = [["home", `/${QS}`], ["app", `/app.html${QS}`], ["docs", `/docs.html${QS}`], ["team", `/team.html${QS}`], ["progress", `/progress.html${QS}`], ["posts", `/posts.html${QS}`], ["chat", `/chat.html${QS}`], ["bakery", `/bakery.html${QS}`], ["bake", `/bake.html${QS}`], ["bakery-demo", `/bakery.html?demo=1&${QS.slice(1)}`], ["bake-demo", `/bake.html?demo=1&${QS.slice(1)}`], ["bake-form", `/bake.html?demo=form&${QS.slice(1)}`], ["privacy", `/privacy.html${QS}`], ["terms", `/terms.html${QS}`], ["admin", `/admin.html${QS}`]];
   for (const [name, path] of list) {
     for (const w of [1920, 1440, 1024, 768, 375]) {
       await p.size(w, w === 375 ? 812 : 900, w === 375);

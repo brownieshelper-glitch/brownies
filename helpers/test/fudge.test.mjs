@@ -99,3 +99,31 @@ test("without X credentials Fudge still posts, on the site alone, and says so in
   assert.equal(W.gw.of("fudge", "post")[0].place, "site");
   assert.equal(W.gw.of("fudge", "post")[0].url, "https://feedthebrownies.com/posts.html");
 });
+
+test("media posts: off by default; on, the files go up and the post carries them; a failed upload keeps the post back", async () => {
+  const { makeWorld: mw } = await import("./mock.mjs");
+  const { Fudge } = await import("../helpers/fudge.mjs");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const W = mw();
+  const dir = mkdtempSync(join(tmpdir(), "fudge-media-"));
+  const png = join(dir, "meme.png"); writeFileSync(png, Buffer.alloc(300, 1));
+  assert.equal(await W.fudge.postMedia({ topic: "a meme", files: [png] }), null, "off by default");
+  assert.equal(W.xm.posts.length, 0);
+  const on = new Fudge({ config: { ...W.helpersCfg.fudge, media: true }, brain: W.brain, gateway: W.gateway, store: W.store, clock: W.clock, alerts: W.alerts, facts: "- Every trade pays a 2% tax.", log: () => {}, x: W.x, siteUrl: "https://feedthebrownies.com" });
+  W.brain.helpers.fudge = { ...W.helpersCfg.fudge, media: true };
+  let inits = 0;
+  W.fetch.on("POST", "api.x.com/2/media/upload/initialize", () => { inits++; return { json: { data: { id: "m7" } } }; });
+  W.fetch.on("POST", /media\/upload\/m7\/append$/, () => ({ status: 204 }));
+  W.fetch.on("POST", /media\/upload\/m7\/finalize$/, () => ({ json: { data: { id: "m7" } } }));
+  const r = await on.postMedia({ topic: "our version of a trend, the picture attached", files: [png] });
+  assert.ok(r?.url, "posted");
+  assert.equal(inits, 1); assert.deepEqual(W.xm.posts.at(-1).media, { media_ids: ["m7"] });
+  // a refused upload: no post without its picture
+  W.fetch.on("POST", "api.x.com/2/media/upload/initialize", () => ({ status: 403, json: { title: "Forbidden", detail: "the scope media.write is missing" } }));
+  const bad = join(dir, "other.png"); writeFileSync(bad, Buffer.alloc(100, 3));
+  const before = W.xm.posts.length;
+  const r2 = await on.post({ topic: "another", media: [bad] });
+  assert.equal(r2, null); assert.equal(W.xm.posts.length, before);
+});

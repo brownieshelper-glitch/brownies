@@ -45,6 +45,7 @@ export class Fudge extends Helper {
     this.siteUrl = String(deps.siteUrl || "https://feedthebrownies.com").replace(/\/$/, "");
     this.topics = this.config.topics?.length ? this.config.topics : DEFAULT_TOPICS;
     this.maxPosts = this.config.maxPostsPerDay ?? 3;
+    this.mediaOn = this.config.media === true; // pictures and videos on X need the media.write scope on the app; off until the owner connects it
     this.maxReplies = this.config.maxRepliesPerDay ?? 12;
   }
 
@@ -103,8 +104,16 @@ export class Fudge extends Helper {
     }
     // X first, the site always. A refusal by X is not the end of the post.
     let posted = null;
+    const mediaIds = [];
+    if (this.x?.configured && Array.isArray(slot.media) && slot.media.length) {
+      for (const f of slot.media.slice(0, 4)) {
+        try { mediaIds.push((await this.x.uploadMedia(f)).mediaId); }
+        catch (e) { this.log(`[fudge] X did not take the file ${f}: ${cut(e.message, 100)}`); if (e.credentials) await this.alerts?.credentials("x", e.message); }
+      }
+      if (!mediaIds.length) { this.log("[fudge] no file went up: the post waits for the next try"); this.store.jobDone({ at: now, helper: "fudge", job: "post", ok: false, costMicro: cost, note: "media upload failed" }); return null; }
+    }
     if (this.x?.configured) {
-      try { posted = await this.x.post(text); }
+      try { posted = await this.x.post(text, { mediaIds }); }
       catch (e) {
         if (e.budget) throw e;
         this.log(`[fudge] X refused the post (${cut(e.message, 100)}); it goes out on the site only`);
@@ -122,6 +131,14 @@ export class Fudge extends Helper {
   /// The owner's instruction (the control room, or /fudge on Telegram): one post on that topic, now, within the caps.
   async onRequest(text) {
     return this.guard("post", () => this.post({ topic: String(text || "").trim() }));
+  }
+
+  /// A post with pictures or a video (a trend's version made by Sprinkle): Fudge writes the words, X gets the files.
+  /// Null while media posting is off (config media: true once the app may upload) or X is not configured.
+  async postMedia({ topic, files = [] }) {
+    if (!this.mediaOn) { this.log("[fudge] media posting is off: the file stays with the owner"); return null; }
+    if (!this.x?.configured || !files.length) return null;
+    return this.guard("post", () => this.post({ topic: String(topic || "").trim(), media: files }));
   }
 
   /// What the brownies did today, from the gateway's team summary, as a block for the prompt ("" when unreachable).

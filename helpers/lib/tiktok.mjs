@@ -50,7 +50,7 @@ export class TikTok {
     let me = {};
     try { me = await this.me(); } catch (e) { this.log(`[tiktok] connected, but the profile did not load: ${e.message}`); }
     this.saveTokens({ ...t, username: me.username || null, display_name: me.display_name || null });
-    return { open_id: t.open_id, username: me.username || null, display_name: me.display_name || null, scope: t.scope };
+    return { open_id: t.open_id, username: me.username || null, display_name: me.display_name || null, name: me.display_name || me.username || t.open_id, scope: t.scope };
   }
 
   /// A live access token, refreshed a minute before it expires.
@@ -84,9 +84,10 @@ export class TikTok {
     return j.data || {};
   }
 
-  /// The account: { open_id, username, display_name, avatar_url }.
+  /// The account: { open_id, username, display_name, avatar_url }. The basic scope gives the display name, not the
+  /// handle (that would need user.info.profile), so the name shown to the owner is the display name.
   async me() {
-    const d = await this.api("GET", "/user/info/", { query: { fields: "open_id,union_id,avatar_url,display_name,username" } });
+    const d = await this.api("GET", "/user/info/", { query: { fields: "open_id,union_id,avatar_url,display_name" } });
     const u = d.user || {};
     return { open_id: u.open_id, username: u.username || null, display_name: u.display_name || null, avatar_url: u.avatar_url || null };
   }
@@ -184,9 +185,9 @@ export class TikTokAuth {
         if (!s || this.now() > s.expiresAt || url.searchParams.get("state") !== s.state) return page(400, "Something went wrong", "The answer from TikTok did not match the request. Ask the bot for a new link with /tiktok.");
         if (url.searchParams.get("error")) return page(400, "TikTok said no", `${url.searchParams.get("error")}: ${url.searchParams.get("error_description") || ""}`);
         const me = await this.tiktok.exchange(url.searchParams.get("code"));
-        this.log(`[tiktok] connected as @${me.username || me.open_id}`);
+        this.log(`[tiktok] connected as ${me.name}`);
         if (this.onConnected) await this.onConnected(me).catch?.(() => {});
-        return page(200, "TikTok is connected", `Brownies can now send videos to ${me.username ? "@" + me.username : "this account"}. You can close this tab.`);
+        return page(200, "TikTok is connected", `Brownies can now send videos to ${me.display_name ? me.display_name : "this account"}. You can close this tab.`);
       }
       return page(404, "Not here", "Nothing at this address.");
     } catch (e) {

@@ -123,3 +123,22 @@ test("the polling loop runs until stopped and survives a failed poll", async () 
   assert.equal(W.crumb.running, false);
   void original;
 });
+
+test("a brownie's own button goes to the hook, only from the owner; without a hook it is unknown", async () => {
+  const W = makeWorld();
+  const presses = [];
+  W.tg.callback({ chatId: OWNER, fromId: 999, data: "sprinkle:tt:1:post", messageId: 5 });
+  await W.crumb.pollOnce();
+  assert.equal(W.tg.answered.at(-1).text, "Unknown button.", "no hook, no answer");
+  W.crumb.onButton = async (data, ctx) => { presses.push([data, ctx]); return data.endsWith("post") ? "Posting on TikTok." : null; };
+  W.tg.callback({ chatId: "-100", fromId: 5, data: "sprinkle:tt:1:post", messageId: 5 });
+  await W.crumb.pollOnce();
+  assert.equal(W.tg.answered.at(-1).text, "Only the owner decides."); assert.equal(presses.length, 0);
+  W.tg.callback({ chatId: OWNER, fromId: 999, data: "sprinkle:tt:1:post", messageId: 5 });
+  await W.crumb.pollOnce();
+  assert.equal(W.tg.answered.at(-1).text, "Posting on TikTok.");
+  assert.deepEqual(presses[0], ["sprinkle:tt:1:post", { chatId: OWNER, messageId: 5 }]);
+  W.tg.callback({ chatId: OWNER, fromId: 999, data: "sprinkle:tt:1:what", messageId: 5 });
+  await W.crumb.pollOnce();
+  assert.equal(W.tg.answered.at(-1).text, "Unknown button.", "a hook that returns nothing");
+});

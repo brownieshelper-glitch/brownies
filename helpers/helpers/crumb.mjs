@@ -55,6 +55,7 @@ export class Crumb extends Helper {
     this.ownerChatId = String(deps.ownerChatId || "");
     this.questionsHour = this.config.questionsHour ?? 20;
     this.onDecision = deps.onDecision || null;   // (approvalId, "approve" | "reject", { chatId, messageId })
+    this.onButton = deps.onButton || null;       // (data, { chatId, messageId }) -> the answer to show, for every other button (a brownie's own card)
     this.onNote = deps.onNote || null;           // (approvalId, text)
     this.onOwnerCommand = deps.onOwnerCommand || null; // (command, text) -> true (done), a reply string, or nothing (not a command: answered as a message)
     this.onHolderCommand = deps.onHolderCommand || null; // (command, text, { chatId, from }) -> a reply string; /link and /mybrownie from any private chat (the Bakery)
@@ -290,9 +291,16 @@ ${text}
   /// A press on Approve or Reject. Only the owner's press counts; the decision itself is Chip's.
   async callback(cq) {
     const m = String(cq.data || "").match(/^(approve|reject):(\d+)$/);
-    if (!m) return this.tg.answerCallbackQuery(cq.id, "Unknown button.");
     const chatId = String(cq.message?.chat?.id || "");
-    if (!this.ownerChatId || (chatId !== this.ownerChatId && String(cq.from?.id || "") !== this.ownerChatId)) return this.tg.answerCallbackQuery(cq.id, "Only the owner decides.");
+    const isOwner = this.ownerChatId && (chatId === this.ownerChatId || String(cq.from?.id || "") === this.ownerChatId);
+    if (!m) {
+      // a brownie's own card (TikTok's post settings, for one): the owner's press goes to it, the answer comes back
+      if (!this.onButton || !cq.data) return this.tg.answerCallbackQuery(cq.id, "Unknown button.");
+      if (!isOwner) return this.tg.answerCallbackQuery(cq.id, "Only the owner decides.");
+      const answer = await this.onButton(String(cq.data), { chatId, messageId: cq.message?.message_id });
+      return this.tg.answerCallbackQuery(cq.id, answer || "Unknown button.");
+    }
+    if (!isOwner) return this.tg.answerCallbackQuery(cq.id, "Only the owner decides.");
     const a = this.store.approval(Number(m[2]));
     if (!a) return this.tg.answerCallbackQuery(cq.id, "Nothing to decide.");
     if (a.state !== "pending") return this.tg.answerCallbackQuery(cq.id, "Already decided.");

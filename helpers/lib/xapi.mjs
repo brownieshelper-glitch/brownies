@@ -3,6 +3,7 @@
 // The access token lives two hours. The refresh token CHANGES at every renewal: the pair that comes back is the
 // only one that still works, so it is written to X_TOKEN_FILE at once, atomically (write a temp file, rename).
 // A token is renewed when it is older than 100 minutes or when X answers 401. Nothing here ever logs a token.
+import { xHardProblems } from "./xrules.mjs";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, extname, basename } from "node:path";
 
@@ -97,7 +98,9 @@ export class XClient {
   statusUrl(id) { return `https://x.com/${this.username || "i"}/status/${id}`; }
 
   /// Posts a tweet, or a reply when replyTo is a tweet id. Returns { id, url }.
-  async post(text, { replyTo = null, mediaIds = null } = {}) {
+  async post(text, { replyTo = null, mediaIds = null, approved = false } = {}) {
+    const bad = approved ? [] : xHardProblems(text, { kind: replyTo ? "reply" : "post" });
+    if (bad.length) throw new Error(`x: the text breaks the rules of X (${bad.join(", ")}) and was not sent`);
     const body = { text };
     if (replyTo) body.reply = { in_reply_to_tweet_id: String(replyTo) };
     if (Array.isArray(mediaIds) && mediaIds.length) body.media = { media_ids: mediaIds.map(String) };

@@ -109,3 +109,16 @@ test("media upload: initialize, the bytes in chunks, finalize, the processing wa
   await assert.rejects(() => x.uploadMedia(txt), /X cannot take \.txt files/);
   assert.equal(up.inits.length, 2, "nothing started for the refused file");
 });
+
+test("the client refuses a text that breaks the rules of X (a link, an address, bait) unless the owner approved it; softer rules are the helpers' business", async () => {
+  const fetch = makeFetch(), clock = new FakeClock(T0), xm = mockX(fetch);
+  const x = new XClient({ clientId: "cid", clientSecret: "sec", accessToken: "access-old", refreshToken: "refresh-old", tokenFile: tmp(), username: "Feedthebrownies", fetch, clock });
+  await assert.rejects(() => x.post("Docs: https://feedthebrownies.com/docs.html"), /breaks the rules of X \(a link \(links go in the bio\)\) and was not sent/);
+  await assert.rejects(() => x.post("CA 0x9C355950bd5634eF2b2935d356075C7c19b2386a"), /a contract or wallet address/);
+  await assert.rejects(() => x.post("Like and repost to win"), /engagement bait/);
+  await assert.rejects(() => x.post("Send me your email", { replyTo: "7001" }), /asks for private information/);
+  assert.equal(xm.posts.length, 0);
+  await x.post("Docs: https://feedthebrownies.com/docs.html", { approved: true });
+  await x.post("Two tags are not the client's business #a #b");
+  assert.equal(xm.posts.length, 2);
+});

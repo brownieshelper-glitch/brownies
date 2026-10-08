@@ -44,6 +44,8 @@
       "mentionsEveryMinutes": 20,
       "maxPostsPerDay": 3,
       "maxRepliesPerDay": 12,
+      "maxRepliesPerAuthorPerDay": 2,
+      "replies": "approve",
       "topics": [
         "how a trade turns into SUGAR for stakers",
         "what the four brownies do, in one line each",

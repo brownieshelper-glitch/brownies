@@ -45,6 +45,7 @@
       "maxPostsPerDay": 3,
       "maxRepliesPerDay": 12,
       "maxRepliesPerAuthorPerDay": 2,
+      "maxMediaPostsPerDay": 2,
       "replies": "approve",
       "topics": [
         "how a trade turns into SUGAR for stakers",

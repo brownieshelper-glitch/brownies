@@ -62,6 +62,7 @@ export class Fudge extends Helper {
     this.maxPosts = this.config.maxPostsPerDay ?? 3;
     this.mediaOn = this.config.media === true; // pictures and videos on X need the media.write scope on the app; off until the owner connects it
     this.maxReplies = this.config.maxRepliesPerDay ?? 12;
+    this.maxMedia = this.config.maxMediaPostsPerDay ?? 2; // clips and memes on X, counted apart from the text posts
     this.maxRepliesPerAuthor = this.config.maxRepliesPerAuthorPerDay ?? 2; // X: one answer per message, and no reply loops with one person
   }
 
@@ -87,8 +88,10 @@ export class Fudge extends Helper {
     return list[(day * 3 + n) % list.length];
   }
 
-  /// Posts made today, on X and on the site together (a post that only reached the site still counts).
+  /// Text posts made today, on X and on the site together (a post that only reached the site still counts).
   postsToday(now) { return this.store.postsToday("fudge", "x", "post", now) + this.store.postsToday("fudge", "site", "post", now); }
+  /// Posts with a picture or a video made today (a clip, a meme): their own cap, so the words never crowd them out.
+  mediaToday(now) { return this.store.postsToday("fudge", "x", "media", now) + this.store.postsToday("fudge", "site", "media", now); }
   /// The same text, wherever it went.
   hasPost(text) { return this.store.hasPost("x", text) || this.store.hasPost("site", text); }
   /// Replies drafted and waiting for the owner's Approve.
@@ -102,11 +105,12 @@ export class Fudge extends Helper {
   /// owner as a card instead of straight to X; the answer is then { approvalId, text }.
   async post(slot = {}) {
     const now = this.clock.now();
-    const made = this.postsToday(now);
-    if (made >= this.maxPosts) { this.log(`[fudge] already ${made} posts today`); return null; }
+    const withMedia = Array.isArray(slot.media) && slot.media.length > 0;
+    const made = withMedia ? this.mediaToday(now) : this.postsToday(now);
+    if (withMedia ? made >= this.maxMedia : made >= this.maxPosts) { this.log(`[fudge] already ${made} ${withMedia ? "posts with files" : "posts"} today`); return null; }
     if (!(await this.ready())) return null;
     const nth = slot.nth || made + 1;
-    await this.status(`Writing today's ${ordinal(nth)} post`);
+    await this.status(withMedia ? "Writing the words for a clip on X" : `Writing today's ${ordinal(nth)} post`);
     const recent = [...this.store.recentPosts("fudge", "x", "post", 12), ...this.store.recentPosts("fudge", "site", "post", 12)].slice(0, 12);
     const topic = slot.topic || this.pickTopic(now, made);
     const work = await this.todaysWork();
@@ -156,8 +160,8 @@ export class Fudge extends Helper {
     } else this.log("[fudge] X is not configured: the post goes out on the site only");
     const place = posted ? "x" : "site";
     const url = posted ? posted.url : `${this.siteUrl}/posts.html`;
-    this.store.addPost({ at: now, helper: "fudge", place, kind: "post", text, externalId: posted?.id || null, url });
-    await this.toPage(text, slot.media ? "a post with files, words only" : "post");
+    this.store.addPost({ at: now, helper: "fudge", place, kind: withMedia ? "media" : "post", text, externalId: posted?.id || null, url });
+    await this.toPage(text, withMedia ? "a post with files, words only" : "post");
     await this.report("post", cut(text, 160), { body: text.length > 160 ? text : null, url, place, cost_micro: cost });
     return { id: posted?.id || null, url, text, place };
   }

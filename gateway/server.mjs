@@ -18,6 +18,7 @@
 //   GET  /api/team/towers               public: the jobs done, 100 to a tower: bricks and dates of each tower
 //   GET  /api/team/summary              public: per brownie counts, its current task, the last 7 days by kind
 //   POST /api/team/log                  the brownies report here (one entry or up to 20), with the team key
+//   POST /api/team/hide                 { id } or { url }: a report taken off every public view, with the team key
 //   GET  /health
 //
 // A key is the wallet's signature of "Brownies API key, chain 4663, epoch N" (auth.mjs). One SUGAR atom is one
@@ -423,6 +424,16 @@ const server = createServer(async (req, res) => {
       if (!list.length || list.length > 20) throw err(400, "bad_entry", "Send 1 to 20 entries.");
       const rows = list.map((e) => cleanEntry(e)); // every entry is checked before any is written
       return json(res, 200, { added: rows.map((r) => team.insert(r)) });
+    }
+    if (url.pathname === "/api/team/hide" && req.method === "POST") {
+      if (!cfg.teamLogKey) throw err(503, "closed", "This gateway takes no reports.");
+      if (!sameSecret(bearer(req), cfg.teamLogKey)) throw err(401, "bad_key", "Wrong team key.");
+      let body;
+      try { body = JSON.parse(await readBody(req, 4 * 1024, res)); } catch { throw err(400, "bad_entry", "The body is not JSON."); }
+      if (!body || typeof body !== "object") throw err(400, "bad_entry", "The body is not an object.");
+      const id = Math.floor(Number(body.id) || 0), link = typeof body.url === "string" ? body.url.slice(0, 500) : "";
+      if (!id && !link) throw err(400, "bad_entry", "Give an id or a url.");
+      return json(res, 200, { hidden: team.hide({ id, url: link }) });
     }
     throw err(404, "not_found", "No such route.");
   } catch (e) {

@@ -53,6 +53,8 @@ export class Store {
       addPost: p("INSERT INTO posts(at, helper, place, kind, key, text, external_id, url) VALUES(?, ?, ?, ?, ?, ?, ?, ?)"),
       postsSince: p("SELECT COUNT(*) AS n FROM posts WHERE helper = ? AND place = ? AND kind = ? AND at >= ?"),
       recentPosts: p("SELECT text, at FROM posts WHERE helper = ? AND place = ? AND kind = ? ORDER BY id DESC LIMIT ?"),
+      postByExternal: p("SELECT * FROM posts WHERE place = ? AND external_id = ?"),
+      delPost: p("DELETE FROM posts WHERE id = ?"),
       seen: p("SELECT 1 FROM seen WHERE place = ? AND ref = ?"),
       markSeen: p("INSERT OR IGNORE INTO seen(place, ref, at) VALUES(?, ?, ?)"),
       addTurn: p("INSERT INTO turns(chat, at, role, who, text) VALUES(?, ?, ?, ?, ?)"),
@@ -113,6 +115,8 @@ export class Store {
   }
   postsToday(helper, place, kind, now) { return Number(this.q.postsSince.get(helper, place, kind, this.dayStart(now)).n); }
   recentPosts(helper, place, kind = "post", n = 10) { return this.q.recentPosts.all(helper, place, kind, n).map((r) => r.text); }
+  postByExternalId(place, externalId) { return this.q.postByExternal.get(place, String(externalId)) || null; }
+  deletePost(id) { return this.q.delPost.run(id).changes > 0; }
 
   // ---- things handled once: a mention, an issue, an update ----
   seen(place, ref) { return Boolean(this.q.seen.get(place, String(ref))); }

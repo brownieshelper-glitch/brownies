@@ -8,7 +8,7 @@ import { recentLaunches, launchesBlock } from "../lib/launches.mjs";
 
 const RULES = `Your task now: write today's research note.
 - About 300 words. Two headings, exactly these: "What changed" and "What to do".
-- Under "What changed": what is new in our numbers, on our site, and on the competitors' pages since the previous note. Short, concrete.
+- Under "What changed": what is new in our numbers and on our site since the previous note (and on the competitors' pages, when any are given). Short, concrete. Never compare us with anyone and never name another project in the note.
 - Under "What to do": three to five plain suggestions for Fudge (posts), Crumb (answers) and Chip (code), each one line.
 - Numbers only from the material given, each with its source in brackets, for example (gateway stats). If a page could not be read, say so in one line and move on.
 - No markdown except the two headings ("## What changed", "## What to do") and plain lines. ASCII only.`;
@@ -66,7 +66,7 @@ export class Nib extends Helper {
     const date = this.store.dayKey(now);
     if (!focus && this.store.seen("nib-note", date)) { this.log(`[nib] the note for ${date} exists`); return null; }
     if (!(await this.ready())) return null;
-    await this.status("Reading the chain, the site and the competitors");
+    await this.status(this.competitors.length ? "Reading the chain, the site and the competitors" : "Reading the chain and the site");
     const [stats, summary] = await Promise.all([this.gateway.stats(), this.gateway.summary()]);
     const site = await this.page(`${this.siteUrl}/llms.txt`, 3000);
     const pages = [];
@@ -88,7 +88,7 @@ export class Nib extends Helper {
     const r = await this.think({ system: this.system(RULES), prompt, maxTokens: 1200, temperature: 0.4 });
     const text = tidy(r.text);
     if (!text) { await this.status("The research note came back empty"); return null; }
-    const md = `# Research note ${date}${focus ? ": " + cut(focus, 60) : ""}\n\nWritten by Nib, the research brownie, from the gateway's figures, the site and the competitors' pages.${focus ? " Asked for by the owner." : ""}\n\n${text}\n`;
+    const md = `# Research note ${date}${focus ? ": " + cut(focus, 60) : ""}\n\nWritten by Nib, the research brownie, from the gateway's figures and the site${this.competitors.length ? " and the competitors' pages" : ""}.${focus ? " Asked for by the owner." : ""}\n\n${text}\n`;
     const path = focus ? `notes/${date}-focus-${Date.now().toString(36)}.md` : `notes/${date}.md`;
     let url = null;
     if (this.github?.configured) {

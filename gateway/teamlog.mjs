@@ -57,13 +57,23 @@ export class TeamLog {
       CREATE INDEX IF NOT EXISTS team_log_helper ON team_log(helper, id);
       CREATE INDEX IF NOT EXISTS team_log_kind ON team_log(kind, id);
     `);
+    // a report the owner took down: kept for the record, shown nowhere (the column arrived 2026-10-08)
+    try { db.exec("ALTER TABLE team_log ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"); } catch { /* already there */ }
     this.q = {
       add: db.prepare("INSERT INTO team_log(at, helper, kind, title, body, url, place, cost_micro) VALUES(?, ?, ?, ?, ?, ?, ?, ?)"),
-      perHelper: db.prepare("SELECT helper, COUNT(*) AS total, COALESCE(SUM(at >= ?), 0) AS today, COALESCE(SUM(CASE WHEN at >= ? THEN cost_micro ELSE 0 END), 0) AS cost_today, MAX(at) AS last_at FROM team_log WHERE kind != 'status' GROUP BY helper"),
+      perHelper: db.prepare("SELECT helper, COUNT(*) AS total, COALESCE(SUM(at >= ?), 0) AS today, COALESCE(SUM(CASE WHEN at >= ? THEN cost_micro ELSE 0 END), 0) AS cost_today, MAX(at) AS last_at FROM team_log WHERE kind != 'status' AND hidden = 0 GROUP BY helper"),
       status: db.prepare("SELECT helper, title, at FROM team_log WHERE id IN (SELECT MAX(id) FROM team_log WHERE kind = 'status' GROUP BY helper)"),
-      week: db.prepare("SELECT kind, COUNT(*) AS n FROM team_log WHERE kind != 'status' AND at >= ? GROUP BY kind"),
-      total: db.prepare("SELECT COUNT(*) AS n FROM team_log WHERE kind != 'status'"),
+      week: db.prepare("SELECT kind, COUNT(*) AS n FROM team_log WHERE kind != 'status' AND hidden = 0 AND at >= ? GROUP BY kind"),
+      total: db.prepare("SELECT COUNT(*) AS n FROM team_log WHERE kind != 'status' AND hidden = 0"),
+      hide: db.prepare("UPDATE team_log SET hidden = 1 WHERE hidden = 0 AND (id = ? OR (? != '' AND url = ?))"),
     };
+  }
+
+  /// Takes a report off every public view, by its id or by the exact address it carried. Returns how many rows changed.
+  hide({ id = 0, url = "" } = {}) {
+    const i = Math.floor(Number(id) || 0), u = String(url || "");
+    if (!i && !u) return 0;
+    return Number(this.q.hide.run(i, u, u).changes);
   }
 
   /// Stores a row that clean() returned. Returns it with its id.
@@ -80,6 +90,7 @@ export class TeamLog {
     if (before > 0) { where.push("id < ?"); args.push(Math.floor(before)); }
     if (helper) { where.push("helper = ?"); args.push(helper); }
     if (kind) { where.push("kind = ?"); args.push(kind); } else where.push("kind != 'status'");
+    where.push("hidden = 0");
     const sql = "SELECT id, at, helper, kind, title, body, url, place, cost_micro FROM team_log WHERE " + where.join(" AND ") + " ORDER BY id " + (asc ? "ASC" : "DESC") + " LIMIT ? OFFSET ?";
     return this.db.prepare(sql).all(...args, Math.max(1, Math.min(100, Math.floor(limit) || 30)), Math.max(0, Math.floor(offset) || 0));
   }
@@ -89,7 +100,7 @@ export class TeamLog {
   towers(size = 100) {
     const n = Math.max(1, Math.floor(size));
     const rows = this.db.prepare(`SELECT (rn - 1) / ${n} AS tower, COUNT(*) AS count, MIN(at) AS first_at, MAX(at) AS last_at
-      FROM (SELECT at, ROW_NUMBER() OVER (ORDER BY id) AS rn FROM team_log WHERE kind != 'status') GROUP BY tower ORDER BY tower`).all();
+      FROM (SELECT at, ROW_NUMBER() OVER (ORDER BY id) AS rn FROM team_log WHERE kind != 'status' AND hidden = 0) GROUP BY tower ORDER BY tower`).all();
     return rows.map((r) => ({ tower: Number(r.tower), count: Number(r.count), firstAt: Number(r.first_at), lastAt: Number(r.last_at) }));
   }
 

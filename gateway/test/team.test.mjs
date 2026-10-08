@@ -79,3 +79,21 @@ test("the bricks come back in the order they were laid, and are cut into towers"
   assert.equal(towers[0].firstAt < towers[0].lastAt && towers[0].lastAt < towers[1].firstAt, true);
   assert.deepEqual(fresh().towers(100), []);
 });
+
+test("a hidden report leaves every public view: the list, the summary, the towers; the hide route needs the team key and an id or a url", async () => {
+  const { TeamLog } = await import("../teamlog.mjs");
+  const { DatabaseSync } = await import("node:sqlite");
+  const team = new TeamLog(new DatabaseSync(":memory:"));
+  const a = team.add({ helper: "fudge", kind: "post", title: "Our numbers", url: "https://x.com/Feedthebrownies/status/1" });
+  const b = team.add({ helper: "fudge", kind: "post", title: "A comparison", url: "https://x.com/Feedthebrownies/status/2" });
+  team.add({ helper: "fudge", kind: "status", title: "Writing" });
+  assert.equal(team.list().length, 2); assert.equal(team.summary().total, 2); assert.equal(team.towers(100)[0].count, 2);
+  assert.equal(team.hide({ url: "https://x.com/Feedthebrownies/status/2" }), 1);
+  assert.equal(team.hide({ url: "https://x.com/Feedthebrownies/status/2" }), 0, "once");
+  assert.deepEqual(team.list().map((r) => r.id), [a.id]);
+  assert.equal(team.summary().total, 1); assert.equal(team.summary().helpers.find((h) => h.helper === "fudge").total, 1);
+  assert.equal(team.towers(100)[0].count, 1);
+  assert.equal(team.hide({ id: a.id }), 1); assert.equal(team.list().length, 0);
+  assert.equal(team.hide({}), 0, "nothing named, nothing hidden");
+  void b;
+});

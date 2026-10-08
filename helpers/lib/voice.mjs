@@ -19,6 +19,9 @@ export function tidy(s) {
 // Words that promise a price or a gain, or that tell people to buy. None of them belongs in a brownie's mouth.
 export const PROMISES = /\b(to the moon|moon(ing|shot|ed)?|\d+x\b|guaranteed?|will go up|will rise|will pump|price target|pumps?|pumping|hidden gem|get rich|easy money|can('|no)?t lose|cannot lose|wagmi|lfg|ape in|buy now|buy the dip|last chance|don'?t miss|do not miss|(guaranteed|high|big|safe|passive) (returns?|income|profits?)|\d+ ?% (returns?|apy|apr|gains?))\b/i;
 export const BOILERPLATE = /\b(not financial advice|nfa|dyor|do your own research|this is not advice|no financial advice|financial advice)\b/i;
+// Comparisons with other providers, coins or projects, and the rivals by name: never in anything public (the owner, 2026-10-08)
+export const COMPARES = /\b(rivals?|competitors?|competition)\b|\bother (providers?|coins?|projects?|launchpads?|tokens?|platforms?)\b|\b(cheaper|better|faster|bigger|more) than (other|any|the rest|them|theirs)\b|\b(saving|discount)s? on credits\b|\bcompared (to|with) (other|them|the market)\b|\bunlike (other|the other)\b/i;
+export const RIVALS = /\b(orbio|claus\.si|kairence|moonlet|spir8l|spiral launchpad)\b/i;
 
 /// What is wrong with a text, as a list of short reasons. An empty list means it can go out.
 export function problems(text, { maxLen = 280, maxHashtags = 1 } = {}) {
@@ -33,6 +36,8 @@ export function problems(text, { maxLen = 280, maxHashtags = 1 } = {}) {
   if (BOILERPLATE.test(t)) out.push("boilerplate");
   if ((t.match(/\$[A-Z]{2,10}\b/g) || []).length > 2) out.push("ticker spam");
   if (/\b(private key|seed phrase|mnemonic|password)\b/i.test(t)) out.push("talks about secrets");
+  if (COMPARES.test(t)) out.push("compares with others");
+  if (RIVALS.test(t)) out.push("names another project");
   return out;
 }
 
@@ -44,6 +49,7 @@ export const RULES = `How you write:
 - No hashtag storm. One hashtag at most, and usually none.
 - Facts only, and only from the facts you were given. If you do not know a number, do not invent one: say where it can be read.
 - Never ask for or mention private keys, seed phrases or passwords.
+- Never compare us with another provider, coin or project, never name or hint at one, never quote their prices, savings or numbers. Speak only about Brownies.
 - Do not sign your messages and do not add a title unless asked.
 
 Money and keys:

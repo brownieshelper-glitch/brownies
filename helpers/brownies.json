@@ -72,25 +72,12 @@
       "_questions": "Once a day at questionsHour Crumb writes what people asked into notes/questions/YYYY-MM-DD.md, a short answer each, for the team and for Chip's FAQ page."
     },
     "nib": {
-      "role": "research. Once a day you read the gateway's figures, the site and the competitors, and write a note on what changed and what to do",
+      "role": "research. Once a day you read the gateway's figures and the site, and write a note on what changed and what to do",
       "model": "anthropic/claude-fable-5.1",
       "dailyCapUsd": 31.0,
       "hour": 8,
       "minute": 0,
-      "competitors": [
-        {
-          "name": "Orbio",
-          "url": "https://orbio.ai"
-        },
-        {
-          "name": "Orbio app",
-          "url": "https://orbio.so"
-        },
-        {
-          "name": "Programmable",
-          "url": "https://programmable.market"
-        }
-      ],
+      "competitors": [],
       "launches": {
         "hours": 24,
         "max": 15,

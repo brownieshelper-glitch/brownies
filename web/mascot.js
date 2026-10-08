@@ -33,7 +33,7 @@
        g.mouth[data-m]    the mouths
        g.waves            the megaphone's sound waves */
 (function (root) {
-  var INK = "#0E0E0C", BONE = "#F3EFE6", ORANGE = "#FF5A1F", ORANGE2 = "#E64A12";
+  var INK = "#2A1710", BONE = "#F6EFE2", ORANGE = "#FF5A1F", ORANGE2 = "#E64A12";   // cocoa, cream, icing
   var NS = 'xmlns="http://www.w3.org/2000/svg"';
   var MOUTHS = ["smile", "open", "grin", "o"];
   var uid = 0;

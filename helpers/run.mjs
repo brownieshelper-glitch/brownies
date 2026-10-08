@@ -39,6 +39,7 @@ import { Connect } from "./lib/connect.mjs";
 import { Clips } from "./lib/clips.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
+import { listText as suggestionsList } from "./lib/suggestions.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
 import { Nib } from "./helpers/nib.mjs";
 import { Chip } from "./helpers/chip.mjs";
@@ -86,7 +87,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
   const fudge = new Fudge({ ...deps("fudge"), x, siteUrl: S.siteUrl, telegram, ownerChatId: S.telegram.ownerChatId });
-  const crumb = new Crumb({ ...deps("crumb"), telegram, github, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => { const a = store.approval(id); const h = a ? all[a.helper] : null; return (h && typeof h.decide === "function" ? h : chip).decide(id, d, ctx); }, onNote: (id, t) => chip.addNote(id, t), onButton: (data, ctx) => { const h = all[String(data).split(":")[0]]; return h && typeof h.onButton === "function" ? h.onButton(data, ctx) : null; } });
+  const crumb = new Crumb({ ...deps("crumb"), telegram, github, siteUrl: S.siteUrl, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => { const a = store.approval(id); const h = a ? all[a.helper] : null; return (h && typeof h.decide === "function" ? h : chip).decide(id, d, ctx); }, onNote: (id, t) => chip.addNote(id, t), onButton: (data, ctx) => { const h = all[String(data).split(":")[0]]; return h && typeof h.onButton === "function" ? h.onButton(data, ctx) : null; } });
   const nib = new Nib({ ...deps("nib"), github, siteUrl: S.siteUrl, rpcUrl: S.rpcUrl });
   // the recruits: brownies hired at runtime by Dough (lib/hiring.mjs), kept as specs in the store, never as code
   const all = { fudge, crumb, nib, chip };
@@ -190,6 +191,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
       return r.ok ? `${who[0].toUpperCase() + who.slice(1).toLowerCase()}'s cap is now ${r.capUsd} USD a day.` : r.error;
     }
     if (cmd === "summary") { await sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }); return true; }
+    if (cmd === "suggestions") return suggestionsList(store, S.siteUrl);
     if (cmd === "fudge") { if (!text) return `Tell Fudge what to post: /fudge <what>. Or /fudge replies auto|approve|off|status for the answers on X (now: ${fudge.repliesMode()}).`; const r = await fudge.onRequest(text); return typeof r === "string" ? r : r ? true : "Fudge could not write that one now (budget, the cap, or an error). Check the log."; }
     if (all[cmd]?.onRequest) { if (!text) return `Tell ${cmd} what to draft: /${cmd} <what>`; const r = await all[cmd].onRequest(text); return r ? true : `${cmd} could not write that one now (budget or an error). Check the log.`; }
     return undefined; // not a command of ours: Crumb answers it like any message

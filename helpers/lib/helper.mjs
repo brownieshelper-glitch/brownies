@@ -3,6 +3,7 @@
 import { systemPrompt } from "./voice.mjs";
 import { latestNoteText, latestCriticText, cap } from "./facts.mjs";
 import { BudgetError } from "./brain.mjs";
+import { acceptedSuggestionsText } from "./suggestions.mjs";
 
 export const ORDINAL = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"];
 export const ordinal = (n) => ORDINAL[n] || `${n}th`;
@@ -19,7 +20,7 @@ export class Helper {
   }
 
   /// The system prompt: the voice, the facts, Nib's latest note and this helper's own rules.
-  system(extra = "") { return systemPrompt({ name: this.Name, role: this.role, facts: this.facts, note: latestNoteText(this.store), feedback: latestCriticText(this.store, this.name), extra }); }
+  system(extra = "") { return systemPrompt({ name: this.Name, role: this.role, facts: this.facts, note: latestNoteText(this.store), feedback: latestCriticText(this.store, this.name), accepted: acceptedSuggestionsText(this.store), extra }); }
 
   /// False (and an alert, at most once an hour) when the helper cannot pay for a thought right now.
   async ready() {

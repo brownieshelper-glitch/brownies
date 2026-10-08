@@ -90,6 +90,23 @@
       acts.append(yes, no); box.append(acts); li.append(box); ap.append(li);
     }
     $("approvalsEmpty").hidden = s.approvals.length > 0;
+    const sg = $("suggestions"); sg.replaceChildren();
+    const sugg = s.suggestions || [];
+    const sRow = (g) => {
+      const li = el("li"); const box = el("div");
+      const m = el("p", "meta", `${g.place === "x" ? "X" : "Telegram"}${g.who ? ", @" + g.who : ""}, ${when(g.at)}${g.state !== "new" ? ", " + g.state : ""}`);
+      for (const f of g.flags || []) m.append(" ", el("span", "flag", f));
+      box.append(m, el("p", "what", g.text));
+      if (g.note) box.append(el("p", "meta", `Your note: ${g.note}`));
+      const acts = el("div", "admin-row");
+      if (g.state !== "listen") { const yes = el("button", "btn sm", "Listen"); yes.onclick = () => command({ action: "suggest", id: g.id, value: "listen" }); acts.append(yes); }
+      if (g.state !== "ignore") { const no = el("button", "btn sm ghost", "Ignore"); no.onclick = () => command({ action: "suggest", id: g.id, value: "ignore" }); acts.append(no); }
+      box.append(acts); li.append(box); return li;
+    };
+    for (const g of sugg.filter((x) => x.state === "new")) sg.append(sRow(g));
+    const decidedS = sugg.filter((x) => x.state !== "new");
+    if (decidedS.length) { const li = el("li"); const d = el("details"); d.append(el("summary", null, `${decidedS.length} decided`)); const ul = el("ul", "admin-approvals"); for (const g of decidedS) ul.append(sRow(g)); d.append(ul); li.append(d); sg.append(li); }
+    $("suggestionsEmpty").hidden = sugg.length > 0;
     const jobs = s.jobs || { totals: {}, list: [] };
     const jt = jobs.totals || {};
     $("jobsTotals").textContent = `${jt.found || 0} found and not picked, ${jt.open || 0} in progress, ${jt.won || 0} won, ${jt.paid || 0} paid, ${money(jt.earnedUsd)} earned. The public page: jobs.html`;

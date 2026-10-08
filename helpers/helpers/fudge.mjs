@@ -16,6 +16,7 @@ import { Helper, ordinal } from "../lib/helper.mjs";
 import { tidy, problems } from "../lib/voice.mjs";
 import { cut, oneLine } from "../lib/text.mjs";
 import { xProblems, X_RULES, BIO_LINE, LINK, ADDRESS, bare, wantsOptOut, asksForLink, claimsStaff, isSensitive, staffLikeName } from "../lib/xrules.mjs";
+import { isSuggestion, flags as suggestionFlags, SUGGEST_LINE, noticeText } from "../lib/suggestions.mjs";
 
 const DEFAULT_TOPICS = [
   "how a trade turns into SUGAR for stakers",
@@ -239,6 +240,17 @@ export class Fudge extends Helper {
     return `TODAY'S WORK, read from the Kitchen just now (quote only what is here, never a job that is not listed):\n${rows.join("\n")}`;
   }
 
+  /// A suggestion from a mention: kept for the owner's list, never acted on; the owner hears about new ones at most
+  /// once an hour.
+  async keepSuggestion(t, f, now) {
+    if (this.store.seen("suggestion", `x:${t.id}`)) return null;
+    this.store.markSeen("suggestion", `x:${t.id}`, now);
+    const id = this.store.addSuggestion({ at: now, place: "x", who: t.author || null, whoId: t.authorId, text: t.text, flags: f, ref: t.id, url: `https://x.com/i/status/${t.id}` });
+    this.log(`[fudge] suggestion ${id} from @${t.author || "someone"} kept for the owner${f.length ? ` (${f.join(", ")})` : ""}`);
+    await this.alerts?.send("suggestions", noticeText(this.store, now, this.siteUrl));
+    return id;
+  }
+
   /// Reads new mentions and answers the ones that ask something, by the rules of X: never an author who said stop,
   /// never a staff claim or sensitive words, at most two answers per author a day, the bio line for link and
   /// contract asks (no model), and an AI-written answer as a card for the owner unless replies are "auto".
@@ -265,13 +277,21 @@ export class Fudge extends Helper {
         continue;
       }
       if (isSensitive(t.text) || isSensitive(author)) { this.log(`[fudge] mention ${t.id} carries sensitive words: no answer`); continue; }
-      if (!isQuestion(t.text)) continue;
+      let suggested = null; // a suggestion: kept for the owner, answered with one fixed line unless it carries bait
+      if (isSuggestion(t.text)) {
+        const f = suggestionFlags(t.text);
+        await this.keepSuggestion(t, f, now);
+        if (f.length) continue; // a link, an address, another coin or drainer words: no answer at all, so bait is never amplified
+        suggested = SUGGEST_LINE;
+      }
+      if (!suggested && !isQuestion(t.text)) continue;
       if (mode === "off") { this.log("[fudge] replies are off"); break; }
       const byAuthor = Number(this.store.getMeta(this.authorKey(t.authorId, now)) || 0);
       if (byAuthor >= this.maxRepliesPerAuthor) { this.log(`[fudge] @${author} already had ${byAuthor} answers today`); continue; }
       if (this.store.postsToday("fudge", "x", "reply", now) + this.pendingReplies() >= this.maxReplies) { this.log("[fudge] reply cap for today"); break; }
       let text, cost = 0;
-      if (asksForLink(t.text)) text = BIO_LINE; // the site, the docs and the contract live in the bio: one fixed line, no model
+      if (suggested) text = suggested; // the owner reads it and decides: one fixed line, no model
+      else if (asksForLink(t.text)) text = BIO_LINE; // the site, the docs and the contract live in the bio: one fixed line, no model
       else {
         if (!(await this.ready())) break;
         if (!answered) await this.status("Answering mentions on X");
@@ -282,7 +302,7 @@ export class Fudge extends Helper {
         if (bad.length) { this.log(`[fudge] reply refused: ${bad.join(", ")}`); continue; }
       }
       this.store.setMeta(this.authorKey(t.authorId, now), String(byAuthor + 1));
-      if (mode === "auto" || text === BIO_LINE) {
+      if (mode === "auto" || text === BIO_LINE || text === SUGGEST_LINE) {
         const posted = await this.x.post(text, { replyTo: t.id });
         this.store.addPost({ at: now, helper: "fudge", place: "x", kind: "reply", text, ref: t.id, externalId: posted.id, url: posted.url });
         await this.report("reply", `Answered @${author}: ${cut(text, 120)}`, { url: posted.url, place: "x", cost_micro: cost });

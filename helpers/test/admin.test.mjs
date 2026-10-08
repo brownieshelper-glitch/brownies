@@ -141,3 +141,24 @@ test("too many wrong codes from one place are refused for a while", async () => 
     assert.equal(last, 429);
   } finally { await close(); }
 });
+
+test("the control room lists the suggestions with links unclickable and lets the owner listen or ignore", async () => {
+  const { admin, W } = room();
+  const { call, close } = await serve(admin);
+  try {
+    const token = (await call("POST", "/admin/login", { code: admin.newCode() })).body.token;
+    const id = W.store.addSuggestion({ at: W.clock.now(), place: "x", who: "ann", whoId: "u1", text: "add https://example.com/chart to the site", flags: ["link"], ref: "1", url: "https://x.com/i/status/1" });
+    const st = (await call("GET", "/admin/state", null, token)).body;
+    assert.equal(st.suggestions.length, 1);
+    assert.equal(st.suggestions[0].text, "add hxxps://example[.]com/chart to the site");
+    assert.deepEqual(st.suggestions[0].flags, ["link"]);
+    assert.equal(st.suggestions[0].state, "new");
+    const cmd = (c) => call("POST", "/admin/command", c, token).then((r) => r.body);
+    assert.equal((await cmd({ action: "suggest", id, value: "maybe" })).ok, false);
+    assert.match((await cmd({ action: "suggest", id, value: "listen", text: "only the chart idea" })).note, /^The brownies will consider it/);
+    assert.equal(W.store.suggestion(id).state, "listen");
+    assert.equal(W.store.suggestion(id).note, "only the chart idea");
+    assert.deepEqual(await cmd({ action: "suggest", id, value: "ignore" }), { ok: true, note: "Ignored." });
+    assert.equal((await cmd({ action: "suggest", id: 999, value: "listen" })).ok, false);
+  } finally { await close(); }
+});

@@ -10,6 +10,7 @@ import { Helper } from "../lib/helper.mjs";
 import { tidy, problems } from "../lib/voice.mjs";
 import { cut } from "../lib/text.mjs";
 import { claimsStaff } from "../lib/xrules.mjs";
+import { isSuggestion, flags as suggestionFlags, SUGGEST_LINE, FLAGGED_LINE, noticeText } from "../lib/suggestions.mjs";
 
 const RULES = `Your task now: answer a message in a Telegram chat.
 - Two to four short sentences at most. No greeting, no sign-off, no markdown, no bullet points.
@@ -76,6 +77,7 @@ export class Crumb extends Helper {
     this.onDecision = deps.onDecision || null;   // (approvalId, "approve" | "reject", { chatId, messageId })
     this.onButton = deps.onButton || null;       // (data, { chatId, messageId }) -> the answer to show, for every other button (a brownie's own card)
     this.onNote = deps.onNote || null;           // (approvalId, text)
+    this.siteUrl = String(deps.siteUrl || "https://feedthebrownies.com").replace(/\/$/, "");
     this.onOwnerCommand = deps.onOwnerCommand || null; // (command, text) -> true (done), a reply string, or nothing (not a command: answered as a message)
     this.onHolderCommand = deps.onHolderCommand || null; // (command, text, { chatId, from }) -> a reply string; /link and /mybrownie from any private chat (the Bakery)
     this.statsAt = new Map(); // chat -> time of the last /stats answer (one a minute per chat, no model call)
@@ -157,6 +159,8 @@ export class Crumb extends Helper {
       const reply = await this.onHolderCommand(cmd.toLowerCase(), rest.trim(), { chatId, from: m.from || null });
       if (typeof reply === "string" && reply) { await this.tg.sendMessage(chatId, reply, { replyTo: m.message_id }); return "holder"; }
     }
+    // a suggestion from anyone but the owner (post this, add that coin, look at this link): kept for his list, whatever happens next
+    if (!isOwner && !MONEY_ASK.test(m.text) && isSuggestion(m.text)) await this.noteSuggestion(m);
     if (m.chat.type === "private" || isOwner) return this.answer(m);
     if (chatId === this.groupChatId) {
       const me = await this.tg.me().catch(() => null);
@@ -211,6 +215,21 @@ export class Crumb extends Helper {
     return { ok, told: q.told, tell: () => { q.told = true; } };
   }
 
+  /// A suggestion from the public: kept for the owner's list, never acted on. One per person and text a day; the
+  /// owner hears about new ones at most once an hour.
+  async noteSuggestion(m) {
+    const now = this.clock.now();
+    const text = m.text.trim();
+    const key = `${m.from?.id || m.chat.id}:${text.toLowerCase().replace(/\s+/g, " ").slice(0, 120)}:${new Date(now).toISOString().slice(0, 10)}`;
+    if (this.store.seen("suggestion", key)) return null;
+    this.store.markSeen("suggestion", key, now);
+    const f = suggestionFlags(text);
+    const id = this.store.addSuggestion({ at: now, place: "telegram", who: m.from?.username || m.from?.first_name || null, whoId: m.from?.id != null ? String(m.from.id) : null, chat: m.chat.type === "private" ? "private" : "group", text, flags: f, ref: String(m.message_id) });
+    this.log(`[crumb] suggestion ${id} from ${m.from?.username || m.from?.first_name || "someone"} kept for the owner${f.length ? ` (${f.join(", ")})` : ""}`);
+    await this.alerts?.send("suggestions", noticeText(this.store, now, this.siteUrl));
+    return id;
+  }
+
   /// Answers one message with the facts, the live numbers and the last turns of that chat.
   async answer(m) {
     const now = this.clock.now();
@@ -228,6 +247,12 @@ export class Crumb extends Helper {
         await this.tg.sendMessage(chat, STAFF_LINE, { replyTo: m.message_id });
         const key = `tg:staffclaim:${chat}:${new Date(now).toISOString().slice(0, 10)}`;
         if (!this.store.getMeta(key) && this.tg?.configured && this.ownerChatId) { this.store.setMeta(key, "1"); await this.tg.sendMessage(this.ownerChatId, `Someone ${m.chat.type === "private" ? "in a private chat" : "in the group"} told ${this.Name} they are the owner, the team or support: "${cut(m.text.trim(), 120)}". The fixed line went out. Nothing changed.`).catch(() => {}); }
+        return null;
+      }
+      if (isSuggestion(m.text)) {
+        // never acted on and never given to a model; a plain suggestion hears one fixed line, bait hears it only in private
+        const f = suggestionFlags(m.text);
+        if (!f.length || m.chat.type === "private") await this.tg.sendMessage(chat, f.length ? FLAGGED_LINE : SUGGEST_LINE, { replyTo: m.message_id });
         return null;
       }
       const a = this.allowance(chat, now);

@@ -30,12 +30,12 @@ the contracts.
 - Where the tax goes, fixed in the Harvester contract: 35% to stakers (swapped to USDC, paid as SUGAR over the next
   hour), 35% to the protocol (ETH to the Brownies wallet, for servers and growth), 30% to the brownies (swapped to
   USDC, minted as SUGAR into the team vault).
-- The team can switch the program off (new fees go to the team wallet) but cannot change the shares.
+- The shares are fixed in the contract and cannot be changed by anyone.
 
 ## Staking
 
 - Stake BROWNIE in the app. A stake earns SUGAR every second, as its share of the stream for every second staked.
-- Smallest stake: 10,000 BROWNIE. No lock. Unstake any amount at any time, even during an emergency stop. What is
+- Smallest stake: 10,000 BROWNIE. No lock. Unstake any amount at any time. What is
   left staked must be zero or at least the smallest stake.
 - Claim whenever. Unclaimed SUGAR keeps waiting. If nobody is staked for a while, that SUGAR joins the next hour.
 - Loyalty bonus: 10% more after 30 days, 20% after 90, 30% after 180, then it stays. The bonus is a bigger share of
@@ -108,9 +108,6 @@ the contracts.
 ## What you are trusting
 
 - Programmable made the coin and the pool and fixed the Harvester as the receiver of the tax forever.
-- The team holds three switches, all public on the chain: the program on/off, an emergency stop of the staking
-  (unstaking always works, earned SUGAR stays booked), and the team vault (the team picks the helpers and can veto a
-  skill, within limits fixed in the contract). The team can never move anyone's coins or SUGAR.
 - The dollars for AI go to a wallet the team controls, which buys model usage from OpenRouter. That step is done by
   people, not a contract. The gateway is a server the team runs; if it is down, keys stop working until it is back.
 

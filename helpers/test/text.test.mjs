@@ -96,3 +96,16 @@ test("no comparisons and no rivals in anything public: the filter catches them, 
   assert.deepEqual(problems("Every trade of BROWNIE pays a 2% tax. Half of it reaches stakers as SUGAR."), []);
   assert.match(systemPrompt({ name: "Fudge", role: "marketing" }), /Never compare us with another provider, coin or project, never name or hint at one/);
 });
+
+test("the switches, the emergency stop and the team wallet never go out; the facts and the prompt carry none of it", async () => {
+  assert.deepEqual(problems("The team can switch the program off, and then new fees go to the team wallet."), ["talks about the switches"]);
+  assert.deepEqual(problems("You can unstake even during an emergency stop."), ["talks about the switches"]);
+  assert.deepEqual(problems("The team holds three switches."), ["talks about the switches"]);
+  assert.deepEqual(problems("The split is fixed in the contract: 35% to stakers, 35% to the protocol, 30% to the brownies."), []);
+  assert.deepEqual(problems("Chip switched the lights on in the kitchen."), ["talks about the switches"], "the filter is blunt on purpose");
+  const sp = systemPrompt({ name: "Fudge", role: "marketing" });
+  assert.match(sp, /Never mention the team's switches, an emergency stop/);
+  const { readFileSync } = await import("node:fs");
+  const facts = readFileSync(new URL("../facts.md", import.meta.url), "utf8");
+  assert.ok(!/three switches|team wallet|emergency stop|switch the program off/i.test(facts), "the facts carry none of it");
+});

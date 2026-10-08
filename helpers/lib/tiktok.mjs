@@ -13,6 +13,17 @@ export const SCOPES = ["user.info.basic", "video.upload", "video.publish"];
 const CHUNK = 10 * 1024 * 1024, ONE_CHUNK_MAX = 64 * 1024 * 1024, MIN_CHUNK = 5 * 1024 * 1024;
 const TOKENS_KEY = "tiktok:tokens";
 
+/// TikTok's error codes in plain words, for the owner.
+export const EXPLAIN = {
+  unaudited_client_can_only_post_to_private_accounts: "until TikTok reviews the app it may post only to a PRIVATE account: in the TikTok app set the account to private (Settings and privacy, Privacy, Private account), then try again",
+  spam_risk_too_many_pending_share: "too many drafts are waiting in the account's inbox: post or delete them in the TikTok app, then try again",
+  spam_risk_user_banned_from_posting: "TikTok has blocked this account from posting for now",
+  spam_risk_too_many_posts: "TikTok says the account posted too much today; try tomorrow",
+  reached_active_user_cap: "the app has reached TikTok's cap of users before the review",
+  access_token_invalid: "the TikTok connection expired: connect again with /tiktok",
+  scope_not_authorized: "the TikTok connection lacks the posting permission: connect again with /tiktok",
+};
+
 export class TikTok {
   constructor({ clientKey = "", clientSecret = "", redirectUri = "", store, clock, fetch = globalThis.fetch, log = () => {} } = {}) {
     Object.assign(this, { clientKey, clientSecret, redirectUri, store, clock, fetch, log });
@@ -75,7 +86,7 @@ export class TikTok {
     const j = await r.json().catch(() => ({}));
     const code = j?.error?.code;
     if (!r.ok || (code && code !== "ok")) {
-      const e = fail(r.status, `TikTok answered ${r.status}${code ? " " + code : ""}: ${j?.error?.message || "no detail"}`);
+      const e = fail(r.status, `TikTok answered ${r.status}${code ? " " + code : ""}: ${EXPLAIN[code] || j?.error?.message || "no detail"}`);
       e.code = code;
       if (/access_token_invalid|scope_not_authorized|unaudited_client|invalid_grant/i.test(code || "")) { e.credentials = true; e.service = "tiktok"; }
       if (/rate_limit|spam_risk/i.test(code || "")) e.rateLimited = true;

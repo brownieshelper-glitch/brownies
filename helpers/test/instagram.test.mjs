@@ -123,7 +123,7 @@ test("Facebook Login: the dialog asks the Page scopes, the code becomes a long u
     const r = await get(auth.link().replace("https://gw.test", ""));
     const to = new URL(r.headers.get("location"));
     assert.equal(to.origin + to.pathname, "https://www.facebook.com/v21.0/dialog/oauth");
-    assert.equal(to.searchParams.get("scope"), "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement");
+    assert.equal(to.searchParams.get("scope"), "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management");
     assert.equal(to.searchParams.get("response_type"), "code");
     const state = to.searchParams.get("state");
     assert.equal((await get(`/instagram/callback?error=access_denied&error_reason=user_denied&state=${state}`)).status, 400);
@@ -144,7 +144,17 @@ test("Facebook Login: the dialog asks the Page scopes, the code becomes a long u
     await ig.me();
     assert.equal(m.longs, 2);
     assert.equal(ig.tokens().access_token, "long-2");
-    // no Page with an Instagram account: a credentials error that says what to link
+    // a Page owned by a business portfolio: /me/accounts is empty, the portfolio lookup finds it and reads its token
+    m.pages = [];
+    let bizData = [{ id: "biz1", name: "Brownies", owned_pages: { data: [{ id: "p7", name: "Feedthebrownies", instagram_business_account: { id: "17841499", username: "feedthebrownies" } }] } }];
+    mf.on("GET", /graph\.facebook\.com\/v21\.0\/me\/businesses\?/, () => ({ json: { data: bizData } }));
+    mf.on("GET", /graph\.facebook\.com\/v21\.0\/p7\?/, (c) => (new URL(c.url).searchParams.get("access_token").startsWith("long-") ? { json: { id: "p7", name: "Feedthebrownies", access_token: "page-tok-1", instagram_business_account: { id: "17841499", username: "feedthebrownies", name: "Brownies" } } } : { status: 401, json: { error: { code: 190, message: "no" } } }));
+    ig.disconnect();
+    const link4 = auth.link(); const state4 = new URL((await get(link4.replace("https://gw.test", ""))).headers.get("location")).searchParams.get("state");
+    assert.equal((await get(`/instagram/callback?code=good-code&state=${state4}`)).status, 200);
+    assert.equal(ig.tokens().page_id, "p7"); assert.equal(ig.tokens().page_token, "page-tok-1");
+    // no Page with an Instagram account anywhere: a credentials error that says what to link
+    bizData = [];
     m.pages = [{ id: "p0", name: "Old page", access_token: "page-tok-0" }];
     ig.disconnect();
     const link3 = auth.link(); const state3 = new URL((await get(link3.replace("https://gw.test", ""))).headers.get("location")).searchParams.get("state");

@@ -13,7 +13,7 @@ const IG_API = "https://graph.instagram.com";
 const FB_API = "https://graph.facebook.com";
 const VERSION = "v21.0";
 export const SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
-export const FB_SCOPES = ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement"];
+export const FB_SCOPES = ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement", "business_management"]; // business_management: Pages owned by a business portfolio are listed only with it
 export const LOGINS = ["instagram", "facebook"];
 const TOKENS_KEY = "instagram:tokens";
 
@@ -70,17 +70,39 @@ export class Instagram {
     const pr = await this.fetch(`${FB_API}/${VERSION}/me/accounts?${new URLSearchParams({ fields: "id,name,access_token,instagram_business_account{id,username,name}", access_token: l.access_token })}`);
     const pages = await pr.json().catch(() => ({}));
     if (!pr.ok || !Array.isArray(pages.data)) throw cred(`Facebook did not list the Pages (${pr.status}${pages.error?.message ? ": " + pages.error.message : ""})`);
-    const page = pages.data.find((p) => p.instagram_business_account?.id);
+    let page = pages.data.find((p) => p.instagram_business_account?.id);
+    if (!page) page = await this.pageThroughBusinesses(l.access_token);
     if (!page) {
-      let granted = "unknown";
+      let granted = "unknown", who = "unknown", chosen = "unknown";
       try { const g = await (await this.fetch(`${FB_API}/${VERSION}/me/permissions?${new URLSearchParams({ access_token: l.access_token })}`)).json(); if (Array.isArray(g.data)) granted = g.data.filter((x) => x.status === "granted").map((x) => x.permission).join(", ") || "none"; } catch { granted = "unknown"; }
-      throw cred(`no Facebook Page you manage has a linked Instagram professional account (${pages.data.length} Page${pages.data.length === 1 ? "" : "s"} seen; permissions granted: ${granted}): in the Facebook screen tick the Brownies Page and the Brownies Instagram account, and make sure the Page has the Instagram account under Account collegati, then connect again`);
+      try { const m = await (await this.fetch(`${FB_API}/${VERSION}/me?${new URLSearchParams({ fields: "id,name", access_token: l.access_token })}`)).json(); if (m.name) who = `${m.name} (${m.id})`; } catch { who = "unknown"; }
+      try { const d = await (await this.fetch(`${FB_API}/${VERSION}/debug_token?${new URLSearchParams({ input_token: l.access_token, access_token: `${this.appId}|${this.appSecret}` })}`)).json(); const gs = d.data?.granular_scopes; if (Array.isArray(gs)) { const ps = gs.find((x) => x.scope === "pages_show_list"); chosen = ps ? (Array.isArray(ps.target_ids) && ps.target_ids.length ? ps.target_ids.join(", ") : "all Pages (none chosen one by one)") : "the Pages permission carries no Page list"; } } catch { chosen = "unknown"; }
+      throw cred(`no Facebook Page you manage has a linked Instagram professional account (${pages.data.length} Page${pages.data.length === 1 ? "" : "s"} seen; logged in as ${who}; Pages ticked in the Facebook screen: ${chosen}; permissions granted: ${granted}): the account that logs in must be an admin of the Brownies Page, and the Page must be ticked in the Facebook screen`);
     }
     const ig = page.instagram_business_account;
     const t = { login: "facebook", access_token: l.access_token, expiresAt: this.now() + Number(l.expires_in || 60 * 86400) * 1000, obtainedAt: this.now(), page_id: String(page.id), page_name: page.name || null, page_token: page.access_token || null, user_id: String(ig.id), username: ig.username || null, account_type: "professional", permissions: FB_SCOPES };
     this.saveTokens(t);
     this.log(`[instagram] connected through the Page ${page.name || page.id} (Facebook Login)`);
     return { id: t.user_id, username: t.username, name: t.username ? "@" + t.username : "the Instagram account", account_type: "professional", page: page.name || page.id };
+  }
+
+  /// A Page owned by a business portfolio does not always show in /me/accounts: walk the portfolios the user is in,
+  /// their owned Pages, and read each Page's own token with the user token. Null when nothing fits.
+  async pageThroughBusinesses(userToken) {
+    try {
+      const br = await this.fetch(`${FB_API}/${VERSION}/me/businesses?${new URLSearchParams({ fields: "id,name,owned_pages{id,name,instagram_business_account{id,username,name}}", access_token: userToken })}`);
+      const b = await br.json().catch(() => ({}));
+      const candidates = [];
+      for (const biz of Array.isArray(b.data) ? b.data : []) for (const pg of biz.owned_pages?.data || []) candidates.push(pg);
+      this.log(`[instagram] ${candidates.length} Page${candidates.length === 1 ? "" : "s"} through the business portfolios`);
+      for (const pg of candidates) {
+        const pr = await this.fetch(`${FB_API}/${VERSION}/${pg.id}?${new URLSearchParams({ fields: "id,name,access_token,instagram_business_account{id,username,name}", access_token: userToken })}`);
+        const full = await pr.json().catch(() => ({}));
+        if (pr.ok && full.access_token && full.instagram_business_account?.id) return full;
+        this.log(`[instagram] Page ${pg.name || pg.id}: ${!pr.ok ? "not readable" : !full.access_token ? "no Page token" : "no Instagram account linked"}`);
+      }
+    } catch (e) { this.log(`[instagram] the portfolio lookup failed: ${e.message}`); }
+    return null;
   }
 
   /// A live token. Instagram Login: the long-lived one, renewed once it is a week old (Instagram renews only after

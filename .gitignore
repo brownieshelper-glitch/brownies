@@ -51,4 +51,10 @@ helpers/test/season.test.mjs
 helpers/helpers/zest.mjs
 helpers/test/zest.test.mjs
 helpers/helpers/contests.mjs
+helpers/helpers/truffle.mjs
+helpers/test/truffle.test.mjs
+helpers/test/sprinkle-instagram.test.mjs
 helpers/test/contests.test.mjs
+
+# the team-buy bundle launcher and its records: kept off the public repository on purpose (keys never live here either)
+eth-launch/bundle/

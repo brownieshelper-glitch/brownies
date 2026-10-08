@@ -33,6 +33,10 @@ import { JobsApi, totalsView, money as moneyFmt, OPEN as OPEN_JOB_STATES, STATE_
 import { Studio } from "./lib/studio.mjs";
 import { youtubeFromEnv } from "./lib/youtube.mjs";
 import { TikTok, TikTokAuth } from "./lib/tiktok.mjs";
+import { Instagram } from "./lib/instagram.mjs";
+import { LinkedIn } from "./lib/linkedin.mjs";
+import { Connect } from "./lib/connect.mjs";
+import { Clips } from "./lib/clips.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
@@ -74,6 +78,10 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const github = new GitHub({ token: S.github.token, repo: S.github.repo, log });
   const youtube = youtubeFromEnv(env, { log }); // the project's channel (lib/youtube.mjs); Sprinkle uploads there when it is configured
   const tiktok = new TikTok({ clientKey: S.tiktok.clientKey, clientSecret: S.tiktok.clientSecret, redirectUri: `${S.gatewayUrl}/tiktok/callback`, store, clock, log }); // lib/tiktok.mjs; connected by the owner with /tiktok
+  // Instagram and LinkedIn, connected by the owner with /instagram and /linkedin; the clip links give Instagram a public address for a finished video
+  const instagram = new Instagram({ appId: S.instagram.appId, appSecret: S.instagram.appSecret, redirectUri: `${S.gatewayUrl}/instagram/callback`, store, clock, log });
+  const linkedin = new LinkedIn({ clientId: S.linkedin.clientId, clientSecret: S.linkedin.clientSecret, version: S.linkedin.version, redirectUri: `${S.gatewayUrl}/linkedin/callback`, store, clock, log });
+  const clips = new Clips({ store, clock, baseUrl: S.gatewayUrl, dir: priv.helpers?.sprinkle?.videosDir || env.VIDEOS_DIR || "/var/lib/brownies/videos", log });
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
@@ -93,7 +101,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     all[name] = new Recruit(recruitDeps(spec));
   }
   const off = offList(env); // HELPERS_OFF="fudge" keeps a helper quiet for now: built, shown in the health line, but no job runs
-  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, youtube, tiktok, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
+  const W = { S, config, clock, store, gateway, telegram, alerts, brain, x, github, youtube, tiktok, instagram, linkedin, clips, helpers: all, scheduler: null, off, hidden: [], startedAt: Date.now(), requestRestart: null };
   // a hire or a retirement changes the schedule in place: the retired brownie's jobs are dropped, a new one's are
   // added, and the scheduler is started again, which recomputes every next run (the day's flags keep a slot that
   // already ran from running twice). No process restart, so the pages and the bot keep answering.
@@ -131,7 +139,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
@@ -155,6 +163,20 @@ export async function build({ env = process.env, configFile = null } = {}) {
       if (sub === "test") { if (!all.sprinkle?.tiktokLatest) return "There is no video brownie here."; const r = await all.sprinkle.tiktokLatest(); return r ? true : "No finished video to send, or TikTok refused it. Check the log."; }
       return `Open this link, log in to TikTok with the Brownies account and allow the app:\n${W.tiktokAuth.link()}\nIt works once, for ten minutes.`;
     }
+    if (cmd === "instagram") {
+      if (!W.instagram.configured) return "Instagram is not set up: INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET are empty in the helpers env.";
+      const sub = text.trim().toLowerCase();
+      if (sub === "status" || (!sub && W.instagram.connected)) { const t = W.instagram.tokens(); return t ? `Instagram is connected (@${t.username || t.user_id}, ${t.account_type || "professional"} account), ${W.instagram.daysLeft()} days of access left, renewed by itself.\nEvery cartoon episode and trend clip that goes to TikTok goes up as a reel too; memes go up as pictures. /instagram test posts the latest clip now. /instagram link connects again.` : "Instagram is not connected. Send /instagram link."; }
+      if (sub === "test") { if (!all.sprinkle?.instagramLatest) return "There is no video brownie here."; const r = await all.sprinkle.instagramLatest(); return r ? `Posted on Instagram${r.url ? ": " + r.url : ""}.` : "No finished clip to send, or Instagram refused it. Check the log."; }
+      return `Open this link, log in to Instagram with the Brownies account (a business or creator account) and allow the app:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`;
+    }
+    if (cmd === "linkedin") {
+      if (!W.linkedin.configured) return "LinkedIn is not set up: LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET are empty in the helpers env.";
+      const sub = text.trim().toLowerCase();
+      if (sub === "status" || (!sub && W.linkedin.connected)) { const t = W.linkedin.tokens(); return t ? `LinkedIn is connected (${t.name || "the profile"}), ${W.linkedin.daysLeft()} days of access left (LinkedIn gives 60; Truffle asks for a new link in time).\n/truffle shows the posting. /linkedin link connects again.` : "LinkedIn is not connected. Send /linkedin link."; }
+      return `Open this link, log in to LinkedIn with your own profile and allow the app:\n${W.linkedinAuth.link()}\nIt works once, for ten minutes.`;
+    }
+    if (cmd === "truffle") { if (!all.truffle) return "There is no LinkedIn brownie here."; const r = await all.truffle.onRequest(text); return r === true ? true : (r || "Truffle could not do that now; check the log."); }
     if (cmd === "zest") { if (!all.zest) return "There is no scout here."; const r = await all.zest.onRequest(text || "hunt"); return r ? true : "Zest could not scout now (budget or an error). Check the log."; }
     if (cmd === "jobs") {
       const t = totalsView(store);
@@ -187,6 +209,8 @@ export async function build({ env = process.env, configFile = null } = {}) {
   crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
   // TikTok: /tiktok in the owner's chat gives a one-time link; the browser comes back to /tiktok/callback with the code
   W.tiktokAuth = new TikTokAuth({ tiktok, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `TikTok is connected (${me.name}). From now on the vertical copy of every finished video lands in your TikTok inbox as a draft to post from the app. /tiktok test sends the latest one now.`).catch(() => {}); } });
+  W.instagramAuth = new Connect({ name: "instagram", client: instagram, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `Instagram is connected (${me.name}${me.account_type ? ", " + me.account_type.toLowerCase() + " account" : ""}). From now on every cartoon episode and trend clip that goes to TikTok goes up as a reel too, and memes as pictures. /instagram test posts the latest clip now.`).catch(() => {}); } });
+  W.linkedinAuth = new Connect({ name: "linkedin", client: linkedin, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `LinkedIn is connected (${me.name}). Truffle writes one post a day about the business for your Approve; /truffle post writes one now, /truffle profile drafts your headline and About, /truffle learn and /truffle study teach it the voice you like.`).catch(() => {}); } });
   scheduler.isOff = (name) => W.admin.isPaused(name);
   return W;
 }
@@ -204,6 +228,8 @@ async function main() {
   if (!W.github.configured) log("[helpers] GitHub is not configured: Nib keeps its notes in the store, Chip has no tasks");
   log(W.youtube?.configured ? "[helpers] YouTube is connected: finished videos go up unlisted, the owner publishes" : "[helpers] YouTube is not configured: videos stay in Telegram");
   log(!W.tiktok.configured ? "[helpers] TikTok is not configured" : W.tiktok.connected ? `[helpers] TikTok is connected (${W.tiktok.tokens()?.display_name || W.tiktok.tokens()?.username || "the Brownies account"}): vertical videos go to the owner's inbox as drafts` : "[helpers] TikTok app is set; the owner connects the account with /tiktok");
+  log(!W.instagram.configured ? "[helpers] Instagram is not configured" : W.instagram.connected ? `[helpers] Instagram is connected (@${W.instagram.tokens()?.username || W.instagram.tokens()?.user_id}): cartoon clips go up as reels` : "[helpers] Instagram app is set; the owner connects the account with /instagram");
+  log(!W.linkedin.configured ? "[helpers] LinkedIn is not configured" : W.linkedin.connected ? `[helpers] LinkedIn is connected (${W.linkedin.tokens()?.name || "the profile"}), ${W.linkedin.daysLeft()} days left` : "[helpers] LinkedIn app is set; the owner connects the profile with /linkedin");
   if (W.off.length) log(`[helpers] switched off by HELPERS_OFF: ${W.off.join(", ")} (no job runs for them)`);
 
   const started = Date.now();
@@ -213,6 +239,9 @@ async function main() {
     if (req.url.startsWith("/jobs/")) return W.jobs.handle(req, res);
     if (req.url.startsWith("/studio/")) return W.studio.handle(req, res);
     if (req.url.startsWith("/tiktok/")) return W.tiktokAuth.handle(req, res);
+    if (req.url.startsWith("/instagram/")) return W.instagramAuth.handle(req, res);
+    if (req.url.startsWith("/linkedin/")) return W.linkedinAuth.handle(req, res);
+    if (req.url.startsWith("/clips/")) return W.clips.handle(req, res);
     const now = Date.now();
     const body = {
       ok: true, mode: S.mode, uptimeSeconds: Math.round((now - started) / 1000), reports: gateway.reports, thoughts: brain.calls,

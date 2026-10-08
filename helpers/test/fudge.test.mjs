@@ -143,3 +143,27 @@ test("a post goes to the Facebook Page too when the owner allowed it; a refusal 
   W.or.reply = () => POSTS[3];
   assert.equal((await W.fudge.post({ nth: 3 })).text, POSTS[3]);
 });
+
+test("clips and memes have their own daily cap on X: three text posts do not block them, and a third file post waits for tomorrow", async () => {
+  const { Fudge } = await import("../helpers/fudge.mjs");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const W = makeWorld({ reply: (body, n) => POSTS[(n - 1) % POSTS.length] });
+  const on = new Fudge({ config: { ...W.helpersCfg.fudge, media: true, maxMediaPostsPerDay: 2 }, brain: W.brain, gateway: W.gateway, store: W.store, clock: W.clock, alerts: W.alerts, facts: "- Every trade pays a 2% tax.", log: () => {}, x: W.x, siteUrl: "https://feedthebrownies.com" });
+  W.brain.helpers.fudge = { ...W.helpersCfg.fudge, media: true };
+  for (let i = 1; i <= 3; i++) assert.ok(await on.post({ nth: i }), `text post ${i}`);
+  assert.equal(await on.post({ nth: 4 }), null, "the three text posts are the day's cap");
+  const dir = mkdtempSync(join(tmpdir(), "fudge-cap-"));
+  const png = join(dir, "clip.png"); writeFileSync(png, Buffer.alloc(300, 1));
+  W.fetch.on("POST", "api.x.com/2/media/upload/initialize", () => ({ json: { data: { id: "m9" } } }));
+  W.fetch.on("POST", /media\/upload\/m9\/append$/, () => ({ status: 204 }));
+  W.fetch.on("POST", /media\/upload\/m9\/finalize$/, () => ({ json: { data: { id: "m9" } } }));
+  W.or.reply = (body, n) => `Clip words number ${n}, about the brownies at work.`;
+  assert.ok((await on.postMedia({ topic: "the clip", files: [png] }))?.url, "a clip still goes out after three text posts");
+  assert.ok((await on.postMedia({ topic: "the meme", files: [png] }))?.url, "a meme too");
+  assert.equal(await on.postMedia({ topic: "one more", files: [png] }), null, "two with files a day");
+  assert.equal(W.xm.posts.length, 5);
+  assert.equal(on.postsToday(W.clock.now()), 3); assert.equal(on.mediaToday(W.clock.now()), 2);
+  assert.equal(W.gw.of("fudge", "status").filter((r) => /clip on X/.test(r.title)).length, 2, "the refused third one never started");
+});

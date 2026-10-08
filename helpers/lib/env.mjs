@@ -19,7 +19,7 @@ export const NAMES = [
 /// The helpers switched off for now, from HELPERS_OFF="fudge,chip" (names, any case, spaces allowed). A helper
 /// that is off is built and shown in the health line, but none of its jobs run and it does not listen.
 export function offList(env = process.env) {
-  return String(env.HELPERS_OFF || "").toLowerCase().split(/[\s,;]+/).filter((s) => ["fudge", "crumb", "nib", "chip"].includes(s));
+  return String(env.HELPERS_OFF || "").toLowerCase().split(/[\s,;]+/).filter((s) => /^[a-z][a-z0-9_-]*$/.test(s));
 }
 
 /// Reads the file into `env` (names not already set). Returns the number of names read. A missing file reads nothing.
@@ -30,7 +30,9 @@ export function readEnvFile(file, env = process.env) {
     const line = raw.replace(/\r$/, "");
     const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
     if (!m || line.trimStart().startsWith("#")) continue;
-    const value = m[2].replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+    let value = m[2].trim();
+    if (/^".*"$/.test(value) || /^'.*'$/.test(value)) value = value.slice(1, -1);
+    else value = value.replace(/\s+#.*$/, "").trim(); // an unquoted value ends where a comment starts
     if (env[m[1]] === undefined && value !== "") { env[m[1]] = value; n++; }
   }
   return n;

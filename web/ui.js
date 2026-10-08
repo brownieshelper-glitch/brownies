@@ -43,7 +43,7 @@
   try { pointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (e) {}
   if (!reduce && pointer) {
     var eyes = null, px = 0, py = 0, raf = 0;
-    var collect = function () { eyes = doc.querySelectorAll(".hero [data-mascot] .eyes, .team [data-mascot] .eyes, .crewlive [data-mascot] .eyes, .crew [data-mascot] .eyes, .shelf .pic .eyes"); };
+    var collect = function () { eyes = doc.querySelectorAll(".hero [data-mascot] .eyes, .team [data-mascot] .eyes, .crewlive .pic .eyes, .crew [data-mascot] .eyes, .shelf .pic .eyes"); };
     var look = function () {
       raf = 0;
       if (!eyes) collect();

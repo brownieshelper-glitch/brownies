@@ -18,6 +18,7 @@ const RULES = `Your task now: answer a message in a Telegram chat.
 - If someone asks for a private key, a seed phrase or money, say no in one sentence.`;
 
 const FALLBACK = "I do not have a good answer for that one. The docs have the details: https://feedthebrownies.com/docs.html";
+const ALLOWANCE = { burst: 5, day: 40, all: 150 }; // answers for one stranger's chat in ten minutes, in a day, and for all strangers in a day
 
 const money = (micro) => `$${(Number(micro || 0) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 const num = (n) => Number(n || 0).toLocaleString("en-US");
@@ -118,7 +119,11 @@ export class Crumb extends Helper {
     // the owner answering "Reply to this message with a note": the note goes to the pull request
     if (isOwner && m.reply_to_message) {
       const a = this.store.approvalByMessage(chatId, m.reply_to_message.message_id);
-      if (a && a.state === "rejected" && this.onNote) { await this.onNote(a.id, m.text.trim()); await this.tg.sendMessage(chatId, "Added your note to the pull request.", { replyTo: m.message_id }); return "note"; }
+      if (a && a.state === "rejected" && this.onNote) {
+        const ok = await this.onNote(a.id, m.text.trim());
+        await this.tg.sendMessage(chatId, ok ? "Added your note to the pull request." : "This card is not a pull request, so there is no place to add a note.", { replyTo: m.message_id });
+        return "note";
+      }
     }
     // /stats works everywhere, costs nothing, and never goes through a model
     if (/^\/stats(@\w+)?(\s|$)/i.test(m.text.trim())) return this.stats(m);
@@ -174,10 +179,32 @@ export class Crumb extends Helper {
     return /\b(brownies?|crumb|fudge|nib|chip)\b/i.test(t);
   }
 
+  /// Strangers get a limited number of answers: a burst of 5 in ten minutes and 40 a day for one chat, 150 a day for
+  /// all of them together. Over the limit nothing goes to the model; a private chat hears one fixed line, the group
+  /// hears nothing. The owner is never limited.
+  allowance(chat, now) {
+    const day = new Date(now).toISOString().slice(0, 10);
+    if (this.quotaDay !== day) { this.quotaDay = day; this.quota = new Map(); this.quotaAll = 0; }
+    const q = this.quota.get(chat) || { recent: [], day: 0, told: false };
+    q.recent = q.recent.filter((t) => now - t < 10 * 60_000);
+    const ok = q.recent.length < ALLOWANCE.burst && q.day < ALLOWANCE.day && this.quotaAll < ALLOWANCE.all;
+    if (ok) { q.recent.push(now); q.day++; this.quotaAll++; }
+    this.quota.set(chat, q);
+    return { ok, told: q.told, tell: () => { q.told = true; } };
+  }
+
   /// Answers one message with the facts, the live numbers and the last turns of that chat.
   async answer(m) {
     const now = this.clock.now();
     const chat = String(m.chat.id);
+    if (!(this.ownerChatId && chat === this.ownerChatId)) {
+      const a = this.allowance(chat, now);
+      if (!a.ok) {
+        this.log(`[crumb] chat ${chat} is over its allowance; nothing goes to the model`);
+        if (m.chat.type === "private" && !a.told) { a.tell(); await this.tg.sendMessage(chat, "That is all I can answer for now. Ask me again in a little while.", { replyTo: m.message_id }); }
+        return null;
+      }
+    }
     const who = m.from?.first_name || m.from?.username || "someone";
     this.store.addTurn(chat, "user", m.text.trim(), { who, at: now });
     if (!(await this.ready())) return null;

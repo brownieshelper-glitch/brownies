@@ -65,18 +65,21 @@ export class Scheduler {
     if (this.stopped) return;
     const now = this.clock.now();
     const runs = [];
-    for (const j of this.jobs) {
-      if (j.next > now) continue;
-      if (j.daily) {
-        const h = localParts(j.next, this.tz).h;
-        runs.push(this._runDaily(j, { at: j.next, hour: h, index: j.daily.hours.indexOf(h) }, now));
-        j.next = nextDaily(now, j.daily.hours, j.daily.minute, this.tz);
-      } else {
-        runs.push(this._run(j, { at: now }));
-        j.next = now + j.every;
+    try {
+      for (const j of this.jobs) {
+        if (j.next > now) continue;
+        if (j.daily) {
+          const h = localParts(j.next, this.tz).h, slot = { at: j.next, hour: h, index: j.daily.hours.indexOf(h) };
+          j.next = nextDaily(now, j.daily.hours, j.daily.minute, this.tz);
+          try { runs.push(this._runDaily(j, slot, now)); } catch (e) { this.log(`[${j.helper}] job ${j.id} could not start: ${e.message}`); }
+        } else {
+          j.next = now + j.every;
+          try { runs.push(this._run(j, { at: now })); } catch (e) { this.log(`[${j.helper}] job ${j.id} could not start: ${e.message}`); }
+        }
       }
+    } finally {
+      this._arm(); // whatever a start threw, the next tick is booked
     }
-    this._arm();
     await Promise.all(runs);
   }
 

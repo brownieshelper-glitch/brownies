@@ -60,12 +60,14 @@ export class Ambient {
   }
 
   /// The paid request: quote, then the stream through the payer. Returns { response, paid, quote, upstreamModel }.
-  async chat(body, { quote = null } = {}) {
+  async chat(body, { quote = null, maxMicro = null } = {}) {
     const up = this.body(body);
     const q = quote || await this.quote(up);
+    // the pantry pays what the quote allowed and a little rounding, never whatever the 402 happens to ask
+    const cap = maxMicro != null ? maxMicro : Math.ceil(Number(q.maxMicro || q.micro || 0) * 1.05);
     const { response, paid } = await this.payer.fetch(`${this.baseUrl}/paid/chat/v2`, {
       method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream", ...q.headers }, body: JSON.stringify(up),
-    });
+    }, { maxMicro: cap });
     return { response, paid, quote: q, upstreamModel: up.model };
   }
 }

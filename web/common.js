@@ -65,6 +65,7 @@
       "function tip(uint256 id, uint256 amount)",
       "error TooEarly(uint256 nextRelease)",
       "error NothingToRelease()",
+      "error BadHelper()",
     ],
     harvester: [
       "function claim()",

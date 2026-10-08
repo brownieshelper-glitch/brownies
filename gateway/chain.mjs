@@ -65,6 +65,7 @@ export class Chain {
     this.releaseMinMicro = BigInt(Math.round(Number(cfg.releaseMinSugar ?? 1) * 1e6));
     this.signer = cfg.keeperPrivateKey ? new Wallet(cfg.keeperPrivateKey, this.provider) : null;
     this.lastWarn = new Map(); // topic -> time, so a standing problem is logged once an hour, not every tick
+    this.claimMemo = null; this.claimStuck = 0; this.claimBackoffUntil = 0; // a claim that moved nothing is not repeated every tick
     this.stopped = false;
   }
 
@@ -205,9 +206,26 @@ export class Chain {
     if (this.harvester) {
       const s = await this.harvesterState();
       const due = s.fresh >= this.claimMinWei || s.pendingRest >= s.minSwap || s.mainOwed > 0n;
-      // claim() refuses to run under its gas floor (it must not be starved into a silent no-op); give it room
-      if (due) out.harvested = await this.send(`harvester.claim (fresh ${formatEther(s.fresh)}, waiting ${formatEther(s.pendingRest)} WETH)`, this.harvester, "claim", { gasLimit: 2_500_000 });
-      else out.skipped.push(`harvester: ${formatEther(s.fresh)} WETH fresh, nothing due`);
+      // a claim that left the waiting swap and the owed ETH exactly as they were (the price off its band, the staking
+      // stopped, the main wallet refusing ETH) is not sent again every five minutes: it waits 1, 2, 4... hours, up to a
+      // day, unless fresh fees arrive, which always get booked
+      const unchanged = this.claimMemo && this.claimMemo.pendingRest === s.pendingRest && this.claimMemo.mainOwed === s.mainOwed;
+      if (due && unchanged && s.fresh < this.claimMinWei && Date.now() < this.claimBackoffUntil) {
+        out.skipped.push(`harvester: the last claim moved nothing; next try at ${new Date(this.claimBackoffUntil).toISOString()}`);
+      } else if (due) {
+        // claim() refuses to run under its gas floor (it must not be starved into a silent no-op); give it room
+        out.harvested = await this.send(`harvester.claim (fresh ${formatEther(s.fresh)}, waiting ${formatEther(s.pendingRest)} WETH)`, this.harvester, "claim", { gasLimit: 2_500_000 });
+        if (out.harvested?.tx) {
+          const after = await this.harvesterState();
+          if (after.pendingRest + after.mainOwed > 0n && after.pendingRest === s.pendingRest && after.mainOwed === s.mainOwed) {
+            this.claimStuck++;
+            const hours = Math.min(24, 2 ** (this.claimStuck - 1));
+            this.claimBackoffUntil = Date.now() + hours * 3600_000;
+            this.claimMemo = { pendingRest: after.pendingRest, mainOwed: after.mainOwed };
+            this.warnOnce("claim-stuck", `[keeper] harvester.claim moved nothing: ${formatEther(after.pendingRest)} WETH still waits for its swap and ${formatEther(after.mainOwed)} ETH is still owed (the price off its band, the staking stopped, or the main wallet refusing ETH); next try in ${hours} h`);
+          } else { this.claimStuck = 0; this.claimMemo = null; this.claimBackoffUntil = 0; }
+        }
+      } else out.skipped.push(`harvester: ${formatEther(s.fresh)} WETH fresh, nothing due`);
     }
 
     // 3. the brownies' daily budget

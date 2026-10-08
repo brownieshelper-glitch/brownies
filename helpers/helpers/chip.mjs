@@ -239,7 +239,7 @@ ${a.url}`);
   /// The owner's note after a rejection, added to the pull request.
   async addNote(id, text) {
     const a = this.store.approval(id);
-    if (!a) return false;
+    if (!a || !/^\d+$/.test(String(a.ref))) return false; // only a pull request has a place for a note
     await this.github.comment(Number(a.ref), `Owner's note: ${cut(text, 1000)}`);
     this.store.setApprovalNote(id, cut(text, 1000));
     return true;

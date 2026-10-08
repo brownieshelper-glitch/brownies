@@ -68,8 +68,8 @@ test("env: the file is read without ever printing a value, and the names are che
   assert.equal(readEnvFile(join(dir, "missing.env"), env), 0);
 });
 
-test("env: HELPERS_OFF names the helpers that stay quiet, unknown names are ignored", () => {
-  assert.deepEqual(offList({ HELPERS_OFF: "Fudge, chip;nobody" }), ["fudge", "chip"]);
+test("env: HELPERS_OFF names the helpers that stay quiet, hidden ones too; junk is ignored", () => {
+  assert.deepEqual(offList({ HELPERS_OFF: "Fudge, chip;sprinkle 3bad !x" }), ["fudge", "chip", "sprinkle"]);
   assert.deepEqual(offList({}), []);
   assert.deepEqual(offList({ HELPERS_OFF: "" }), []);
 });

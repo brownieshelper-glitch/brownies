@@ -197,7 +197,14 @@
   }
   /// Approve exactly what the next call needs, when the allowance is short.
   async function approveIfShort(btn, token, spender, amountNeeded, name) {
-    const have = await token.allowance(account(), spender);
+    // a second click while the first is under way does nothing: the button is held from the first read to the last receipt
+    if (btn.disabled || btn.classList.contains("busy")) return false;
+    const label = btn.textContent;
+    btn.disabled = true; btn.classList.add("busy"); btn.textContent = "Checking";
+    let have;
+    try { have = await token.allowance(account(), spender); }
+    catch (e) { toast(explainError(e), "err"); return false; }
+    finally { btn.textContent = label; btn.classList.remove("busy"); btn.disabled = false; }
     if (have >= amountNeeded) return true;
     const r = await tx(btn, () => signerOf(token).approve(spender, amountNeeded), `${name} approved. Now confirm the second step.`, EXP);
     return !!r;

@@ -32,8 +32,10 @@ test("the offer; a good request lands on the board once and the owner is told", 
   const job = W.store.moneyJob(1);
   assert.equal(job.kind, "studio"); assert.equal(job.state, "found"); assert.equal(job.source, "studio-form"); assert.equal(job.title, "Studio request: Moon Cat");
   assert.equal(job.url, "https://x.com/mooncat"); assert.equal(job.effort, "high");
-  assert.match(job.summary, /^A cat coin for the Base community.*\nContact: @mooncat on Telegram\nLink: https:\/\/x\.com\/mooncat$/);
-  assert.equal(job.nextStep, "Reply to @mooncat on Telegram with the proposal: 0.25 ETH plus 10% of the creator fee through the splitter.");
+  // the idea is on the board; who to answer is kept aside for the owner, never on the public page
+  assert.equal(job.summary, "A cat coin for the Base community with a daily cartoon, we have 3,000 followers already.");
+  assert.equal(job.nextStep, "Reply to the client with the proposal: 0.25 ETH plus 10% of the creator fee through the splitter. The contact is in your Telegram and in the control room.");
+  assert.deepEqual(JSON.parse(W.store.getMeta("job:1:contact")), { contact: "@mooncat on Telegram", link: "https://x.com/mooncat" });
   assert.equal(job.log[0].text, "asked through the studio form");
   const msg = W.tg.sent.at(-1);
   assert.equal(msg.chat_id, "999");

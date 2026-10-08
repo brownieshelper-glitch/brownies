@@ -59,7 +59,7 @@ export class X402Payer {
   get address() { return this.wallet.address; }
 
   /// Signs the requirement we can meet in a PAYMENT-REQUIRED body. Returns { header, payload, micro }.
-  async sign(required) {
+  async sign(required, { maxMicro = null } = {}) {
     const req = pickRequirement(required, { chainId: this.chainId, asset: this.asset });
     if (!req) {
       const offered = (Array.isArray(required?.accepts) ? required.accepts : []).map((a) => `${a?.scheme}/${a?.network}`).join(", ") || "nothing";
@@ -67,7 +67,8 @@ export class X402Payer {
     }
     const micro = Number(req.amount);
     if (!Number.isInteger(micro) || micro < 0) throw new Error(`x402: bad amount ${req.amount}`);
-    if (micro > this.maxMicro) throw new Error(`x402: the price ${(micro / 1e6).toFixed(6)} USDC is over the cap of ${(this.maxMicro / 1e6).toFixed(2)} USDC per request`);
+    const cap = maxMicro != null && Number.isFinite(Number(maxMicro)) ? Math.min(this.maxMicro, Math.max(0, Math.ceil(Number(maxMicro)))) : this.maxMicro;
+    if (micro > cap) throw new Error(`x402: the price ${(micro / 1e6).toFixed(6)} USDC is over the cap of ${(cap / 1e6).toFixed(cap === this.maxMicro ? 2 : 6)} USDC ${cap === this.maxMicro ? "per request" : "for this request"}`);
     const sec = Math.floor(this.now() / 1000);
     const window = Math.min(Math.max(Number(req.maxTimeoutSeconds) || 300, 60), 3600);
     const authorization = { from: this.address, to: getAddress(req.payTo), value: String(micro), validAfter: String(sec - 600), validBefore: String(sec + window), nonce: hexlify(randomBytes(32)) };
@@ -79,14 +80,14 @@ export class X402Payer {
 
   /// fetch that pays: the request, the 402, the signed retry. Returns { response, paid }; paid is null when the
   /// resource asked for nothing. A second 402, a price over the cap or an unknown chain are errors, not payments.
-  async fetch(url, init = {}) {
+  async fetch(url, init = {}, { maxMicro = null } = {}) {
     const first = await this.fetchRaw(url, init);
     if (first.status !== 402) return { response: first, paid: null };
     const header = first.headers.get("payment-required");
     if (!header) throw new Error(`x402: 402 without a PAYMENT-REQUIRED header from ${url}`);
     let required;
     try { required = b64.decode(header); } catch { throw new Error("x402: PAYMENT-REQUIRED is not base64 JSON"); }
-    const { header: sig, payload, micro } = await this.sign(required);
+    const { header: sig, payload, micro } = await this.sign(required, { maxMicro });
     const headers = new Headers(init.headers || {});
     headers.set("payment-signature", sig);
     const second = await this.fetchRaw(url, { ...init, headers });

@@ -43,7 +43,7 @@
     if (reset) list.replaceChildren();
     const now = Date.now();
     for (const e of rows) list.append(item(e, now));
-    if (rows.length) before = rows[rows.length - 1].at;
+    if (rows.length) before = rows[rows.length - 1].id; // the gateway pages by id
     if (empty) empty.hidden = list.childElementCount > 0;
     if (more) more.hidden = rows.length < limit;
   }

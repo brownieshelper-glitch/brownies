@@ -324,6 +324,7 @@ pre.code .k { color: var(--accent); }
 .timeline .meta { margin-top: 6px; }
 .feed-more { margin-top: 20px; }
 .empty-line { color: var(--muted-b); padding: 18px 0; }
+.dark .empty-line { color: var(--muted); }
 .timeline li { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 20px; padding: 20px 0; border-bottom: 1.5px solid var(--line-b); }
 .timeline time { font-family: var(--mono); font-size: 14px; color: var(--muted-b); padding-top: 5px; }
 .grid.tight { padding-bottom: 0; }
@@ -370,6 +371,7 @@ pre.code .k { color: var(--accent); }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .row .btn { flex: 1 1 140px; }
 .hint { color: var(--muted-b); font-size: 15px; line-height: 1.45; }
+.hint.bad { color: var(--ink); font-weight: 600; }
 .keybox { margin-top: 14px; background: var(--bone); border: var(--bw) solid var(--ink); border-radius: 16px; padding: 12px 14px; font-family: var(--mono); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 textarea.prompt { width: 100%; min-height: 96px; resize: vertical; background: var(--bone); border: var(--bw) solid var(--ink); border-radius: 16px; padding: 12px 14px; font-size: 17px; line-height: 1.5; outline: 0; transition: border-color 140ms ease; }
 textarea.prompt:focus { border-color: var(--accent); }
@@ -593,7 +595,7 @@ section.band.posts-band { border-top: var(--bw) solid var(--line); padding-top: 
 .chat-log .text { margin: 0; padding: 14px 18px; border-radius: 18px; font-size: 17px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; border: var(--bw) solid var(--ink); }
 .chat-log .you .text { background: var(--ink); color: var(--bone); }
 .chat-log .bot .text { background: var(--paper); color: var(--ink); }
-.chat-log .bot.err .text { border-color: var(--accent); color: var(--accent-2); }
+.chat-log .bot.err .text { border-color: var(--accent); border-left-width: 6px; color: var(--ink); }
 .chat-log .typing:empty::after { content: "..."; color: var(--muted-b); }
 .chat-form { margin-top: 22px; }
 .chat-form textarea { width: 100%; min-height: 96px; padding: 14px 16px; border-radius: 18px; border: var(--bw) solid var(--ink); background: var(--paper); color: var(--ink); font: inherit; font-size: 17px; line-height: 1.5; resize: vertical; }
@@ -661,7 +663,7 @@ section.band.posts-band { border-top: var(--bw) solid var(--line); padding-top: 
 .baked-head { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 14px; align-items: center; }
 .baked-card .pic { width: 84px; height: 84px; border-radius: 18px; background: var(--bone); border: var(--bw) solid var(--ink); overflow: hidden; }
 .baked-card .pic svg { display: block; width: 100%; height: 100%; }
-.baked-card h3 { font-size: 28px; font-weight: 800; line-height: 1; }
+.baked-card h3 { font-size: 28px; font-weight: 800; line-height: 1; overflow-wrap: anywhere; }
 .baked-card .job { display: block; font-family: var(--mono); font-size: 13px; color: var(--muted-b); margin-top: 6px; overflow-wrap: anywhere; }
 .baked-card .line { font-size: 17px; line-height: 1.4; font-weight: 600; }
 .baked-card .role { color: var(--muted-b); font-size: 16px; line-height: 1.45; }
@@ -682,7 +684,7 @@ section.band.posts-band { border-top: var(--bw) solid var(--line); padding-top: 
 .mine-head { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 20px; align-items: center; padding: 24px 0; }
 .mine-head .face { width: 112px; height: 112px; border-radius: 24px; background: var(--paper); border: var(--bw) solid var(--ink); overflow: hidden; }
 .mine-head .face svg { display: block; width: 100%; height: 100%; }
-.mine-head h2 { font-size: clamp(32px, 4vw, 48px); }
+.mine-head h2 { font-size: clamp(32px, 4vw, 48px); overflow-wrap: anywhere; }
 .mine-role { font-size: 18px; margin-top: 6px; line-height: 1.4; }
 .mine-line { color: var(--muted-b); font-size: 16px; margin-top: 4px; }
 .mine-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
@@ -767,7 +769,7 @@ section.band.posts-band { border-top: var(--bw) solid var(--line); padding-top: 
 .board-totals dt { font-family: var(--mono); font-size: 13px; color: var(--muted-b); }
 .board-totals dd { font-family: var(--display); font-size: 30px; font-weight: 800; margin: 4px 0 0; line-height: 1; }
 .board-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
-.board-filters button { font: inherit; font-size: 14px; font-weight: 600; min-height: 40px; padding: 0 14px; border-radius: 999px; border: var(--bw) solid var(--ink); background: var(--paper); color: inherit; cursor: pointer; }
+.board-filters button { font: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 14px; border-radius: 999px; border: var(--bw) solid var(--ink); background: var(--paper); color: inherit; cursor: pointer; }
 .board-filters button[aria-pressed="true"] { background: var(--ink); color: var(--bone); }
 .board { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; padding-bottom: 40px; }
 .job-card { border: var(--bw) solid var(--ink); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--paper); }
@@ -830,7 +832,7 @@ h1 .dot, .intro-word .dot { animation: cube-drop 700ms cubic-bezier(0.34, 1.56, 
 @keyframes cube-drop { from { transform: translateY(-0.7em); opacity: 0; } }
 /* the brownies' eyes follow the pointer (ui.js moves .pupils), and a clicked brownie jumps */
 [data-mascot] .pupils { transition: transform 260ms var(--ease-out); }
-.jump { animation: jump 560ms cubic-bezier(0.34, 1.56, 0.64, 1); transform-box: fill-box; transform-origin: 50% 100%; }
+.jump, .lineup .m.jump { animation: jump 560ms cubic-bezier(0.34, 1.56, 0.64, 1); transform-box: fill-box; transform-origin: 50% 100%; }
 @keyframes jump { 0% { transform: none; } 35% { transform: translateY(-9%) scale(0.98, 1.05); } 65% { transform: translateY(0) scale(1.05, 0.94); } 100% { transform: none; } }
 /* new lines in a feed slide in */
 .feed li { transition: opacity 400ms var(--ease-out), transform 400ms var(--ease-out); }

@@ -10,6 +10,7 @@
 //   POST /admin/command { helper, action, text?, id?, value? }     action: run | ask | off | on | cap | approve | reject | summary
 //   GET  /admin/log?n=200                  the last lines of the service log
 //   POST /admin/logout
+import { clientIp } from "./net.mjs";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { applyAction as jobAction, totalsView as jobTotals, STATE_LABEL as JOB_STATE } from "./moneyjobs.mjs";
 import { verifyMessage, getAddress, isAddress } from "ethers";
@@ -36,6 +37,7 @@ export class Admin {
   newCode() {
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
     this.W.store.setMeta("admin:code", JSON.stringify({ hash: sha(code), expiresAt: this.W.clock.now() + CODE_TTL }));
+    this.W.store.setMeta("admin:code:misses", 0);
     return code;
   }
   newNonce() {
@@ -59,8 +61,16 @@ export class Admin {
     const raw = this.W.store.getMeta("admin:code");
     if (!raw) return null;
     const c = JSON.parse(raw);
-    if (this.W.clock.now() > c.expiresAt || sha(String(code || "").trim()) !== c.hash) return null;
+    if (this.W.clock.now() > c.expiresAt) { this.W.store.setMeta("admin:code", null); return null; }
+    if (sha(String(code || "").trim()) !== c.hash) {
+      // five wrong guesses burn the code: a guesser gets nothing, the owner asks the bot for a fresh one
+      const misses = Number(this.W.store.getMeta("admin:code:misses", 0)) + 1;
+      this.W.store.setMeta("admin:code:misses", misses);
+      if (misses >= 5) { this.W.store.setMeta("admin:code", null); this.log("[admin] the one-time code was burnt after five wrong tries"); }
+      return null;
+    }
     this.W.store.setMeta("admin:code", null); // one use
+    this.W.store.setMeta("admin:code:misses", 0);
     return this.session();
   }
   loginWithWallet({ address, signature, nonce }) {
@@ -106,7 +116,7 @@ export class Admin {
       helpers: list,
       approvals: store.pendingApprovals().map((a) => ({ id: a.id, helper: a.helper, title: a.title, url: a.url, at: nowIso(a.at) })),
       videos: Number(store.getMeta("sprinkle:videos", 0)) || 0,
-      jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => { let draft = null; try { draft = JSON.parse(store.getMeta(`job:${j.id}:draft`) || "null"); } catch { draft = null; } return { ...j, stateLabel: JOB_STATE[j.state] || j.state, draft }; }) },
+      jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => { let draft = null, contact = null; try { draft = JSON.parse(store.getMeta(`job:${j.id}:draft`) || "null"); } catch { draft = null; } try { contact = JSON.parse(store.getMeta(`job:${j.id}:contact`) || "null"); } catch { contact = null; } return { ...j, stateLabel: JOB_STATE[j.state] || j.state, draft, contact }; }) },
       group: store.getMeta("tg:group:auto") || this.W.S.telegram.groupChatId || "",
       reports: this.W.gateway.reports, thoughts: brain.calls,
     };
@@ -198,8 +208,7 @@ export class Admin {
     try {
       if (req.method === "GET" && url.pathname === "/admin/nonce") return json(200, { nonce: this.newNonce(), message: adminMessage("<nonce>"), wallets: this.wallets.length });
       if (req.method === "POST" && url.pathname === "/admin/login") {
-        const ip = req.socket?.remoteAddress || "?";
-        if (this.tooMany(ip)) return json(429, { error: "too many tries; wait ten minutes" });
+        if (this.tooMany(clientIp(req))) return json(429, { error: "too many tries; wait ten minutes" });
         const body = await readJson(req);
         const s = body.code != null ? this.loginWithCode(body.code) : this.loginWithWallet(body);
         if (!s) return json(401, { error: body.code != null ? "wrong or expired code" : "the signature does not match an admin wallet" });

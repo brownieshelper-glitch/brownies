@@ -192,8 +192,8 @@ export class TikTokAuth {
       if (req.method === "GET" && url.pathname === "/tiktok/callback") {
         const raw = this.store.getMeta("tiktok:state");
         const s = raw ? JSON.parse(raw) : null;
-        this.store.setMeta("tiktok:state", null);
         if (!s || this.now() > s.expiresAt || url.searchParams.get("state") !== s.state) return page(400, "Something went wrong", "The answer from TikTok did not match the request. Ask the bot for a new link with /tiktok.");
+        this.store.setMeta("tiktok:state", null); // matched: it was good for one answer
         if (url.searchParams.get("error")) return page(400, "TikTok said no", `${url.searchParams.get("error")}: ${url.searchParams.get("error_description") || ""}`);
         const me = await this.tiktok.exchange(url.searchParams.get("code"));
         this.log(`[tiktok] connected as ${me.name}`);

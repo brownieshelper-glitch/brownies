@@ -20,7 +20,7 @@
   const DEFAULTS = ["a name check, a logo and a banner in the coin's own style", "a one-page site with the story, the links and a live chart", "a short cartoon intro video for X, TikTok and Telegram", "the launch on Programmable on Ethereum, done for you, with the fee contract set at launch", "two weeks of community: a Telegram bot that answers your holders and daily posts on X"];
   for (const x of DEFAULTS) $("includes").append(el("li", x));
   offer();
-  const status = (t, bad = false) => { const s = $("askStatus"); s.textContent = t; s.style.color = bad ? "var(--accent)" : ""; };
+  const status = (t, bad = false) => { const s = $("askStatus"); s.textContent = t; s.classList.toggle("bad", bad); };
   $("askForm").onsubmit = async (ev) => {
     ev.preventDefault();
     if (!API) return status("This page needs the gateway address in config.js.", true);

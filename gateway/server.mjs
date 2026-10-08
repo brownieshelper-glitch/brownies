@@ -101,12 +101,44 @@ const json = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 const oaiError = (res, e) => json(res, e.status || 500, { error: { message: e.message, type: e.status === 401 ? "authentication_error" : e.status === 402 ? "insufficient_balance" : "api_error", code: e.code || "error" } });
-const readBody = (req, limit = 4 * 1024 * 1024) => new Promise((resolve, reject) => {
-  let size = 0; const chunks = [];
-  req.on("data", (c) => { size += c.length; if (size > limit) { reject(err(413, "too_large", "Body over 4 MB.")); req.destroy(); } else chunks.push(c); });
+const readBody = (req, limit = 4 * 1024 * 1024, res = null) => new Promise((resolve, reject) => {
+  let size = 0, over = false; const chunks = [];
+  req.on("data", (c) => {
+    if (over) return;
+    size += c.length;
+    if (size > limit) {
+      // the answer goes out first, then the connection is closed: a client that sent too much is told so
+      over = true; req.pause();
+      if (res && !res.headersSent) { res.setHeader("connection", "close"); res.once("finish", () => req.destroy()); } else req.destroy();
+      reject(err(413, "too_large", `Body over ${Math.round(limit / 1024 / 1024) || 1} MB.`));
+    } else chunks.push(c);
+  });
   req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
   req.on("error", reject);
 });
+/// The body as a JSON object; anything else (bad JSON, null, a list, a number) is a 400, never a crash.
+const parseObject = (raw) => {
+  let v;
+  try { v = JSON.parse(raw); } catch { throw err(400, "bad_json", "Body is not JSON."); }
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw err(400, "bad_json", "Body must be a JSON object.");
+  return v;
+};
+/// The address a request came from: behind a proxy on this machine, the last X-Forwarded-For value.
+const clientIp = (req) => {
+  const sock = String(req.socket?.remoteAddress || "");
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",").map((x) => x.trim()).filter(Boolean);
+  return /^(::1|127\.|::ffff:127\.)/.test(sock) && fwd.length ? fwd[fwd.length - 1] : sock || "?";
+};
+/// A small allowance per address for the routes anyone may call that cost the gateway a chain call.
+const buckets = new Map();
+const allow = (key, perMinute) => {
+  const now = Date.now(), list = (buckets.get(key) || []).filter((t) => now - t < 60_000);
+  if (list.length >= perMinute) { buckets.set(key, list); return false; }
+  list.push(now); buckets.set(key, list);
+  if (buckets.size > 5000) for (const [k, v] of buckets) if (!v.length || now - v[v.length - 1] > 60_000) buckets.delete(k);
+  return true;
+};
+const indexMisses = new Map(); // tx -> when it was last looked up and not found
 const bearer = (req) => { const h = req.headers.authorization || ""; return h.startsWith("Bearer ") ? h.slice(7).trim() : ""; };
 const dollars = (micro) => (micro / 1e6).toFixed(6);
 const sha = (v) => createHash("sha256").update(String(v)).digest();
@@ -115,7 +147,7 @@ const sameSecret = (a, b) => timingSafeEqual(sha(a), sha(b));
 function authed(req) {
   const k = verifyKey(bearer(req), cfg.chainId);
   const bal = ledger.balance(k.beneficiary);
-  if (k.epoch < bal.epoch) throw err(401, "key_revoked", `This key's epoch ${k.epoch} was rotated away; sign epoch ${bal.epoch}.`);
+  if (k.epoch !== bal.epoch) throw err(401, "key_revoked", `This key carries epoch ${k.epoch}; the wallet's current epoch is ${bal.epoch}. Sign the current message.`);
   return { ...k, bal };
 }
 
@@ -164,70 +196,105 @@ function worstCaseMicro(model, body) {
 async function chatCompletions(req, res) {
   const who = authed(req);
   const pay = payer(req, who);
-  const raw = await readBody(req);
-  let body;
-  try { body = JSON.parse(raw); } catch { throw err(400, "bad_json", "Body is not JSON."); }
-  if (!body.model || !Array.isArray(body.messages)) throw err(400, "bad_request", "model and messages are required.");
+  const body = parseObject(await readBody(req, 4 * 1024 * 1024, res));
+  if (typeof body.model !== "string" || !body.model || body.model.length > 200 || !Array.isArray(body.messages)) throw err(400, "bad_request", "model and messages are required.");
   if (pay.availableMicro < cfg.minBalanceMicro) throw err(402, "insufficient_balance", pay.grant ? `The grant from ${pay.grant.from} has ${dollars(pay.availableMicro)} USD left today.` : `Balance ${dollars(pay.availableMicro)} USD. Activate SUGAR to this wallet.`);
   const { byId } = await models();
   const model = byId.get(body.model);
   if (!model) throw err(400, "unknown_model", `Unknown model ${body.model}. See GET /v1/models.`);
   if (!body.max_tokens && !body.max_completion_tokens) body.max_tokens = 1024;
-  const worst = worstCaseMicro(model, body);
-  if (worst > pay.availableMicro) throw err(402, "insufficient_balance", `This request could cost up to ${dollars(worst)} USD and ${pay.grant ? "the grant's room today" : "the balance"} is ${dollars(pay.availableMicro)} USD. Lower max_tokens${pay.grant ? "" : " or activate more SUGAR"}.`);
+  const maxOut = Number(body.max_tokens || body.max_completion_tokens);
+  if (!Number.isFinite(maxOut) || maxOut < 1 || maxOut > 1_000_000) throw err(400, "bad_request", "max_tokens must be a whole number from 1 upwards.");
 
   if (ambient && ambient.isOurs(body.model)) return ambientChat({ res, who, pay, body });
   if (!cfg.openrouterKey) throw err(503, "upstream_unconfigured", "The gateway has no upstream key yet.");
 
-  body.usage = { include: true }; // OpenRouter returns usage.cost (dollars) in the final chunk or the body
-  const upstream = await fetch(`${cfg.openrouterUrl}/chat/completions`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${cfg.openrouterKey}`, "content-type": "application/json", "HTTP-Referer": "https://brownies.fun", "X-Title": "Brownies" },
-    body: JSON.stringify(body),
-  });
-  if (!upstream.ok) {
-    const t = await upstream.text();
-    res.writeHead(upstream.status, { "content-type": "application/json", "access-control-allow-origin": "*" });
-    res.end(t);
-    return;
-  }
-  const charge = (usage, upstreamId) => {
-    if (!usage) return 0;
-    const micro = Math.ceil(Number(usage.cost || 0) * 1e6 * cfg.priceMultiplier);
-    const info = { model: body.model, upstreamId, promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens };
-    if (micro > 0) { if (pay.grant) ledger.chargeVia(pay.beneficiary, who.wallet, micro, info); else ledger.charge(who.beneficiary, micro, info); }
-    return micro;
-  };
-
-  if (body.stream) {
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", "access-control-allow-origin": "*" });
-    const reader = upstream.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "", usage = null, upstreamId = null;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const chunk = dec.decode(value, { stream: true });
-      res.write(chunk);
-      buf += chunk;
-      let nl;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
-        if (!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (data === "[DONE]") continue;
-        try { const j = JSON.parse(data); if (j.usage) usage = j.usage; if (j.id) upstreamId = j.id; } catch {}
-      }
+  // the most this call could cost is held before the call, in one step with the check: two requests in flight can
+  // never both spend the same dollar, and a grant's day cannot be passed by sending many requests at once
+  const worst = worstCaseMicro(model, body);
+  const hold = takeHold(pay, who, worst);
+  let settled = false;
+  const settle = (micro, info = {}) => { if (settled) return; settled = true; ledger.settle(hold, micro, { model: body.model, ...info }); };
+  let sentAny = false;
+  try {
+    body.usage = { include: true }; // OpenRouter returns usage.cost (dollars) in the final chunk or the body
+    const upstream = await fetch(`${cfg.openrouterUrl}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${cfg.openrouterKey}`, "content-type": "application/json", "HTTP-Referer": "https://brownies.fun", "X-Title": "Brownies" },
+      body: JSON.stringify(body),
+    });
+    if (!upstream.ok) {
+      settle(0);
+      const t = await upstream.text();
+      res.writeHead(upstream.status, { "content-type": "application/json", "access-control-allow-origin": "*" });
+      res.end(t);
+      return;
     }
-    res.end();
-    charge(usage, upstreamId);
-    return;
+    const charge = (usage, upstreamId) => {
+      const micro = billedMicro(model, usage);
+      settle(micro, { upstreamId, promptTokens: usage?.prompt_tokens, completionTokens: usage?.completion_tokens });
+      return micro;
+    };
+
+    if (body.stream) {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", "access-control-allow-origin": "*" });
+      const reader = upstream.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "", usage = null, upstreamId = null;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = dec.decode(value, { stream: true });
+        res.write(chunk); sentAny = true;
+        buf += chunk;
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") continue;
+          try { const j = JSON.parse(data); if (j.usage) usage = j.usage; if (j.id) upstreamId = j.id; } catch {}
+        }
+      }
+      res.end();
+      charge(usage, upstreamId);
+      return;
+    }
+    const j = await upstream.json();
+    const micro = charge(j.usage, j.id);
+    j.brownies = { charged_usd: dollars(micro), balance_usd: dollars(pay.grant ? (ledger.grantRoom(pay.beneficiary, who.wallet)?.roomMicro ?? 0) : ledger.balance(who.beneficiary).availableMicro) };
+    if (pay.grant) j.brownies.paid_by = pay.grant.from;
+    json(res, 200, j);
+  } finally {
+    // a call that broke after the answer started is billed its prompt: the upstream read it. One that never started costs nothing.
+    if (!settled) settle(sentAny ? promptMicro(model, body) : 0, { upstreamId: null });
   }
-  const j = await upstream.json();
-  const micro = charge(j.usage, j.id);
-  j.brownies = { charged_usd: dollars(micro), balance_usd: dollars(pay.grant ? (ledger.grantRoom(pay.beneficiary, who.wallet)?.roomMicro ?? 0) : ledger.balance(who.beneficiary).availableMicro) };
-  if (pay.grant) j.brownies.paid_by = pay.grant.from;
-  json(res, 200, j);
+}
+
+/// The hold for a request: on the key's own balance, or on the granter's through the grant. A refusal is the 402.
+function takeHold(pay, who, worst) {
+  try {
+    return pay.grant ? ledger.reserveVia(pay.beneficiary, who.wallet, worst) : ledger.reserve(who.beneficiary, worst);
+  } catch (e) {
+    if (e.noGrant) throw err(403, "no_grant", `${pay.grant?.from} has not granted ${who.wallet} any spending.`);
+    if (e.insufficient) throw err(402, "insufficient_balance", `This request could cost up to ${dollars(worst)} USD and ${pay.grant ? "the grant's room today" : "the balance"} is ${dollars(e.availableMicro)} USD. Lower max_tokens${pay.grant ? "" : " or activate more SUGAR"}.`);
+    throw e;
+  }
+}
+
+/// What a finished call costs: the upstream's stated cost, or the tokens at the catalogue's prices when it stated none.
+function billedMicro(model, usage) {
+  if (!usage) return 0;
+  if (usage.cost != null && Number(usage.cost) > 0) return Math.ceil(Number(usage.cost) * 1e6 * cfg.priceMultiplier);
+  const p = model?.pricing || {};
+  const micro = (Number(usage.prompt_tokens) || 0) * Number(p.prompt || 0) + (Number(usage.completion_tokens) || 0) * Number(p.completion || 0);
+  return Math.ceil(micro * 1e6 * cfg.priceMultiplier);
+}
+/// The prompt's share of the worst case: what a call that broke mid-answer is billed.
+function promptMicro(model, body) {
+  const p = model?.pricing || {};
+  const promptTokens = Math.ceil(JSON.stringify(body.messages || "").length / 3.5);
+  return Math.ceil(promptTokens * Number(p.prompt || 0) * 1e6 * cfg.priceMultiplier);
 }
 
 /// Ambient over x402: the quote is the price (input plus the output bound), the pantry pays it when JumpGate asks,
@@ -238,19 +305,23 @@ async function ambientChat({ res, who, pay, body }) {
   let quote;
   try { quote = await ambient.quote(up); } catch (e) { throw err(502, "upstream", e.message); }
   const worst = Math.ceil(quote.maxMicro * cfg.priceMultiplier);
-  if (worst > pay.availableMicro) throw err(402, "insufficient_balance", `This request costs up to ${dollars(worst)} USD and ${pay.grant ? "the grant's room today" : "the balance"} is ${dollars(pay.availableMicro)} USD. Lower max_tokens or add balance.`);
+  const hold = takeHold(pay, who, worst);
+  let settled = false;
+  const settle = (micro, info = {}) => { if (settled) return; settled = true; ledger.settle(hold, micro, { model: body.model, ...info }); };
   let out;
-  try { out = await ambient.chat(body, { quote }); } catch (e) { throw err(502, "upstream", `Ambient: ${e.message}`); }
+  try { out = await ambient.chat(body, { quote, maxMicro: Math.ceil(quote.maxMicro * 1.05) }); } catch (e) { settle(0); throw err(502, "upstream", `Ambient: ${e.message}`); }
   const { response: upstream, paid } = out;
   if (!upstream.ok) {
+    // the pantry paid nothing for a refusal (a second 402 is an error above); a paid request that failed is still paid
+    settle(paid ? Math.ceil(paid.micro * cfg.priceMultiplier) : 0, { upstreamId: null });
     const t = await upstream.text();
     res.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") || "text/plain", "access-control-allow-origin": "*" });
     res.end(t);
     return;
   }
   const micro = Math.ceil((paid ? paid.micro : quote.micro) * cfg.priceMultiplier);
-  const info = { model: body.model, upstream: "ambient", upstreamModel: out.upstreamModel, paidMicro: paid?.micro ?? 0, tx: paid?.settlement?.transaction || null, promptTokens: quote.inputTokens, maxCompletionTokens: quote.outputTokens };
-  const charge = () => { if (micro > 0) { if (pay.grant) ledger.chargeVia(pay.beneficiary, who.wallet, micro, info); else ledger.charge(who.beneficiary, micro, info); } };
+  const info = { upstreamId: paid?.settlement?.transaction || null, promptTokens: quote.inputTokens, completionTokens: null };
+  const charge = () => settle(micro, info);
   if (body.stream) {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", "access-control-allow-origin": "*" });
     try {
@@ -292,7 +363,7 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/grants" && req.method === "POST") {
       const who = authed(req);
-      let body; try { body = JSON.parse(await readBody(req, 4096)); } catch { throw err(400, "bad_json", "Body is not JSON."); }
+      const body = parseObject(await readBody(req, 4096, res));
       const grantee = parseWallet(body.grantee, "grantee");
       if (!grantee) throw err(400, "bad_wallet", "grantee must be an address.");
       if (grantee === who.wallet) throw err(400, "bad_grantee", "A wallet needs no grant to itself.");
@@ -303,7 +374,7 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/grants/revoke" && req.method === "POST") {
       const who = authed(req);
-      let body; try { body = JSON.parse(await readBody(req, 4096)); } catch { throw err(400, "bad_json", "Body is not JSON."); }
+      const body = parseObject(await readBody(req, 4096, res));
       const grantee = parseWallet(body.grantee, "grantee");
       if (!grantee) throw err(400, "bad_wallet", "grantee must be an address.");
       return json(res, 200, { object: "grant", grantee, revoked: ledger.revokeGrant(who.beneficiary, grantee) });
@@ -322,9 +393,15 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { wallet, beneficiary: b, epoch: bal.epoch, balance: { available: dollars(bal.availableMicro), used: dollars(bal.spentMicro), credited: dollars(bal.creditedMicro) }, recent: ledger.recent(b, 25) });
     }
     if (url.pathname === "/api/protocol/index-tx" && req.method === "POST") {
-      const body = JSON.parse(await readBody(req, 4096));
+      const body = parseObject(await readBody(req, 4096, res));
       if (!/^0x[0-9a-fA-F]{64}$/.test(body.tx || "")) throw err(400, "bad_tx", "tx must be a transaction hash.");
+      if (!chain) throw err(503, "not_live", "The chain is not connected yet.");
+      // anyone may ask, a few times a minute; a hash that was not found is not looked up again for a minute
+      if (!allow("index:" + clientIp(req), 6)) throw err(429, "slow_down", "Six lookups a minute per address.");
+      const tx = body.tx.toLowerCase(), missedAt = indexMisses.get(tx) || 0;
+      if (Date.now() - missedAt < 60_000) return json(res, 200, { booked: 0, note: "looked up a moment ago, nothing found yet" });
       const booked = await chain.indexTx(body.tx);
+      if (!booked) { indexMisses.set(tx, Date.now()); if (indexMisses.size > 10_000) indexMisses.clear(); }
       return json(res, 200, { booked });
     }
     if (url.pathname === "/api/team/activity" && req.method === "GET") {
@@ -340,7 +417,8 @@ const server = createServer(async (req, res) => {
       if (!cfg.teamLogKey) throw err(503, "closed", "This gateway takes no reports.");
       if (!sameSecret(bearer(req), cfg.teamLogKey)) throw err(401, "bad_key", "Wrong team key.");
       let body;
-      try { body = JSON.parse(await readBody(req, 64 * 1024)); } catch { throw err(400, "bad_entry", "The body is not JSON."); }
+      try { body = JSON.parse(await readBody(req, 64 * 1024, res)); } catch { throw err(400, "bad_entry", "The body is not JSON."); }
+      if (!body || typeof body !== "object") throw err(400, "bad_entry", "The body is not an entry.");
       const list = Array.isArray(body) ? body : [body];
       if (!list.length || list.length > 20) throw err(400, "bad_entry", "Send 1 to 20 entries.");
       const rows = list.map((e) => cleanEntry(e)); // every entry is checked before any is written

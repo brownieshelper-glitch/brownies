@@ -36,6 +36,7 @@
   var INK = "#2A1710", BONE = "#F6EFE2", ORANGE = "#FF5A1F", ORANGE2 = "#E64A12";   // cocoa, cream, icing
   var NS = 'xmlns="http://www.w3.org/2000/svg"';
   var MOUTHS = ["smile", "open", "grin", "o"];
+  var esc = function (s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); };   // a name goes into markup
   var uid = 0;
 
   function icingPath(x, top, w, drips) {
@@ -153,7 +154,7 @@
     };
     var all = legs + '<g class="top" data-pivot="200 ' + bottom + '">' + armG("l", armL, stillL, x + 2) + armG("r", armR, stillR, R - 2) + back + body + crumbs + eyes + blush + mouths + front + "</g>";
     if (o.inner) return all;
-    return "<svg " + NS + ' viewBox="' + (o.viewBox || "-60 16 470 333") + '" role="img" aria-label="' + (o.label || "A brownie") + '">' + all + "</svg>";
+    return "<svg " + NS + ' viewBox="' + (o.viewBox || "-60 16 470 333") + '" role="img" aria-label="' + esc(o.label || "A brownie") + '">' + all + "</svg>";
   }
 
   // the four helpers; each frame is the same size, shifted to fit its prop, so they share one scale
@@ -204,7 +205,7 @@
       cursor = cx + rr[1] + gap;
     }
     var total = cursor - gap, tall = 349 - y0;
-    return "<svg " + NS + ' viewBox="0 ' + y0 + " " + total + " " + tall + '" data-ratio="' + (total / tall) + '" role="img" aria-label="The brownies: ' + names.join(", ") + '">' + g.join("") + "</svg>";
+    return "<svg " + NS + ' viewBox="0 ' + y0 + " " + total + " " + tall + '" data-ratio="' + (total / tall) + '" role="img" aria-label="The brownies: ' + esc(names.join(", ")) + '">' + g.join("") + "</svg>";
   }
 
   // the coin logo: the face on an orange coin, with cream icing so it reads on orange.

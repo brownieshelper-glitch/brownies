@@ -31,10 +31,23 @@ export function refFor(url) {
 
 export const money = (usd) => `$${Number(usd || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
+/// What the public board may show of a job: never the owner's instruction, never who to contact for a studio request.
+const PUBLIC_FIELDS = ["id", "kind", "title", "url", "state", "score", "effort", "expectedUsd", "earnedUsd", "deadline", "summary", "nextStep", "helper", "source", "createdAt", "updatedAt", "log"];
+export function publicJob(j) {
+  const o = {};
+  for (const k of PUBLIC_FIELDS) if (j[k] !== undefined) o[k] = j[k];
+  if (j.kind === "studio") {
+    o.summary = String(o.summary || "").split("\n").filter((l) => !/^(contact|link):/i.test(l.trim())).join("\n").trim();
+    delete o.nextStep;
+  }
+  o.stateLabel = STATE_LABEL[j.state] || j.state;
+  return o;
+}
+
 /// Applies an owner's (or a brownie's) action to a job. Returns { job } or { error }.
 export function applyAction(store, { id, action, text = "", value = null, by = "owner", now = Date.now() } = {}) {
   const a = String(action || "").toLowerCase();
-  if (!(a in ACTIONS)) return { error: `No such action "${action}". Actions: ${Object.keys(ACTIONS).join(", ")}.` };
+  if (!Object.hasOwn(ACTIONS, a)) return { error: `No such action "${action}". Actions: ${Object.keys(ACTIONS).join(", ")}.` };
   const job = store.moneyJob(Number(id));
   if (!job) return { error: `There is no job ${id} on the board.` };
   const patch = {};
@@ -76,7 +89,7 @@ export class JobsApi {
         const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") || 200)));
         let list = this.store.moneyJobs({ state, limit: kind ? 500 : limit });
         if (kind) list = list.filter((j) => j.kind === kind).slice(0, limit);
-        return json(200, { jobs: list.map((j) => ({ ...j, stateLabel: STATE_LABEL[j.state] || j.state })), totals: totalsView(this.store), states: STATE_LABEL, kinds: KINDS });
+        return json(200, { jobs: list.map(publicJob), totals: totalsView(this.store), states: STATE_LABEL, kinds: KINDS });
       }
       return json(404, { error: "no such route" });
     } catch (e) {

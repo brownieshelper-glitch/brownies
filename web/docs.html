@@ -253,8 +253,8 @@ console.log(reply.choices[0].message.content);</code></pre>
       <p>The same addresses are published for programs at <a href="deployments/1.json"><code>deployments/1.json</code></a>.</p>
       <h3>Collecting the tax</h3>
       <p>The pool holds the tax until someone presses two buttons: <code>claimCreator()</code> on the pool's ledger, which hands the tax to the Harvester, and <code>claim()</code> on the Harvester, which splits it. Anyone can press them, and the Brownies keeper does as soon as a few hundredths of an ETH have gathered. The caller pays the gas and receives nothing.</p>
-      <p>Give <code>claim()</code> a gas limit of 2,500,000. The Harvester refuses to run with less than 1,800,000, so that a wallet can never send too little gas and do nothing.</p>
-      <p>The Harvester swaps ETH to USDC on the Uniswap WETH and USDC pool. It refuses any swap that lands more than 1% under the pool's 30 minute average price. It waits until at least 0.01 ETH has gathered before it swaps.</p>
+      <p>Give <code>claim()</code> a gas limit of 1,200,000. The Harvester refuses to swap with less than 700,000 left, so that a wallet can never send too little gas and do nothing.</p>
+      <p>The Harvester swaps ETH to USDC on the Uniswap WETH and USDC pool. It refuses any swap that lands more than 1% under the pool's 30 minute average price. It waits until at least 0.03 ETH has gathered before it swaps.</p>
     </section>
 
     <section id="trust">

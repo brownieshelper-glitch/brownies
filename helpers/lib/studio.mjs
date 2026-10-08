@@ -18,6 +18,7 @@ export const DEFAULT_STUDIO = {
   ],
   contact: "https://t.me/feedthebrownies",
 };
+import { clientIp } from "./net.mjs";
 const LIMITS = { name: [2, 80], idea: [10, 1500], contact: [3, 120], link: [0, 200] };
 
 export class Studio {
@@ -34,12 +35,14 @@ export class Studio {
     return { priceEth: c.priceEth, feeSliceBps: c.feeSliceBps, feeSlicePct: Math.round(c.feeSliceBps / 100 * 10) / 10, includes: [...c.includes], contact: c.contact, contract: "StudioSplitter: the coin's creator fee lands in a contract nobody can change; it pays the studio its slice and the client the rest, anyone may trigger the payout" };
   }
 
-  /// At most five requests per address per hour.
+  /// At most five requests per address per hour, and twenty from everyone together. Old entries are forgotten.
   tooMany(ip) {
     const now = this.clock.now();
-    const list = (this.attempts.get(ip) || []).filter((t) => now - t < 3_600_000);
+    for (const [k, v] of this.attempts) { const kept = v.filter((t) => now - t < 3_600_000); if (kept.length) this.attempts.set(k, kept); else this.attempts.delete(k); }
+    const all = [...this.attempts.values()].reduce((n, v) => n + v.length, 0);
+    const list = this.attempts.get(ip) || [];
     list.push(now); this.attempts.set(ip, list);
-    return list.length > 5;
+    return list.length > 5 || all > 20;
   }
 
   /// A request from the form, checked. Returns { fields } or { error }.
@@ -66,10 +69,12 @@ export class Studio {
     const c = this.config;
     const id = this.store.addMoneyJob({
       at: now, kind: "studio", title: `Studio request: ${fields.name}`, url: fields.link || null, ref, source: "studio-form", state: "found", score: 50, effort: "high",
-      expectedUsd: 0, summary: `${fields.idea}\nContact: ${fields.contact}${fields.link ? `\nLink: ${fields.link}` : ""}`,
-      nextStep: `Reply to ${fields.contact} with the proposal: ${c.priceEth} ETH plus ${c.feeSliceBps / 100}% of the creator fee through the splitter.`,
+      expectedUsd: 0, summary: fields.idea,
+      nextStep: `Reply to the client with the proposal: ${c.priceEth} ETH plus ${c.feeSliceBps / 100}% of the creator fee through the splitter. The contact is in your Telegram and in the control room.`,
       note: "asked through the studio form",
     });
+    // who to answer never reaches the public board: the owner has it on Telegram and in the control room
+    this.store.setMeta(`job:${id}:contact`, JSON.stringify({ contact: fields.contact, link: fields.link || "" }));
     this.log(`[studio] request ${id} from ${fields.name} (${fields.contact})`);
     if (this.tg?.configured && this.ownerChatId) {
       await this.tg.sendMessage(this.ownerChatId, `New studio request from ${fields.name} (${fields.contact}):\n${cut(fields.idea, 400)}${fields.link ? `\n${fields.link}` : ""}\n\nIt is job ${id} on the board. /zest pick ${id} makes Glaze write the proposal; the board: ${this.siteUrl}/jobs.html`);
@@ -84,8 +89,7 @@ export class Studio {
     try {
       if (req.method === "GET" && url.pathname === "/studio/info") return json(200, this.info());
       if (req.method === "POST" && url.pathname === "/studio/apply") {
-        const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "?";
-        if (this.tooMany(ip)) return json(429, { error: "too many requests from here; try again in an hour" });
+        if (this.tooMany(clientIp(req))) return json(429, { error: "too many requests from here; try again in an hour" });
         let body; try { body = await readJson(req); } catch (e) { return json(400, { error: e.message }); }
         const c = this.check(body);
         if (c.error !== undefined && !c.fields) return c.error === "no" ? json(200, { ok: true, id: 0 }) : json(400, { error: c.error });

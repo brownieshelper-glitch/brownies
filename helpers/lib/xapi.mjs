@@ -47,7 +47,16 @@ export class XClient {
   get configured() { return Boolean(this.clientId && (this.pair.refresh_token || this.pair.access_token)); }
 
   async ensureToken() {
-    if (!this.pair.access_token || this.clock.now() - this.pair.obtained_at > MAX_AGE) await this.refresh();
+    if (!this.pair.access_token || this.clock.now() - this.pair.obtained_at > MAX_AGE) await this.refreshOnce();
+  }
+
+  /// One renewal at a time: X accepts a refresh token once, so two callers that find the token old share one request,
+  /// and a caller that arrives right after a renewal does not renew again.
+  refreshOnce({ force = false } = {}) {
+    if (this.refreshing) return this.refreshing;
+    if (!force && this.pair.access_token && this.clock.now() - this.pair.obtained_at < 30_000) return Promise.resolve();
+    this.refreshing = this.refresh().finally(() => { this.refreshing = null; });
+    return this.refreshing;
   }
 
   /// Trades the refresh token for a new pair and stores it. Throws CredentialsError when X refuses.
@@ -70,7 +79,7 @@ export class XClient {
     const url = new URL(`${X_API}${path}`);
     for (const [k, v] of Object.entries(query || {})) if (v != null && v !== "") url.searchParams.set(k, String(v));
     const r = await this.fetch(url.toString(), { method, headers: { authorization: `Bearer ${this.pair.access_token}`, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-    if (r.status === 401 && retry) { await this.refresh(); return this.request(method, path, { body, query, retry: false }); }
+    if (r.status === 401 && retry) { await this.refreshOnce({ force: true }); return this.request(method, path, { body, query, retry: false }); }
     if (r.status === 401) throw new CredentialsError("x", `X refused the request (401 on ${path.split("?")[0]})`);
     if (r.status === 429) throw new RateLimited("x", Number(r.headers?.get?.("x-rate-limit-reset") || 0) * 1000);
     const j = await r.json().catch(() => ({}));

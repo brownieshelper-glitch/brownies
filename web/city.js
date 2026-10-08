@@ -59,6 +59,7 @@
     var Hv = H, want = H, aspect = 1.8;   // the camera: how tall a slice of the world is on show, and the slice it is moving to
     var floor = mk("rect", { x: -700, y: FLOOR, width: 9000, height: 400, fill: INK }, svg), ovenG = mk("g", { class: "oven" }, svg), towerG = mk("g", { class: "tower" }, svg), flyG = mk("g", {}, svg), actorsG = mk("g", {}, svg), bitsG = mk("g", {}, svg);
     var total = 0, latest = 0, view = 0, entries = [], nextLand = 0, tx = 0, token = 0, time = 0;
+    var reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);   // less motion: the tower is drawn whole, nobody walks
     var actors = [], byId = {}, flying = [], bits = [];
 
     // the oven where the bricks are baked
@@ -279,7 +280,8 @@
       total = r.body.total; latest = Math.max(0, Math.ceil(total / SIZE) - 1);
       label();
       if (view !== was) return;                              // the visitor is looking at an older tower: leave it alone
-      if (entries.length >= SIZE) { if (latest > view && nextLand >= SIZE && !flying.length) show(view + 1, true); return; }
+      if (entries.length >= SIZE) { if (latest > view && nextLand >= SIZE && !flying.length) show(view + 1, !reduce); return; }
+      if (reduce) { await show(view, false); settle(); return; }   // no walking: the new bricks are simply there
       var mine = token, more = await B.gw(S, "/api/team/activity?order=asc&limit=" + (SIZE - entries.length) + "&offset=" + (view * SIZE + entries.length));
       if (mine !== token || !more.ok || !more.body) return;
       for (var i = 0; i < more.body.entries.length; i++) { entries.push(more.body.entries[i]); enqueue(entries.length - 1); }
@@ -293,14 +295,16 @@
     q(".site-older").onclick = function () { if (view > 0) show(view - 1, false); };
     q(".site-newer").onclick = function () { if (view < latest) show(view + 1, false); };
     var last = 0;
-    requestAnimationFrame(function frame(now) { var dt = last ? Math.min((now - last) / 1000, 0.034) : 0.016; last = now; step(dt); requestAnimationFrame(frame); });
+    function settle() { for (var i = 0; i < 60; i++) step(0.1); }   // the camera reaches its place without a frame loop
+    if (!reduce) requestAnimationFrame(function frame(now) { var dt = last ? Math.min((now - last) / 1000, 0.034) : 0.016; last = now; step(dt); requestAnimationFrame(frame); });
 
     (async function () {
       var r = await B.gw(S, "/api/team/summary");
       total = r.ok && r.body ? r.body.total : 0;
       latest = Math.max(0, Math.ceil(total / SIZE) - 1);
       var want = Number(new URLSearchParams(location.search).get("tower"));
-      await show(want >= 1 && want <= latest + 1 ? want - 1 : latest, true);
+      await show(want >= 1 && want <= latest + 1 ? want - 1 : latest, !reduce);
+      if (reduce) settle();
       setInterval(refresh, 30000);
     })();
 

@@ -25,6 +25,7 @@
 // Before the launch there is no coin and no SUGAR: only the admin wallets may bake, so the owner can try it. Live,
 // a wallet needs at least `minHold` BROWNIE held or staked (read from the chain), one brownie per wallet, and the
 // Bakery as a whole holds at most `maxTotal`. The owner hears about every bake and can retire any brownie.
+import { clientIp } from "./net.mjs";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { verifyMessage, getAddress, isAddress, JsonRpcProvider, Contract, formatUnits } from "ethers";
 import { validateSpec, BAKED_TOOLS } from "./recruit.mjs";
@@ -414,8 +415,7 @@ export class Bakery {
       if (req.method === "GET" && url.pathname === "/bake/feed") return json(200, { brownies: this.feed() });
       if (req.method === "GET" && url.pathname === "/bake/nonce") return json(200, { nonce: this.newNonce(), message: bakeMessage("<nonce>") });
       if (req.method === "POST" && url.pathname === "/bake/login") {
-        const ip = req.socket?.remoteAddress || "?";
-        if (this.tooMany(ip)) return json(429, { error: "too many tries; wait ten minutes" });
+        if (this.tooMany(clientIp(req))) return json(429, { error: "too many tries; wait ten minutes" });
         const s = this.login(await readJson(req));
         return s ? json(200, s) : json(401, { error: "the signature does not match the wallet, or the nonce expired" });
       }

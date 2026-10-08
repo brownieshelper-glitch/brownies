@@ -168,6 +168,6 @@ export class Store {
   moneyTotals() { const by = {}; for (const r of this.q.moneyTotals.all()) by[r.state] = { n: Number(r.n), expectedUsd: Number(r.expected) || 0, earnedUsd: Number(r.earned) || 0 }; return by; }
 
   // ---- Nib's latest note, where Fudge and Crumb read it ----
-  get latestNote() { const v = this.getMeta("note:latest"); return v ? JSON.parse(v) : null; }
+  get latestNote() { const v = this.getMeta("note:latest"); if (!v) return null; try { return JSON.parse(v); } catch { return null; } }
   set latestNote(n) { this.setMeta("note:latest", JSON.stringify(n)); }
 }

@@ -99,3 +99,58 @@ test("the token is renewed by itself after a week; an expired one, or a dead one
   assert.equal(ig.connected, false);
   await assert.rejects(() => ig.me(), /not connected/);
 });
+
+test("Facebook Login: the dialog asks the Page scopes, the code becomes a long user token and the Page token of the Page with the Instagram account, and reels go through graph.facebook.com", async () => {
+  const mf = makeFetch(); const store = new Store(":memory:"); const clock = new FakeClock(); const lines = [];
+  const m = { codes: 0, longs: 0, pages: [{ id: "p1", name: "Brownies", access_token: "page-tok-1", instagram_business_account: { id: "17841499", username: "feedthebrownies", name: "Brownies" } }, { id: "p0", name: "Old page", access_token: "page-tok-0" }], containers: [], published: [] };
+  mf.on("GET", /graph\.facebook\.com\/v21\.0\/oauth\/access_token\?/, (c) => { const u = new URL(c.url); if (u.searchParams.get("grant_type") === "fb_exchange_token") { m.longs++; return u.searchParams.get("fb_exchange_token").startsWith("short-") || u.searchParams.get("fb_exchange_token").startsWith("long-") ? { json: { access_token: `long-${m.longs}`, token_type: "bearer", expires_in: 5183944 } } : { status: 400, json: { error: { message: "bad", code: 190 } } }; } m.codes++; if (u.searchParams.get("client_id") !== "app" || u.searchParams.get("client_secret") !== "sec" || u.searchParams.get("code") !== "good-code") return { status: 400, json: { error: { message: "Invalid verification code", code: 100 } } }; return { json: { access_token: "short-1", token_type: "bearer", expires_in: 5000 } }; });
+  mf.on("GET", /graph\.facebook\.com\/v21\.0\/me\/accounts\?/, (c) => (new URL(c.url).searchParams.get("access_token") === `long-${m.longs}` ? { json: { data: m.pages } } : { status: 401, json: { error: { message: "no", code: 190 } } }));
+  const authed = (c) => new URL(c.url).searchParams.get("access_token") === "page-tok-1";
+  mf.on("GET", /graph\.facebook\.com\/v21\.0\/17841499\?/, (c) => (authed(c) ? { json: { id: "17841499", username: "feedthebrownies", name: "Brownies" } } : { status: 401, json: { error: { message: "no", code: 190 } } }));
+  mf.on("POST", /graph\.facebook\.com\/v21\.0\/17841499\/media\?/, (c) => { if (!authed(c)) return { status: 401, json: { error: { code: 190, message: "no" } } }; m.containers.push(Object.fromEntries(new URLSearchParams(String(c.body)))); return { json: { id: `c-${m.containers.length}` } }; });
+  mf.on("GET", /graph\.facebook\.com\/v21\.0\/c-\d+\?/, () => ({ json: { status_code: "FINISHED" } }));
+  mf.on("POST", /graph\.facebook\.com\/v21\.0\/17841499\/media_publish\?/, (c) => { if (!authed(c)) return { status: 401, json: { error: { code: 190, message: "no" } } }; m.published.push(new URLSearchParams(String(c.body)).get("creation_id")); return { json: { id: `p-${m.published.length}` } }; });
+  mf.on("GET", /graph\.facebook\.com\/v21\.0\/p-\d+\?/, () => ({ json: { permalink: "https://www.instagram.com/reel/FB123/" } }));
+  const ig = new Instagram({ appId: "app", appSecret: "sec", login: "facebook", redirectUri: "https://gw.test/instagram/callback", store, clock, fetch: mf, log: (l) => lines.push(String(l)), sleep: async () => {} });
+  let told = null;
+  const auth = new Connect({ name: "instagram", client: ig, store, clock, log: (l) => lines.push(String(l)), baseUrl: "https://gw.test", onConnected: async (me) => { told = me; } });
+  const server = createServer((req, res) => (req.url.startsWith("/instagram/") ? auth.handle(req, res) : (res.writeHead(404), res.end())));
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const get = (path) => fetch(base + path, { redirect: "manual" });
+  try {
+    assert.equal(ig.facebook, true);
+    const r = await get(auth.link().replace("https://gw.test", ""));
+    const to = new URL(r.headers.get("location"));
+    assert.equal(to.origin + to.pathname, "https://www.facebook.com/v21.0/dialog/oauth");
+    assert.equal(to.searchParams.get("scope"), "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement");
+    assert.equal(to.searchParams.get("response_type"), "code");
+    const state = to.searchParams.get("state");
+    assert.equal((await get(`/instagram/callback?error=access_denied&error_reason=user_denied&state=${state}`)).status, 400);
+    const link2 = auth.link(); const state2 = new URL((await get(link2.replace("https://gw.test", ""))).headers.get("location")).searchParams.get("state");
+    assert.equal((await get(`/instagram/callback?code=good-code&state=${state2}`)).status, 200);
+    assert.equal(m.codes, 1); assert.equal(m.longs, 1);
+    const t = ig.tokens();
+    assert.equal(t.login, "facebook"); assert.equal(t.page_id, "p1"); assert.equal(t.page_token, "page-tok-1"); assert.equal(t.user_id, "17841499"); assert.equal(t.username, "feedthebrownies");
+    assert.equal(ig.daysLeft(), null, "the Page token does not expire");
+    assert.deepEqual(told, { id: "17841499", username: "feedthebrownies", name: "@feedthebrownies", account_type: "professional", page: "Brownies" });
+    assert.ok(lines.every((l) => !/page-tok|long-1|short-1/.test(l)), "no token in the log");
+    const out = await ig.publishReel({ videoUrl: "https://gw.test/clips/abc.mp4", caption: "Ep. 1" });
+    assert.deepEqual(out, { id: "p-1", url: "https://www.instagram.com/reel/FB123/", container: "c-1" });
+    assert.equal(m.containers[0].media_type, "REELS"); assert.equal(m.containers[0].video_url, "https://gw.test/clips/abc.mp4");
+    assert.deepEqual(await ig.me(), { id: "17841499", username: "feedthebrownies", name: "Brownies", account_type: "professional" });
+    // ten days on: the user token behind the Page token is renewed once, the Page token keeps working
+    clock.t += 10 * 86400_000;
+    await ig.me();
+    assert.equal(m.longs, 2);
+    assert.equal(ig.tokens().access_token, "long-2");
+    // no Page with an Instagram account: a credentials error that says what to link
+    m.pages = [{ id: "p0", name: "Old page", access_token: "page-tok-0" }];
+    ig.disconnect();
+    const link3 = auth.link(); const state3 = new URL((await get(link3.replace("https://gw.test", ""))).headers.get("location")).searchParams.get("state");
+    const bad = await get(`/instagram/callback?code=good-code&state=${state3}`);
+    assert.equal(bad.status, 500, "the connect page shows the reason");
+    assert.match(await bad.text(), /no Facebook Page you manage has a linked Instagram professional account/);
+    assert.equal(ig.connected, false);
+  } finally { server.close(); }
+});

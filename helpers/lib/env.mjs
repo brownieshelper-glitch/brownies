@@ -66,7 +66,7 @@ export function settings(env = process.env) {
     github: { token: env.GITHUB_TOKEN || "", repo: env.GITHUB_REPO || "" },
     hfCredentials: env.HF_CREDENTIALS || "", // Higgsfield's API, key-id:key-secret, for Sprinkle's trend clips
     tiktok: { clientKey: env.TIKTOK_CLIENT_KEY || "", clientSecret: env.TIKTOK_CLIENT_SECRET || "" }, // the developer app; the account tokens live in the store once the owner allows it
-    instagram: { appId: env.INSTAGRAM_APP_ID || "", appSecret: env.INSTAGRAM_APP_SECRET || "" }, // the Meta app with the Instagram product; the account tokens live in the store
+    instagram: { appId: env.INSTAGRAM_APP_ID || "", appSecret: env.INSTAGRAM_APP_SECRET || "", login: String(env.INSTAGRAM_LOGIN || "instagram").toLowerCase() }, // the Meta app with the Instagram product; INSTAGRAM_LOGIN=facebook goes through a Facebook Page; the account tokens live in the store
     linkedin: { clientId: env.LINKEDIN_CLIENT_ID || "", clientSecret: env.LINKEDIN_CLIENT_SECRET || "", version: env.LINKEDIN_VERSION || "202509" }, // the LinkedIn app; the member token lives in the store
     keys: { fudge: env.FUDGE_PRIVATE_KEY || "", crumb: env.CRUMB_PRIVATE_KEY || "", nib: env.NIB_PRIVATE_KEY || "", chip: env.CHIP_PRIVATE_KEY || "", glaze: env.GLAZE_PRIVATE_KEY || "", swirl: env.SWIRL_PRIVATE_KEY || "", sprinkle: env.SPRINKLE_PRIVATE_KEY || "", truffle: env.TRUFFLE_PRIVATE_KEY || "" },
     mnemonic: env.HELPERS_MNEMONIC || "", // the seed of the baked brownies' wallets (lib/bakery.mjs), derived by index, MODE=live only

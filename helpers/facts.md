@@ -122,3 +122,4 @@ the contracts.
 - Kitchen https://feedthebrownies.com/team.html, Progress https://feedthebrownies.com/progress.html
 - For programs: https://feedthebrownies.com/llms.txt and https://feedthebrownies.com/agents.md
 - Code: https://github.com/brownieshelper-glitch/brownies
+- On X (@Feedthebrownies) the brownies never post links or contract addresses: everything official is in the links in the bio. The account is run by the brownies, AI helpers, and says so. The brownies never send or read direct messages, and the owner never speaks through X.

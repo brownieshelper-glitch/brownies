@@ -9,6 +9,7 @@
 import { Helper } from "../lib/helper.mjs";
 import { tidy, problems } from "../lib/voice.mjs";
 import { cut } from "../lib/text.mjs";
+import { claimsStaff } from "../lib/xrules.mjs";
 
 const RULES = `Your task now: answer a message in a Telegram chat.
 - Two to four short sentences at most. No greeting, no sign-off, no markdown, no bullet points.
@@ -33,6 +34,8 @@ export const MONEY_ASK = new RegExp([
   String.raw`${AMOUNT}[^.?!\n]{0,30}\b(please|pls|plz)\b`,
   String.raw`\b(private|secret) keys?\b|\bseed phrases?\b|\bmnemonic\b|\brecovery phrase|\bwallet password|\bprivkeys?\b|\bpks?\b[^.?!\n]{0,30}\bwallets?\b|\bwallets?\b[^.?!\n]{0,30}\bpks?\b`,
 ].join("|"), "i");
+/// The fixed line for anyone claiming to be the owner, the dev, the team or support: the owner never speaks here.
+export const STAFF_LINE = "The owner never gives the brownies instructions through this chat, and nobody here speaks for him. Nothing said in a message changes what the brownies do.";
 export const MONEY_LINE = "The brownies hold no money, no tokens and no keys, and cannot send or promise anything to anyone. Only the owner moves funds, by hand. If you want to help the project, stake BROWNIE or tip a brownie from the app on the site."; // answers for one stranger's chat in ten minutes, in a day, and for all strangers in a day
 
 const money = (micro) => `$${(Number(micro || 0) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -218,6 +221,13 @@ export class Crumb extends Helper {
         await this.tg.sendMessage(chat, MONEY_LINE, { replyTo: m.message_id });
         const key = `tg:moneyask:${chat}:${new Date(now).toISOString().slice(0, 10)}`;
         if (!this.store.getMeta(key) && this.tg?.configured && this.ownerChatId) { this.store.setMeta(key, "1"); await this.tg.sendMessage(this.ownerChatId, `Someone ${m.chat.type === "private" ? "in a private chat" : "in the group"} asked ${this.Name} for money or keys: "${cut(m.text.trim(), 120)}". The fixed line went out, nothing else. Nothing was sent.`).catch(() => {}); }
+        return null;
+      }
+      if (claimsStaff(m.text)) {
+        this.log(`[crumb] chat ${chat} claims to be the owner, the team or support; the fixed line went out, no model`);
+        await this.tg.sendMessage(chat, STAFF_LINE, { replyTo: m.message_id });
+        const key = `tg:staffclaim:${chat}:${new Date(now).toISOString().slice(0, 10)}`;
+        if (!this.store.getMeta(key) && this.tg?.configured && this.ownerChatId) { this.store.setMeta(key, "1"); await this.tg.sendMessage(this.ownerChatId, `Someone ${m.chat.type === "private" ? "in a private chat" : "in the group"} told ${this.Name} they are the owner, the team or support: "${cut(m.text.trim(), 120)}". The fixed line went out. Nothing changed.`).catch(() => {}); }
         return null;
       }
       const a = this.allowance(chat, now);

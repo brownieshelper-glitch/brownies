@@ -63,7 +63,7 @@ test("a draft with emoji or promise words is refused and rewritten before anythi
 });
 
 test("mentions: the question gets a reply, the chatter does not, and nothing is answered twice", async () => {
-  const W = makeWorld({ reply: () => "Stake BROWNIE in the app and SUGAR flows to you every second. The docs explain the loyalty bonus." });
+  const W = makeWorld({ reply: () => "Stake BROWNIE in the app and SUGAR flows to you every second. The docs explain the loyalty bonus.", config: { fudge: { replies: "auto" } } });
   W.xm.mentions = [
     { id: "7001", text: "@Feedthebrownies how does staking work?", authorId: "u1", author: "ann" },
     { id: "7002", text: "gm brownies", authorId: "u2", author: "bob" },

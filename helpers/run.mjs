@@ -80,7 +80,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const youtube = youtubeFromEnv(env, { log }); // the project's channel (lib/youtube.mjs); Sprinkle uploads there when it is configured
   const tiktok = new TikTok({ clientKey: S.tiktok.clientKey, clientSecret: S.tiktok.clientSecret, redirectUri: `${S.gatewayUrl}/tiktok/callback`, store, clock, log }); // lib/tiktok.mjs; connected by the owner with /tiktok
   // Instagram and LinkedIn, connected by the owner with /instagram and /linkedin; the clip links give Instagram a public address for a finished video
-  const instagram = new Instagram({ appId: S.instagram.appId, appSecret: S.instagram.appSecret, redirectUri: `${S.gatewayUrl}/instagram/callback`, store, clock, log });
+  const instagram = new Instagram({ appId: S.instagram.appId, appSecret: S.instagram.appSecret, login: S.instagram.login, redirectUri: `${S.gatewayUrl}/instagram/callback`, store, clock, log });
   const linkedin = new LinkedIn({ clientId: S.linkedin.clientId, clientSecret: S.linkedin.clientSecret, version: S.linkedin.version, redirectUri: `${S.gatewayUrl}/linkedin/callback`, store, clock, log });
   const clips = new Clips({ store, clock, baseUrl: S.gatewayUrl, dir: priv.helpers?.sprinkle?.videosDir || env.VIDEOS_DIR || "/var/lib/brownies/videos", log });
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
@@ -167,9 +167,11 @@ export async function build({ env = process.env, configFile = null } = {}) {
     if (cmd === "instagram") {
       if (!W.instagram.configured) return "Instagram is not set up: INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET are empty in the helpers env.";
       const sub = text.trim().toLowerCase();
-      if (sub === "status" || (!sub && W.instagram.connected)) { const t = W.instagram.tokens(); return t ? `Instagram is connected (@${t.username || t.user_id}, ${t.account_type || "professional"} account), ${W.instagram.daysLeft()} days of access left, renewed by itself.\nEvery cartoon episode and trend clip that goes to TikTok goes up as a reel too; memes go up as pictures. /instagram test posts the latest clip now. /instagram link connects again.` : "Instagram is not connected. Send /instagram link."; }
+      if (sub === "status" || (!sub && W.instagram.connected)) { const t = W.instagram.tokens(); return t ? `Instagram is connected (@${t.username || t.user_id}, ${t.account_type || "professional"} account), ${W.instagram.daysLeft() == null ? "through the Brownies Page, no expiry" : W.instagram.daysLeft() + " days of access left, renewed by itself"}.\nEvery cartoon episode and trend clip that goes to TikTok goes up as a reel too; memes go up as pictures. /instagram test posts the latest clip now. /instagram link connects again.` : "Instagram is not connected. Send /instagram link."; }
       if (sub === "test") { if (!all.sprinkle?.instagramLatest) return "There is no video brownie here."; const r = await all.sprinkle.instagramLatest(); return r ? `Posted on Instagram${r.url ? ": " + r.url : ""}.` : "No finished clip to send, or Instagram refused it. Check the log."; }
-      return `Open this link, log in to Instagram with the Brownies account (a business or creator account) and allow the app:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`;
+      return W.instagram.facebook
+        ? `Open this link, log in to Facebook with your own account (the one that manages the Brownies Page), tick the Brownies Page and the Brownies Instagram account when asked, and allow:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`
+        : `Open this link, log in to Instagram with the Brownies account (a business or creator account) and allow the app:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`;
     }
     if (cmd === "linkedin") {
       if (!W.linkedin.configured) return "LinkedIn is not set up: LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET are empty in the helpers env.";

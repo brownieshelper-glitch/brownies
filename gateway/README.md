@@ -58,4 +58,5 @@ exactly that amount (x402.mjs); the facilitator pays the gas. The caller is char
 PRICE_MULTIPLIER. The pantry (pantry.mjs) reads its USDC on Ethereum (where the coin's fees arrive) and on Base
 every PANTRY_EVERY_SECONDS and, from PANTRY_BRIDGE_MIN_USDC up with ETH for gas, moves it to Base with Relay
 (bridge.mjs, a quote without referrer, approve + deposit, the status polled). X402_MAX_USD_PER_REQUEST caps one
-payment. GET /health shows the pantry's address and balances. Nothing is bought ahead and no account exists anywhere.
+payment. X402_PAY_TO lists the only addresses the pantry may pay (Ambient's JumpGate today); without it the
+first address paid is pinned for the life of the process and any other recipient is refused, never paid. GET /health shows the pantry's address and balances. Nothing is bought ahead and no account exists anywhere.

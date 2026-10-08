@@ -18,7 +18,22 @@ const RULES = `Your task now: answer a message in a Telegram chat.
 - If someone asks for a private key, a seed phrase or money, say no in one sentence.`;
 
 const FALLBACK = "I do not have a good answer for that one. The docs have the details: https://feedthebrownies.com/docs.html";
-const ALLOWANCE = { burst: 5, day: 40, all: 150 }; // answers for one stranger's chat in ten minutes, in a day, and for all strangers in a day
+const ALLOWANCE = { burst: 5, day: 40, all: 150 };
+/// A request for money, tokens or keys from someone who is not the owner: answered with a fixed line, never a model.
+/// A verb with me/us and a money word ("send me 5$", "lend us some eth"), a key or seed phrase, a transfer to a wallet
+/// or an address, or an amount with please. "send me the link" and "can I get SUGAR by staking?" go to the model.
+const MONEY = String.raw`(\$|usd|usdc|dollars?|euros?|eth\b|ether\b|sugar|tokens?|coins?|money|funds|cash|gas|crypto|airdrop|bucks)`;
+const AMOUNT = String.raw`(\$ ?\d|\d+ ?(\$|usd|usdc|dollars?|euros?|eth\b|bucks))`;
+export const MONEY_ASK = new RegExp([
+  String.raw`\b(send|lend|give|transfer|airdrop|pay|wire|loan|spot|drop|donate)\b[^.?!\n]{0,40}\b(me|us|him|her|them)\b[^.?!\n]{0,40}${MONEY}`,
+  String.raw`\b(send|transfer|pay|airdrop|deposit|move)\b[^.?!\n]{0,60}\b(to|into|at) (my|this|our|the following) (wallet|address|addy|account)\b`,
+  String.raw`\b(send|transfer|pay|airdrop)\b[^.?!\n]{0,60}0x[0-9a-fA-F]{40}`,
+  String.raw`0x[0-9a-fA-F]{40}[^.?!\n]{0,40}\b(send|transfer|pay|airdrop)\b`,
+  String.raw`\b(borrow|lend|loan)\b[^.?!\n]{0,30}${MONEY}`,
+  String.raw`${AMOUNT}[^.?!\n]{0,30}\b(please|pls|plz)\b`,
+  String.raw`\b(private|secret) keys?\b|\bseed phrases?\b|\bmnemonic\b|\brecovery phrase|\bwallet password|\bprivkeys?\b|\bpks?\b[^.?!\n]{0,30}\bwallets?\b|\bwallets?\b[^.?!\n]{0,30}\bpks?\b`,
+].join("|"), "i");
+export const MONEY_LINE = "The brownies hold no money, no tokens and no keys, and cannot send or promise anything to anyone. Only the owner moves funds, by hand. If you want to help the project, stake BROWNIE or tip a brownie from the app on the site."; // answers for one stranger's chat in ten minutes, in a day, and for all strangers in a day
 
 const money = (micro) => `$${(Number(micro || 0) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 const num = (n) => Number(n || 0).toLocaleString("en-US");
@@ -198,6 +213,13 @@ export class Crumb extends Helper {
     const now = this.clock.now();
     const chat = String(m.chat.id);
     if (!(this.ownerChatId && chat === this.ownerChatId)) {
+      if (MONEY_ASK.test(m.text)) {
+        this.log(`[crumb] chat ${chat} asked for money or keys; the fixed line went out, no model`);
+        await this.tg.sendMessage(chat, MONEY_LINE, { replyTo: m.message_id });
+        const key = `tg:moneyask:${chat}:${new Date(now).toISOString().slice(0, 10)}`;
+        if (!this.store.getMeta(key) && this.tg?.configured && this.ownerChatId) { this.store.setMeta(key, "1"); await this.tg.sendMessage(this.ownerChatId, `Someone ${m.chat.type === "private" ? "in a private chat" : "in the group"} asked ${this.Name} for money or keys: "${cut(m.text.trim(), 120)}". The fixed line went out, nothing else. Nothing was sent.`).catch(() => {}); }
+        return null;
+      }
       const a = this.allowance(chat, now);
       if (!a.ok) {
         this.log(`[crumb] chat ${chat} is over its allowance; nothing goes to the model`);

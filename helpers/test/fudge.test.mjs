@@ -127,3 +127,19 @@ test("media posts: off by default; on, the files go up and the post carries them
   const r2 = await on.post({ topic: "another", media: [bad] });
   assert.equal(r2, null); assert.equal(W.xm.posts.length, before);
 });
+
+test("a post goes to the Facebook Page too when the owner allowed it; a refusal there never stops the post", async () => {
+  const W = makeWorld({ reply: () => POSTS[1] });
+  const sent = []; let fail = false;
+  W.fudge.page = { canPage: () => true, pagePost: async (o) => { if (fail) throw new Error("Facebook answered 403 (code 200): permission"); sent.push(o); return { id: "p1_5", url: "https://www.facebook.com/p1_5" }; } };
+  const first = await W.fudge.post({ nth: 1 });
+  assert.equal(first.place, "x");
+  assert.deepEqual(sent, [{ message: POSTS[1] }]);
+  fail = true; W.or.reply = () => POSTS[2];
+  const second = await W.fudge.post({ nth: 2 });
+  assert.equal(second.text, POSTS[2], "X and the site still got it");
+  assert.equal(sent.length, 1);
+  W.fudge.page = { canPage: () => false, pagePost: async () => { throw new Error("must not be called"); } };
+  W.or.reply = () => POSTS[3];
+  assert.equal((await W.fudge.post({ nth: 3 })).text, POSTS[3]);
+});

@@ -13,7 +13,7 @@ const IG_API = "https://graph.instagram.com";
 const FB_API = "https://graph.facebook.com";
 const VERSION = "v21.0";
 export const SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
-export const FB_SCOPES = ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement", "business_management"]; // business_management: Pages owned by a business portfolio are listed only with it
+export const FB_SCOPES = ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement", "business_management", "pages_manage_posts"]; // business_management: Pages owned by a business portfolio are listed only with it; pages_manage_posts: the brownies post on the Page too
 export const LOGINS = ["instagram", "facebook"];
 const TOKENS_KEY = "instagram:tokens";
 
@@ -80,7 +80,9 @@ export class Instagram {
       throw cred(`no Facebook Page you manage has a linked Instagram professional account (${pages.data.length} Page${pages.data.length === 1 ? "" : "s"} seen; logged in as ${who}; Pages ticked in the Facebook screen: ${chosen}; permissions granted: ${granted}): the account that logs in must be an admin of the Brownies Page, and the Page must be ticked in the Facebook screen`);
     }
     const ig = page.instagram_business_account;
-    const t = { login: "facebook", access_token: l.access_token, expiresAt: this.now() + Number(l.expires_in || 60 * 86400) * 1000, obtainedAt: this.now(), page_id: String(page.id), page_name: page.name || null, page_token: page.access_token || null, user_id: String(ig.id), username: ig.username || null, account_type: "professional", permissions: FB_SCOPES };
+    let granted = FB_SCOPES;
+    try { const g = await (await this.fetch(`${FB_API}/${VERSION}/me/permissions?${new URLSearchParams({ access_token: l.access_token })}`)).json(); if (Array.isArray(g.data)) granted = g.data.filter((x) => x.status === "granted").map((x) => x.permission); } catch { granted = FB_SCOPES; }
+    const t = { login: "facebook", access_token: l.access_token, expiresAt: this.now() + Number(l.expires_in || 60 * 86400) * 1000, obtainedAt: this.now(), page_id: String(page.id), page_name: page.name || null, page_token: page.access_token || null, user_id: String(ig.id), username: ig.username || null, account_type: "professional", permissions: granted };
     this.saveTokens(t);
     this.log(`[instagram] connected through the Page ${page.name || page.id} (Facebook Login)`);
     return { id: t.user_id, username: t.username, name: t.username ? "@" + t.username : "the Instagram account", account_type: "professional", page: page.name || page.id };
@@ -155,6 +157,40 @@ export class Instagram {
       throw e;
     }
     return j;
+  }
+
+  /// The Facebook Page behind the Instagram account (Facebook Login only): { id, name } or null.
+  get page() { const t = this.tokens(); return t?.login === "facebook" && t.page_id && t.page_token ? { id: String(t.page_id), name: t.page_name || null } : null; }
+  /// True when the brownies may post on the Page: the owner allowed pages_manage_posts and did not say /facebook off.
+  canPage() { const t = this.tokens(); return Boolean(this.page && (t?.permissions || []).includes("pages_manage_posts") && this.store?.getMeta("facebook:posts", "1") !== "0"); }
+  /// A text post on the Page. Returns { id, url }.
+  async pagePost({ message, link = null }) {
+    if (!this.page) throw new Error("no Facebook Page is connected");
+    const body = { message: String(message || "").slice(0, 60000) };
+    if (link) body.link = link;
+    const r = await this.api("POST", `/${this.page.id}/feed`, { body });
+    if (!r.id) throw new Error("Facebook gave no post id");
+    this.log(`[facebook] post ${r.id} on the Page`);
+    return { id: r.id, url: `https://www.facebook.com/${r.id}` };
+  }
+  /// A photo on the Page from a public URL. Returns { id, url }.
+  async pagePhoto({ imageUrl, caption = "" }) {
+    if (!this.page) throw new Error("no Facebook Page is connected");
+    const r = await this.api("POST", `/${this.page.id}/photos`, { body: { url: imageUrl, caption: String(caption || "").slice(0, 60000), published: "true" } });
+    if (!r.id) throw new Error("Facebook gave no photo id");
+    const id = r.post_id || r.id;
+    this.log(`[facebook] photo ${id} on the Page`);
+    return { id, url: `https://www.facebook.com/${id}` };
+  }
+  /// A video on the Page from a public URL (Facebook fetches it). Returns { id, url }.
+  async pageVideo({ videoUrl, description = "", title = "" }) {
+    if (!this.page) throw new Error("no Facebook Page is connected");
+    const body = { file_url: videoUrl, description: String(description || "").slice(0, 60000) };
+    if (title) body.title = String(title).slice(0, 255);
+    const r = await this.api("POST", `/${this.page.id}/videos`, { body });
+    if (!r.id) throw new Error("Facebook gave no video id");
+    this.log(`[facebook] video ${r.id} on the Page`);
+    return { id: r.id, url: `https://www.facebook.com/${this.page.id}/videos/${r.id}` };
   }
 
   async me() {

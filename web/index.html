@@ -17,12 +17,15 @@
 <link rel="stylesheet" href="styles.css">
 <script src="mascot.js"></script>
 <script>
-  /* The intro plays on the first visit of a session. It is skipped for a link to a part of the page, for visitors
-     who asked their device for less motion, and with ?intro=0. ?intro=1 plays it again. */
+  /* The intro plays every time someone arrives at the home page from outside the site: a typed address, a link, a
+     reload. It is skipped when the visitor comes from another page of this site, follows a link to a part of the
+     page, asked their device for less motion, or adds ?intro=0. ?intro=1 always plays it. */
   (function () {
     try {
       var want = new URLSearchParams(location.search).get("intro");
-      var skip = want === "0" || (want !== "1" && (location.hash.length > 1 || sessionStorage.getItem("browniesIntro") || matchMedia("(prefers-reduced-motion: reduce)").matches));
+      var fromSite = false;
+      try { var ref = document.referrer ? new URL(document.referrer) : null; fromSite = !!ref && ref.host === location.host && ref.pathname !== location.pathname; } catch (e2) {}
+      var skip = want === "0" || (want !== "1" && (location.hash.length > 1 || fromSite || matchMedia("(prefers-reduced-motion: reduce)").matches));
       if (!skip) document.documentElement.classList.add("intro-on");
     } catch (e) {}
   })();

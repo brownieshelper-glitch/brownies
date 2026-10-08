@@ -1,0 +1,140 @@
+/* The room: the brownies at work, live. The stage is the kitchen at night (cocoa walls, cream furniture, orange
+   light); the Lights button turns it to day. Everything around it is the site's cream page. */
+.room-page { padding-bottom: 88px; }
+.room-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px 32px; padding-bottom: 22px; }
+.room-head .lead { max-width: 44em; }
+.room-tools { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 6px; }
+.room-tools .btn[aria-pressed="true"] { background: var(--ink); color: var(--bone); }
+
+/* the cards on top: one brownie each, like a desk's name plate */
+.crew-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.crew-card { position: relative; background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 18px; padding: 12px 14px 12px; min-width: 0; cursor: pointer; text-align: left; font: inherit; color: inherit; transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out); }
+.crew-card:active { transform: translateY(2px); }
+.crew-card.on { box-shadow: 0 0 0 3px var(--accent); }
+.crew-card .top { display: flex; align-items: center; gap: 10px; }
+.crew-card .face { width: 40px; height: 40px; border-radius: 11px; background: var(--bone); border: 2px solid var(--ink); overflow: hidden; flex: none; }
+.crew-card .face svg { display: block; width: 100%; height: 100%; }
+.crew-card .name { font-family: var(--display); font-weight: 800; font-size: 20px; line-height: 1; }
+.crew-card .role { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-b); margin-top: 3px; }
+.crew-card .state { position: absolute; right: 12px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--line-b); border: 1.5px solid var(--ink); }
+.crew-card.working .state { background: var(--accent); }
+.crew-card .metric { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.crew-card .metric b { font-family: var(--display); font-weight: 800; font-size: 26px; line-height: 1; }
+.crew-card .metric span { font-family: var(--mono); font-size: 12px; color: var(--muted-b); white-space: nowrap; }
+.crew-card .bar { height: 7px; border-radius: 4px; background: var(--bone-2); border: 1.5px solid var(--ink); overflow: hidden; margin-top: 8px; }
+.crew-card .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width 600ms var(--ease-out); }
+.crew-card .quote { font-size: 13.5px; line-height: 1.35; color: var(--muted-b); margin-top: 9px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.7em; }
+.crew-card.kitchen .quote { color: var(--ink); }
+
+/* the stage */
+.room-stage-wrap { position: relative; }
+.room-stage { position: relative; background: var(--ink); border: 3px solid var(--ink); border-radius: var(--r); overflow: hidden; box-shadow: 8px 8px 0 var(--ink); aspect-ratio: 16 / 9; }
+.room-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+.room-ticker { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: center; overflow: hidden; background: var(--accent); color: var(--ink); border-top: var(--bw) solid var(--ink); font-family: var(--mono); font-size: 12.5px; white-space: nowrap; pointer-events: none; }
+.room-ticker span { display: inline-block; padding-left: 100%; animation: room-ticker 40s linear infinite; }
+@keyframes room-ticker { to { transform: translateX(-100%); } }
+/* the drawing: classes the script sets on the scene */
+.scene .wall { fill: #3A2419; }
+.scene .wall-dark { fill: #2A1710; }
+.scene .floor { fill: #4A3128; }
+.scene .floor-line { stroke: #5B3E33; stroke-width: 2; }
+.scene .skirting { fill: #241209; }
+.scene .screen { fill: #140B07; stroke: var(--bone); stroke-width: 6; }
+.scene .screen-text { fill: var(--bone); font-family: var(--mono); font-size: 18px; }
+.scene .screen-big { fill: var(--bone); font-family: var(--display); font-weight: 800; font-size: 54px; }
+.scene .screen-label { fill: #C9B8A8; font-family: var(--mono); font-size: 14px; letter-spacing: 0.06em; }
+.scene .screen-line { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+.scene .screen-area { fill: var(--accent); fill-opacity: 0.18; }
+.scene .desk { fill: var(--bone); stroke: var(--ink); stroke-width: 5; }
+.scene .desk-dark { fill: #E4D8C4; }
+.scene .monitor { fill: #140B07; stroke: var(--ink); stroke-width: 5; }
+.scene .monitor-text { fill: var(--bone); font-family: var(--mono); font-size: 13px; }
+.scene .monitor-bar { fill: var(--accent); }
+.scene .plate { fill: var(--ink); }
+.scene .plate-text { fill: var(--bone); font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em; }
+.scene .plant-pot { fill: var(--accent); stroke: var(--ink); stroke-width: 4; }
+.scene .leaf { fill: #6FA86A; stroke: var(--ink); stroke-width: 4; stroke-linejoin: round; }
+.scene .sofa { fill: var(--accent); stroke: var(--ink); stroke-width: 5; }
+.scene .sofa-dark { fill: var(--accent-2); }
+.scene .board { fill: #C98B4F; stroke: var(--ink); stroke-width: 5; }
+.scene .pin { fill: var(--bone); stroke: var(--ink); stroke-width: 3; }
+.scene .note { fill: #FFFBF4; stroke: var(--ink); stroke-width: 2.5; }
+.scene .clock-face { fill: var(--bone); stroke: var(--ink); stroke-width: 5; }
+.scene .clock-hand { stroke: var(--ink); stroke-width: 6; stroke-linecap: round; }
+.scene .rules-board { fill: #140B07; stroke: var(--bone); stroke-width: 4; }
+.scene .rules-text { fill: var(--bone); font-family: var(--mono); font-size: 13px; }
+.scene .rules-head { fill: var(--accent); font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; }
+.scene .lamp-light { fill: var(--accent); fill-opacity: 0.08; }
+.scene .bubble { fill: #FFFBF4; stroke: var(--ink); stroke-width: 4; }
+.scene .bubble-text { fill: var(--ink); font-family: var(--font); font-size: 19px; font-weight: 500; }
+.scene .bubble-who { fill: var(--accent-2); font-family: var(--mono); font-size: 13px; letter-spacing: 0.06em; }
+.scene .flow { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; }
+.scene .flow-dot { fill: var(--bone); stroke: var(--accent); stroke-width: 3; }
+.scene .cube-body { fill: #fff; stroke: var(--ink); stroke-width: 6; }
+.scene .cube-dot { fill: var(--bone); }
+.scene .actor { cursor: pointer; }
+.scene .hit { fill: transparent; cursor: pointer; }
+.scene .oven { fill: var(--ink); }
+.scene .oven-door { fill: var(--accent); }
+.scene .oven-window { fill: var(--ink); }
+.scene .oven-light { fill: var(--bone); }
+.scene .jar { fill: #FFFBF4; fill-opacity: 0.9; stroke: var(--ink); stroke-width: 4; }
+.scene .jar-lid { fill: var(--accent); stroke: var(--ink); stroke-width: 4; }
+.scene .sugar { fill: #fff; }
+/* lights on: a day room */
+.room-stage.lit .scene .wall { fill: #EFE4D0; }
+.room-stage.lit .scene .wall-dark { fill: #E3D5BC; }
+.room-stage.lit .scene .floor { fill: #D9C8A8; }
+.room-stage.lit .scene .floor-line { stroke: #C9B48E; }
+.room-stage.lit .scene .skirting { fill: var(--ink); }
+.room-stage.lit .scene .desk { fill: #FFFBF4; }
+.room-stage.lit .scene .lamp-light { fill-opacity: 0; }
+
+/* the drawer: one brownie's day */
+.room-drawer { position: absolute; right: 16px; top: 16px; bottom: 46px; width: min(380px, calc(100% - 32px)); overflow: auto; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); border-radius: var(--r); padding: 18px; box-shadow: 6px 6px 0 var(--accent); z-index: 2; }
+.drawer-head { display: grid; grid-template-columns: 56px minmax(0, 1fr) 44px; gap: 12px; align-items: center; }
+.drawer-head .face { width: 56px; height: 56px; border-radius: 14px; background: var(--bone); border: var(--bw) solid var(--ink); overflow: hidden; }
+.drawer-head .face svg { display: block; width: 100%; height: 100%; }
+.drawer-head h2 { font-size: 28px; }
+.drawer-head .meta { font-family: var(--mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-b); }
+.drawer-now { margin-top: 12px; font-weight: 600; font-size: 16px; line-height: 1.4; padding: 10px 12px; border-radius: 12px; background: var(--ink); color: var(--bone); }
+.drawer-now.rest { background: var(--bone-2); color: var(--ink); font-weight: 500; }
+.room-drawer h3 { font-size: 18px; margin-top: 18px; }
+.drawer-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.drawer-list li { font-size: 14.5px; line-height: 1.35; padding: 8px 0; border-top: 1.5px solid var(--line-b); }
+.drawer-list .when { font-family: var(--mono); font-size: 12px; color: var(--muted-b); }
+.drawer-list a { text-underline-offset: 3px; text-decoration-color: var(--accent); }
+.drawer-row { margin-top: 16px; }
+.drawer-row .btn { flex: 1 1 auto; }
+
+/* under the stage */
+.room-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; margin-top: 28px; }
+.room-log { list-style: none; margin: 14px 0 0; padding: 0; border-top: var(--bw) solid var(--ink); font-size: 15px; }
+.room-log li { display: grid; grid-template-columns: 70px 64px minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1.5px solid var(--line-b); align-items: baseline; }
+.room-log .when, .room-log .who { font-family: var(--mono); font-size: 12.5px; color: var(--muted-b); }
+.room-log .who { color: var(--accent-2); font-weight: 500; }
+.room-log .what { overflow-wrap: anywhere; }
+.room-log .what a { text-underline-offset: 3px; text-decoration-color: var(--accent); }
+.room-log li.fresh { animation: room-fresh 1200ms var(--ease-out) backwards; }
+@keyframes room-fresh { from { background: var(--accent); } }
+.room-rules { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 0; border-top: var(--bw) solid var(--ink); }
+.room-rules li { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 1.5px solid var(--line-b); font-size: 15px; }
+.room-rules b { font-family: var(--display); font-weight: 800; font-size: 20px; }
+
+@media (max-width: 1023px) {
+  .crew-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .room-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .crew-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .crew-card .quote { display: none; }
+  .room-stage { aspect-ratio: 4 / 3; box-shadow: 5px 5px 0 var(--ink); }
+  .room-drawer { right: 10px; top: 10px; bottom: 40px; width: calc(100% - 20px); padding: 14px; }
+  .room-ticker { font-size: 11.5px; height: 26px; }
+  .room-log li { grid-template-columns: 58px minmax(0, 1fr); }
+  .room-log .who { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-ticker span { animation: none; padding-left: 12px; }
+  .room-log li.fresh { animation: none; }
+}

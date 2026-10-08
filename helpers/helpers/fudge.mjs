@@ -163,16 +163,38 @@ export class Fudge extends Helper {
     const place = posted ? "x" : "site";
     const url = posted ? posted.url : `${this.siteUrl}/posts.html`;
     this.store.addPost({ at: now, helper: "fudge", place, kind: withMedia ? "media" : "post", text, externalId: posted?.id || null, url });
-    const fb = (!to || to.has("facebook")) ? await this.toPage(text, withMedia ? "a post with files, words only" : "post") : null;
+    const fb = (!to || to.has("facebook")) ? await this.toPage(text, withMedia ? "post with files, words only" : "post", posted?.id || null) : null;
     await this.report("post", cut(text, 160), { body: text.length > 160 ? text : null, url, place, cost_micro: cost });
     return { id: posted?.id || null, url, text, place, facebook: fb?.url || null };
   }
 
   /// The same words on the Facebook Page, when the owner allowed it. Never stops the post: a refusal is a log line.
-  async toPage(text, what = "post") {
+  async toPage(text, what = "post", xId = null) {
     if (!this.page?.canPage?.()) return null;
-    try { const fb = await this.page.pagePost({ message: text }); this.log(`[fudge] the ${what} is on the Facebook Page too: ${fb.url}`); return fb; }
-    catch (e) { this.log(`[fudge] Facebook did not take the ${what}: ${cut(e.message, 120)}`); return null; }
+    try {
+      const fb = await this.page.pagePost({ message: text });
+      if (xId) this.store.setMeta(`fudge:fb:${xId}`, fb.id); // so a delete on X takes the Page copy down too
+      this.log(`[fudge] the ${what} is on the Facebook Page too: ${fb.url}`);
+      return fb;
+    } catch (e) { this.log(`[fudge] Facebook did not take the ${what}: ${cut(e.message, 120)}`); return null; }
+  }
+
+  /// The owner takes a post down: on X, on the Facebook Page (the copy kept under fudge:fb:<id>), and off the site
+  /// (the gateway hides the report that carried its address). `ref` is the X link or the post id. Returns a line.
+  async deletePost(ref) {
+    const id = String(ref || "").match(/status\/(\d+)/)?.[1] || String(ref || "").replace(/\D/g, "");
+    if (!id) return "Give me the X link or the post id: /fudge delete https://x.com/Feedthebrownies/status/<id>";
+    const row = this.store.postByExternalId("x", id);
+    const done = [];
+    if (this.x?.configured) { try { if (await this.x.delete(id)) done.push("deleted on X"); else done.push("X did not confirm the deletion"); } catch (e) { done.push(`X refused: ${cut(e.message, 100)}`); } }
+    else done.push("X is not configured");
+    const fb = this.store.getMeta(`fudge:fb:${id}`);
+    if (fb && this.page?.pageDelete) { try { if (await this.page.pageDelete(fb)) { done.push("removed from the Facebook Page"); this.store.setMeta(`fudge:fb:${id}`, null); } } catch (e) { done.push(`Facebook refused: ${cut(e.message, 100)}`); } }
+    const url = row?.url || this.x?.statusUrl?.(id) || null;
+    if (url && this.gateway?.hide) { const n = await this.gateway.hide({ url }); if (n) done.push(`hidden on the site (${n} report${n === 1 ? "" : "s"})`); else if (n === 0) done.push("nothing to hide on the site"); }
+    if (row) this.store.deletePost(row.id);
+    this.log(`[fudge] post ${id} taken down: ${done.join("; ")}`);
+    return `Post ${id}: ${done.join("; ")}.`;
   }
 
   /// A text that waits for the owner: a card on Telegram with Approve and Reject. Returns { approvalId, text }.
@@ -207,7 +229,7 @@ export class Fudge extends Helper {
     try {
       const posted = await this.x.post(rec.text, { replyTo: rec.replyTo || null, approved: true });
       this.store.addPost({ at: now, helper: "fudge", place: "x", kind, text: rec.text, ref: rec.replyTo || "", externalId: posted.id, url: posted.url });
-      if (kind === "post") await this.toPage(rec.text, "approved post");
+      if (kind === "post") await this.toPage(rec.text, "approved post", posted.id);
       await this.report(kind, kind === "reply" ? `Answered @${rec.author || "someone"}: ${cut(rec.text, 120)}` : cut(rec.text, 160), { body: kind === "post" && rec.text.length > 160 ? rec.text : null, url: posted.url, place: "x", cost_micro: 0 });
       if (this.tg?.configured && this.ownerChatId) await this.tg.sendMessage(this.ownerChatId, `Posted: ${posted.url}`);
       return true;
@@ -234,6 +256,8 @@ export class Fudge extends Helper {
         : "off: no replies at all";
       return `Replies on X, ${what}. ${this.pendingReplies()} waiting for you, ${this.store.postsToday("fudge", "x", "reply", this.clock.now())} posted today.`;
     }
+    const del = t.match(/^delete(?:\s+(\S+))?$/i);
+    if (del) return this.deletePost(del[1] || "");
     const allowLinks = LINK.test(t) || ADDRESS.test(t);
     return this.guard("post", () => this.post({ topic: t, allowLinks }));
   }

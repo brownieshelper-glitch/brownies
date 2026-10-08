@@ -108,6 +108,12 @@ export class XClient {
     return { id: j.data.id, url: this.statusUrl(j.data.id) };
   }
 
+  /// Deletes a post of ours. Returns true when X says it is gone.
+  async delete(id) {
+    const j = await this.request("DELETE", `/tweets/${String(id).replace(/\D/g, "")}`);
+    return Boolean(j.data?.deleted);
+  }
+
   /// One multipart call (the bytes of a media chunk). A 401 renews the token once and retries.
   async requestForm(method, path, form, { retry = true } = {}) {
     await this.ensureToken();

@@ -182,6 +182,13 @@ export class Instagram {
     this.log(`[facebook] photo ${id} on the Page`);
     return { id, url: `https://www.facebook.com/${id}` };
   }
+  /// Deletes a post, photo or video of the Page by its id. Returns true when Facebook says it is gone.
+  async pageDelete(id) {
+    if (!this.page) throw new Error("no Facebook Page is connected");
+    const r = await this.api("DELETE", `/${String(id).replace(/[^0-9_]/g, "")}`);
+    return Boolean(r.success);
+  }
+
   /// A video on the Page from a public URL (Facebook fetches it). Returns { id, url }.
   async pageVideo({ videoUrl, description = "", title = "" }) {
     if (!this.page) throw new Error("no Facebook Page is connected");

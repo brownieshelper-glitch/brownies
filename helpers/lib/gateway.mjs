@@ -36,6 +36,16 @@ export class Gateway {
     }
   }
 
+  /// A report taken off every public view (the owner deleted the post). Returns how many rows the gateway hid, or null.
+  async hide({ id = 0, url = "" } = {}) {
+    try {
+      const r = await this.fetch(`${this.url}/api/team/hide`, { method: "POST", headers: { authorization: `Bearer ${this.teamKey}`, "content-type": "application/json" }, body: JSON.stringify(id ? { id } : { url }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { this.log(`[gateway] hide refused ${r.status} ${j.error?.code || ""}`); return null; }
+      return Number(j.hidden || 0);
+    } catch (e) { this.log(`[gateway] hide failed: ${e.message}`); return null; }
+  }
+
   /// A plain GET of a public route: { ok, status, body } (body is parsed JSON, or null).
   async get(path, headers = {}) {
     try {

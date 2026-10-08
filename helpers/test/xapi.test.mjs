@@ -122,3 +122,14 @@ test("the client refuses a text that breaks the rules of X (a link, an address, 
   await x.post("Two tags are not the client's business #a #b");
   assert.equal(xm.posts.length, 2);
 });
+
+test("a post of ours is deleted by id or link", async () => {
+  const fetch = makeFetch(), clock = new FakeClock(T0), xm = mockX(fetch);
+  const gone = [];
+  fetch.on("DELETE", /api\.x\.com\/2\/tweets\/\d+$/, (c) => { gone.push(c.url.split("/").pop()); return { json: { data: { deleted: true } } }; });
+  const x = new XClient({ clientId: "cid", clientSecret: "sec", accessToken: "access-old", refreshToken: "refresh-old", tokenFile: tmp(), username: "Feedthebrownies", fetch, clock });
+  assert.equal(await x.delete("2108289804416831519"), true);
+  assert.equal(await x.delete("https://x.com/Feedthebrownies/status/77"), true, "digits are taken from a link too");
+  assert.deepEqual(gone, ["2108289804416831519", "77"]);
+  void xm;
+});

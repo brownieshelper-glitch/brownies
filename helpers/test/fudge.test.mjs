@@ -179,3 +179,19 @@ test("the owner's places: to=[facebook] keeps the post off X (the site and the P
   const c = await W.fudge.post({ nth: 3 });
   assert.equal(c.place, "x"); assert.equal(page.length, 2, "no choice: everywhere");
 });
+
+test("/fudge delete <link>: the post goes off X, the Facebook copy goes too, the site hides the report, the store forgets it", async () => {
+  const W = makeWorld({ reply: () => POSTS[0] });
+  const pageGone = [];
+  W.fudge.page = { canPage: () => true, pagePost: async () => ({ id: "p1_55", url: "https://www.facebook.com/p1_55" }), pageDelete: async (id) => { pageGone.push(id); return true; } };
+  const first = await W.fudge.post({ nth: 1 });
+  assert.equal(W.store.getMeta(`fudge:fb:${first.id}`), "p1_55", "the Page copy is remembered");
+  const xGone = [], hidden = [];
+  W.fetch.on("DELETE", /api\.x\.com\/2\/tweets\/\d+$/, (c) => { xGone.push(c.url.split("/").pop()); return { json: { data: { deleted: true } } }; });
+  W.fetch.on("POST", "/api/team/hide", (c) => { hidden.push(c.body); return { json: { hidden: 1 } }; });
+  const line = await W.fudge.onRequest(`delete ${first.url}`);
+  assert.equal(line, `Post ${first.id}: deleted on X; removed from the Facebook Page; hidden on the site (1 report).`);
+  assert.deepEqual(xGone, [first.id]); assert.deepEqual(pageGone, ["p1_55"]); assert.deepEqual(hidden, [{ url: first.url }]);
+  assert.equal(W.store.postByExternalId("x", first.id), null); assert.equal(W.store.getMeta(`fudge:fb:${first.id}`), null);
+  assert.match(await W.fudge.onRequest("delete"), /^Give me the X link or the post id/);
+});

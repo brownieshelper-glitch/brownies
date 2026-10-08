@@ -203,7 +203,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
     }
     if (cmd === "summary") { await sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }); return true; }
     if (cmd === "suggestions") return suggestionsList(store, S.siteUrl);
-    if (cmd === "fudge") { if (!text) return `Tell Fudge what to post: /fudge <what>. Or /fudge replies auto|approve|off|status for the answers on X (now: ${fudge.repliesMode()}).`; const r = await fudge.onRequest(text); return typeof r === "string" ? r : r ? true : "Fudge could not write that one now (budget, the cap, or an error). Check the log."; }
+    if (cmd === "fudge") { if (!text) return `Tell Fudge what to post: /fudge <what>. Or /fudge replies auto|approve|off|status for the answers on X (now: ${fudge.repliesMode()}), /fudge delete <X link> to take a post down everywhere.`; const r = await fudge.onRequest(text); return typeof r === "string" ? r : r ? true : "Fudge could not write that one now (budget, the cap, or an error). Check the log."; }
     if (all[cmd]?.onRequest) { if (!text) return `Tell ${cmd} what to draft: /${cmd} <what>`; const r = await all[cmd].onRequest(text); return r ? true : `${cmd} could not write that one now (budget or an error). Check the log.`; }
     return undefined; // not a command of ours: Crumb answers it like any message
   };

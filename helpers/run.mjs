@@ -173,6 +173,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
         ? `Open this link, log in to Facebook with your own account (the one that manages the Brownies Page), tick the Brownies Page and the Brownies Instagram account when asked, and allow:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`
         : `Open this link, log in to Instagram with the Brownies account (a business or creator account) and allow the app:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`;
     }
+    if (cmd === "swirl") { if (!all.swirl) return "There is no social brownie here."; if (!text) return "Swirl: /swirl trends shows today's trends, /swirl trend <name> looks one up, /swirl make <number> on <places> makes our version where you say (x, instagram, facebook, tiktok, youtube, all), /swirl plan writes the week's plan."; const r = await all.swirl.onRequest(text); return typeof r === "string" ? r : r ? true : "Swirl could not do that now (budget or an error). Check the log."; }
     if (cmd === "facebook") {
       if (!W.instagram.page) return "The Facebook Page comes with the Instagram connection: send /instagram first.";
       const sub = text.trim().toLowerCase();

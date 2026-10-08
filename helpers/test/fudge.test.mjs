@@ -167,3 +167,15 @@ test("clips and memes have their own daily cap on X: three text posts do not blo
   assert.equal(on.postsToday(W.clock.now()), 3); assert.equal(on.mediaToday(W.clock.now()), 2);
   assert.equal(W.gw.of("fudge", "status").filter((r) => /clip on X/.test(r.title)).length, 2, "the refused third one never started");
 });
+
+test("the owner's places: to=[facebook] keeps the post off X (the site and the Page get it), to=[x] keeps it off the Page", async () => {
+  const W = makeWorld({ reply: (body, n) => POSTS[(n - 1) % POSTS.length] });
+  const page = [];
+  W.fudge.page = { canPage: () => true, pagePost: async (o) => { page.push(o.message); return { id: "p1_7", url: "https://www.facebook.com/p1_7" }; } };
+  const a = await W.fudge.post({ nth: 1, to: ["facebook"] });
+  assert.equal(a.place, "site"); assert.equal(W.xm.posts.length, 0, "not on X"); assert.deepEqual(page, [POSTS[0]]);
+  const b = await W.fudge.post({ nth: 2, to: ["x"] });
+  assert.equal(b.place, "x"); assert.equal(W.xm.posts.length, 1); assert.equal(page.length, 1, "not on the Page");
+  const c = await W.fudge.post({ nth: 3 });
+  assert.equal(c.place, "x"); assert.equal(page.length, 2, "no choice: everywhere");
+});

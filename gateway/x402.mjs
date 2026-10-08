@@ -50,9 +50,12 @@ export function recoverPayer(payload, chainId) {
 
 export class X402Payer {
   /// privateKey or wallet: the pantry wallet that holds USDC on `chainId`. maxMicro: the most one request may cost.
-  constructor({ privateKey = "", wallet = null, chainId = 8453, asset = USDC[chainId] || USDC[8453], maxMicro = 2_000_000, fetch = globalThis.fetch, now = () => Date.now(), log = () => {} } = {}) {
+  constructor({ privateKey = "", wallet = null, chainId = 8453, asset = USDC[chainId] || USDC[8453], maxMicro = 2_000_000, fetch = globalThis.fetch, now = () => Date.now(), log = () => {}, allowTo = [] } = {}) {
     this.wallet = wallet || new Wallet(privateKey);
     this.chainId = chainId; this.asset = asset; this.maxMicro = maxMicro;
+    // where the money may go: the addresses the owner set (X402_PAY_TO), or else the first address ever paid, pinned
+    this.allowTo = (allowTo || []).map((a) => String(a).toLowerCase());
+    this.pinnedTo = null;
     this.fetchRaw = fetch; this.now = now; this.log = log;
     this.paid = { count: 0, micro: 0, last: null }; // what this process has paid so far
   }
@@ -67,6 +70,9 @@ export class X402Payer {
     }
     const micro = Number(req.amount);
     if (!Number.isInteger(micro) || micro < 0) throw new Error(`x402: bad amount ${req.amount}`);
+    const to = String(req.payTo).toLowerCase();
+    if (this.allowTo.length ? !this.allowTo.includes(to) : (this.pinnedTo && this.pinnedTo !== to)) throw new Error(`x402: the payment would go to ${req.payTo}, not an address the owner allowed; set X402_PAY_TO to allow it`);
+    if (!this.allowTo.length && !this.pinnedTo) { this.pinnedTo = to; this.log(`[x402] the pantry will pay ${req.payTo} and no other address until the owner sets X402_PAY_TO`); }
     const cap = maxMicro != null && Number.isFinite(Number(maxMicro)) ? Math.min(this.maxMicro, Math.max(0, Math.ceil(Number(maxMicro)))) : this.maxMicro;
     if (micro > cap) throw new Error(`x402: the price ${(micro / 1e6).toFixed(6)} USDC is over the cap of ${(cap / 1e6).toFixed(cap === this.maxMicro ? 2 : 6)} USDC ${cap === this.maxMicro ? "per request" : "for this request"}`);
     const sec = Math.floor(this.now() / 1000);

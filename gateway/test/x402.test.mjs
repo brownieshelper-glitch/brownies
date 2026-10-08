@@ -51,7 +51,7 @@ test("the payer signs what the facilitator verifies, pays the exact amount once 
   assert.equal(seen[1].headers["x402-input-tokens"], "11", "the original headers travel with the retry");
   assert.equal(seen[1].body, "{}");
   assert.equal(p.paid.count, 1); assert.equal(p.paid.micro, 896); assert.equal(p.paid.last.tx, "0xabc");
-  assert.match(logs[0], /\[x402\] paid 0\.000896 USDC to 0x6992/);
+  assert.match(logs.at(-1), /\[x402\] paid 0\.000896 USDC to 0x6992/);
   // the signed payload is a faithful copy of the requirement
   const payload = b64.decode(seen[1].headers["payment-signature"]);
   assert.deepEqual(payload.accepted, required().accepts[1]);
@@ -78,4 +78,26 @@ test("over the cap, on the wrong chain, refused, or free: no payment is made", a
   await assert.rejects(() => new X402Payer({ wallet: w, fetch: bare }).fetch("https://x"), /402 without a PAYMENT-REQUIRED header/);
   assert.equal(pickRequirement(required(), { chainId: 1, asset: USDC[1] }), null);
   assert.equal(pickRequirement({ accepts: [{ ...required().accepts[1], extra: { assetTransferMethod: "permit2" } }] }, { chainId: 8453, asset: USDC[8453] }), null, "only EIP-3009 is signed here");
+});
+
+test("the pantry pays only the address the owner allowed (X402_PAY_TO), or else the first address it met and no other", async () => {
+  const w = Wallet.createRandom();
+  const other = { ...required(), accepts: [{ ...required().accepts[1], payTo: "0x000000000000000000000000000000000000dEaD" }] };
+  const otherFetch = async () => new Response("", { status: 402, headers: { "payment-required": b64.encode(other) } });
+  const p = new X402Payer({ wallet: w, fetch: fakeResource().fetch, allowTo: [PAY_TO] });
+  assert.equal((await p.fetch("https://x")).paid.to, PAY_TO);
+  const q = new X402Payer({ wallet: w, fetch: otherFetch, allowTo: [PAY_TO] });
+  await assert.rejects(() => q.fetch("https://x"), /would go to 0x0000.*dEaD, not an address the owner allowed; set X402_PAY_TO/);
+  assert.equal(q.paid.count, 0);
+  // no list: the first address paid is pinned for the life of the process
+  const logs = [];
+  const r = new X402Payer({ wallet: w, fetch: fakeResource().fetch, log: (l) => logs.push(l) });
+  await r.fetch("https://x");
+  assert.equal(r.pinnedTo, PAY_TO.toLowerCase());
+  assert.match(logs[0], /\[x402\] the pantry will pay 0x6992.* and no other address until the owner sets X402_PAY_TO/);
+  r.fetchRaw = otherFetch;
+  await assert.rejects(() => r.fetch("https://x"), /not an address the owner allowed/);
+  assert.equal(r.paid.count, 1);
+  // the case of the address does not matter
+  assert.equal((await new X402Payer({ wallet: w, fetch: fakeResource().fetch, allowTo: [PAY_TO.toLowerCase()] }).fetch("https://x")).paid.micro, 896);
 });

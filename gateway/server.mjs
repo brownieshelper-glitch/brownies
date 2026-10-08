@@ -87,7 +87,7 @@ const team = new TeamLog(ledger.db);
 // ---- the pantry and Ambient: inference paid per request, no account anywhere ----
 let pantry = null, ambient = null;
 if (/^0x[0-9a-fA-F]{64}$/.test(cfg.pantryKey)) {
-  const payer = new X402Payer({ privateKey: cfg.pantryKey, chainId: 8453, maxMicro: Math.round(cfg.x402MaxUsd * 1e6), log: console.log });
+  const payer = new X402Payer({ privateKey: cfg.pantryKey, chainId: 8453, maxMicro: Math.round(cfg.x402MaxUsd * 1e6), allowTo: String(process.env.X402_PAY_TO || "").split(/[\s,]+/).filter(Boolean), log: console.log });
   ambient = new Ambient({ payer, log: console.log });
   // the bridge moves the fees' USDC from Ethereum to Base; only when this gateway's chain is Ethereum
   const bridge = cfg.chainId === 1 ? new RelayBridge({ wallet: new PantryWallet(cfg.pantryKey, new PantryProvider(cfg.rpcUrl, 1, { staticNetwork: true })), log: console.log }) : null;

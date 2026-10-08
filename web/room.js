@@ -92,7 +92,7 @@
   const screenRight = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 96, "", "screen-big", viewDays, { "text-anchor": "end" });
   const screenRightSub = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 124, "", "screen-text", viewDays, { "text-anchor": "end" });
   const screenFoot = text(SCREEN.x + 22, SCREEN.y + SCREEN.h - 18, "", "screen-label", viewDays);
-  const screenHint = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 34, "CLICK FOR THE NEXT VIEW", "screen-label", screenG, { "text-anchor": "end" });
+  const screenHint = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 34, "CLICK: NEXT VIEW", "screen-label", screenG, { "text-anchor": "end" });
   const screenFlash = mk("rect", { x: SCREEN.x, y: SCREEN.y, width: SCREEN.w, height: SCREEN.h, rx: 14, fill: "#FF5A1F", opacity: 0, "pointer-events": "none" }, screenG);
   let screenMode = 0;
   const VIEWS = [viewDays, viewWeek, viewTower];

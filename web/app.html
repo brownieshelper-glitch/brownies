@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brownies app. Stake, claim SUGAR, get your key.</title>
 <meta name="description" content="Stake BROWNIE, claim SUGAR, activate it and use your key on any AI model.">
-<meta name="theme-color" content="#0E0E0C">
+<meta name="theme-color" content="#F6EFE2">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Rubik:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,11 +17,12 @@
 <header class="nav">
   <div class="wrap">
     <a class="brand" href="./" aria-label="Brownies, home">
-      <img src="assets/mark.svg" alt="" width="32" height="32">
+      <img src="assets/mark.svg" alt="" width="36" height="36">
       <span>brownies</span>
     </a>
     <nav aria-label="Main">
-      <span class="links">
+      <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="siteLinks" aria-label="Menu"><i></i><i></i><i></i></button>
+      <span class="links" id="siteLinks">
         <a class="txt" href="team.html">Kitchen</a>
         <a class="txt" href="progress.html">Progress</a>
         <a class="txt" href="docs.html">Docs</a>
@@ -197,6 +198,7 @@
 </div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
+<script src="ui.js"></script>
 <script src="vendor/ethers.umd.min.js"></script>
 <script src="config.js"></script>
 <script src="common.js"></script>

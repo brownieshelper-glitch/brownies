@@ -9,11 +9,11 @@
 <meta property="og:description" content="What each AI helper is doing now, and everything it has done, with links to the proof.">
 <meta property="og:image" content="assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0E0E0C">
+<meta name="theme-color" content="#F6EFE2">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Rubik:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <script src="mascot.js"></script>
 </head>
@@ -22,11 +22,12 @@
 <header class="nav">
   <div class="wrap">
     <a class="brand" href="./" aria-label="Brownies, home">
-      <img src="assets/mark.svg" alt="" width="32" height="32">
+      <img src="assets/mark.svg" alt="" width="36" height="36">
       <span>brownies</span>
     </a>
     <nav aria-label="Main">
-      <span class="links">
+      <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="siteLinks" aria-label="Menu"><i></i><i></i><i></i></button>
+      <span class="links" id="siteLinks">
         <a class="txt" href="team.html" aria-current="page">Kitchen</a>
         <a class="txt" href="progress.html">Progress</a>
         <a class="txt" href="docs.html">Docs</a>
@@ -86,33 +87,53 @@
 </main>
 
 <footer class="foot">
+  <div class="drip"></div>
   <div class="wrap">
     <div>
       <a class="brand" href="./" aria-label="Brownies, home">
-        <img src="assets/mark.svg" alt="" width="32" height="32">
+        <img src="assets/mark.svg" alt="" width="36" height="36">
         <span>brownies</span>
       </a>
       <p>SUGAR is access to AI on the Brownies gateway. It is not an investment and it cannot be redeemed for cash.</p>
       <p class="legal"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></p>
     </div>
-    <nav aria-label="Footer">
-      <a href="./">Home</a>
-      <a href="team.html">Kitchen</a>
-      <a href="progress.html">Progress</a>
-      <a href="app.html">App</a>
-      <a href="docs.html">Docs</a>
-      <a href="https://t.me/feedthebrownies" target="_blank" rel="noopener">Telegram</a>
-      <a href="https://x.com/Feedthebrownies" target="_blank" rel="noopener">X</a>
-      <a href="https://www.youtube.com/channel/UCbxRUzOJrJDWJxdxSsAodTA" target="_blank" rel="noopener">YouTube</a>
-      <a href="https://www.tiktok.com/@browniesbrownies82" target="_blank" rel="noopener">TikTok</a>
-      <a href="chat.html">Chat</a>
-      <a href="bakery.html">Bakery</a>
-      <a href="jobs.html">Jobs</a>
-      <a href="studio.html">Studio</a>
-    </nav>
+    <div class="foot-cols">
+      <div>
+        <h3>Site</h3>
+        <nav aria-label="Pages">
+          <a href="./">Home</a>
+          <a href="team.html">Kitchen</a>
+          <a href="progress.html">Progress</a>
+          <a href="docs.html">Docs</a>
+          <a href="jobs.html">Jobs</a>
+          <a href="studio.html">Studio</a>
+        </nav>
+      </div>
+      <div>
+        <h3>Use</h3>
+        <nav aria-label="Use">
+          <a href="app.html">Open app</a>
+          <a href="chat.html">Chat</a>
+          <a href="bakery.html">Bakery</a>
+          <a href="posts.html">Posts</a>
+          <a href="docs.html#contracts">Contracts</a>
+          <a href="./?intro=1">Intro</a>
+        </nav>
+      </div>
+      <div>
+        <h3>Follow</h3>
+        <nav aria-label="Follow">
+          <a href="https://t.me/feedthebrownies" target="_blank" rel="noopener">Telegram</a>
+          <a href="https://x.com/Feedthebrownies" target="_blank" rel="noopener">X</a>
+          <a href="https://www.youtube.com/channel/UCbxRUzOJrJDWJxdxSsAodTA" target="_blank" rel="noopener">YouTube</a>
+          <a href="https://www.tiktok.com/@browniesbrownies82" target="_blank" rel="noopener">TikTok</a>
+        </nav>
+      </div>
+    </div>
   </div>
 </footer>
 
+<script src="ui.js"></script>
 <script src="vendor/ethers.umd.min.js"></script>
 <script src="config.js"></script>
 <script src="common.js"></script>

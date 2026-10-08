@@ -138,3 +138,16 @@
   .room-ticker span { animation: none; padding-left: 12px; }
   .room-log li.fresh { animation: none; }
 }
+
+/* the line under the room where the visitor talks to the brownies */
+.room-say { margin-top: 22px; background: var(--paper); border: var(--bw) solid var(--ink); border-radius: var(--r); padding: 16px 18px 14px; }
+.say-lbl { display: block; font-family: var(--display); font-weight: 700; font-size: 20px; margin-bottom: 10px; }
+.say-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.say-row input { flex: 1 1 260px; min-height: 48px; padding: 0 16px; border-radius: 999px; border: var(--bw) solid var(--ink); background: var(--bone); color: var(--ink); font: inherit; font-size: 17px; }
+.say-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 90, 31, 0.25); }
+.say-row .btn { flex: 0 0 auto; }
+.say-hint { margin-top: 10px; font-size: 14px; color: var(--muted-b); line-height: 1.45; }
+/* the oven at work */
+.scene .oven-g.baking .oven-window { fill: var(--accent); }
+.scene .oven-g.baking .oven-light { fill: var(--accent); }
+.scene .clock-g { cursor: pointer; }

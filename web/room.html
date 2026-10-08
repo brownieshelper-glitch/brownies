@@ -30,6 +30,7 @@
       <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="siteLinks" aria-label="Menu"><i></i><i></i><i></i></button>
       <span class="links" id="siteLinks">
         <a class="txt" href="team.html">Kitchen</a>
+        <a class="txt" href="room.html" aria-current="page">Room</a>
         <a class="txt" href="progress.html">Progress</a>
         <a class="txt" href="docs.html">Docs</a>
         <a class="txt" href="bakery.html">Bakery</a>
@@ -44,12 +45,12 @@
   <div class="page-head room-head">
     <div>
       <h1>The room<span class="dot">.</span></h1>
-      <p class="lead">The four brownies at their stations, live. What each one is doing now, every report the moment it lands, and the numbers on the wall. Click a brownie to read its day. Click the floor to drop a sugar cube.</p>
+      <p class="lead">The four brownies at their stations, live. What each one is doing now, every report the moment it lands, and the numbers on the wall. Click a brownie to read its day, or pick it up and carry it somewhere. Click a jar for a sugar cube, the oven to see what Chip baked, the screen for the next view, the clock for Rome time. Or tell them something under the room.</p>
     </div>
     <div class="room-tools">
       <button class="btn ghost sm" id="lightsBtn" type="button" aria-pressed="false">Lights</button>
       <button class="btn ghost sm" id="bellBtn" type="button">Ring the bell</button>
-      <button class="btn ghost sm" id="soundBtn" type="button" aria-pressed="false" hidden>Sound</button>
+      <button class="btn ghost sm" id="soundBtn" type="button" aria-pressed="false">Sound</button>
     </div>
   </div>
 
@@ -76,6 +77,15 @@
       </div>
     </aside>
   </section>
+
+  <form class="room-say" id="say" autocomplete="off">
+    <label class="say-lbl" for="sayIn">Say something to the brownies</label>
+    <div class="say-row">
+      <input id="sayIn" maxlength="80" placeholder="fudge, what did you do today?">
+      <button class="btn sm" type="submit">Say it</button>
+    </div>
+    <p class="say-hint">They understand their names, sugar, bell, lights, oven, tower, week, today, who is working, and hello. No AI is involved: the answers come from the day's data.</p>
+  </form>
 
   <section class="room-grid">
     <div class="panel room-log-panel">
@@ -117,6 +127,7 @@
         <nav aria-label="Pages">
           <a href="./">Home</a>
           <a href="team.html">Kitchen</a>
+          <a href="room.html">Room</a>
           <a href="progress.html">Progress</a>
           <a href="docs.html">Docs</a>
           <a href="jobs.html">Jobs</a>

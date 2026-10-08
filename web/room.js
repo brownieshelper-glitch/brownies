@@ -667,7 +667,7 @@
   (function buildViews() {
     text(SCREEN.x + 22, SCREEN.y + 70, "THIS WEEK, BY KIND", "screen-label", viewWeek);
     for (let i = 0; i < 5; i++) {
-      const y = SCREEN.y + 96 + i * 38;
+      const y = SCREEN.y + 96 + i * 34;
       const label = text(SCREEN.x + 22, y + 6, "", "screen-text", viewWeek);
       const bar = mk("rect", { x: SCREEN.x + 200, y: y - 10, width: 0, height: 22, rx: 6, fill: "#FF5A1F" }, viewWeek);
       const num = text(SCREEN.x + SCREEN.w - 22, y + 6, "", "screen-text", viewWeek, { "text-anchor": "end" });
@@ -679,7 +679,7 @@
   })();
   function renderScreen() {
     const todayN = actors.reduce((s, a) => s + a.today, 0), t = towers[towers.length - 1];
-    screenTop.textContent = `BROWNIES   REPORTS TODAY ${todayN}   JOBS ON THE BOARD ${jobsOpen}   ${new Date().toUTCString().slice(5, 16).toUpperCase()}`;
+    screenTop.textContent = `BROWNIES   REPORTS TODAY ${todayN}   JOBS ON THE BOARD ${jobsOpen}`;
     if (screenMode === 0) {
       screenBig.textContent = String(totalReports);
       screenSub.textContent = "jobs done, one brick each";

@@ -131,11 +131,12 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
   if (all.swirl) all.swirl.team = all; // a trend's version is made by Sprinkle or Fudge
+  if (all.sprinkle) all.sprinkle.team = all; // a clip approved by the owner goes to X through Fudge
   // bounties, hackathons and audit contests (helpers/contests.mjs, hidden with Zest): Chip prepares the entries, the owner approves
   const contestsFile = new URL("./helpers/contests.mjs", import.meta.url);
   if (existsSync(contestsFile)) { const { Contests } = await import(contestsFile); chip.contests = new Contests({ chip, github, store, clock, telegram, ownerChatId: S.telegram.ownerChatId, log, siteUrl: S.siteUrl }); }

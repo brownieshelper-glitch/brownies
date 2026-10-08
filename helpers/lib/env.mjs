@@ -11,7 +11,7 @@ export const NAMES = [
   "X_CLIENT_ID", "X_CLIENT_SECRET", "X_ACCESS_TOKEN", "X_REFRESH_TOKEN", "X_TOKEN_FILE", "X_USERNAME",
   "GITHUB_TOKEN", "GITHUB_REPO",
   "YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN", "YOUTUBE_CHANNEL_ID",
-  "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET",
+  "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "HF_CREDENTIALS",
   "FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY", "GLAZE_PRIVATE_KEY", "SWIRL_PRIVATE_KEY", "SPRINKLE_PRIVATE_KEY", "HELPERS_MNEMONIC", "VIDEOS_DIR", "FFMPEG_PATH",
   "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF", "ADMIN_WALLETS", "ADMIN_ORIGINS",
 ];
@@ -61,6 +61,7 @@ export function settings(env = process.env) {
       username: env.X_USERNAME || "Feedthebrownies",
     },
     github: { token: env.GITHUB_TOKEN || "", repo: env.GITHUB_REPO || "" },
+    hfCredentials: env.HF_CREDENTIALS || "", // Higgsfield's API, key-id:key-secret, for Sprinkle's trend clips
     tiktok: { clientKey: env.TIKTOK_CLIENT_KEY || "", clientSecret: env.TIKTOK_CLIENT_SECRET || "" }, // the developer app; the account tokens live in the store once the owner allows it
     keys: { fudge: env.FUDGE_PRIVATE_KEY || "", crumb: env.CRUMB_PRIVATE_KEY || "", nib: env.NIB_PRIVATE_KEY || "", chip: env.CHIP_PRIVATE_KEY || "", glaze: env.GLAZE_PRIVATE_KEY || "", swirl: env.SWIRL_PRIVATE_KEY || "", sprinkle: env.SPRINKLE_PRIVATE_KEY || "" },
     mnemonic: env.HELPERS_MNEMONIC || "", // the seed of the baked brownies' wallets (lib/bakery.mjs), derived by index, MODE=live only

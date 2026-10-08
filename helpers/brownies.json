@@ -37,15 +37,17 @@
       "dailyCapUsd": 31.5,
       "postHours": [
         9,
-        13,
-        18
+        12,
+        15,
+        18,
+        21
       ],
       "postMinute": 0,
       "mentionsEveryMinutes": 20,
-      "maxPostsPerDay": 3,
+      "maxPostsPerDay": 5,
       "maxRepliesPerDay": 12,
       "maxRepliesPerAuthorPerDay": 2,
-      "maxMediaPostsPerDay": 2,
+      "maxMediaPostsPerDay": 4,
       "replies": "approve",
       "topics": [
         "how a trade turns into SUGAR for stakers",

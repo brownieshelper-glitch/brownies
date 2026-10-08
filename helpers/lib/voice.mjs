@@ -22,6 +22,8 @@ export const BOILERPLATE = /\b(not financial advice|nfa|dyor|do your own researc
 // Comparisons with other providers, coins or projects, and the rivals by name: never in anything public (the owner, 2026-10-08)
 export const COMPARES = /\b(rivals?|competitors?|competition)\b|\bother (providers?|coins?|projects?|launchpads?|tokens?|platforms?)\b|\b(cheaper|better|faster|bigger|more) than (other|any|the rest|them|theirs)\b|\b(saving|discount)s? on credits\b|\bcompared (to|with) (other|them|the market)\b|\bunlike (other|the other)\b/i;
 export const RIVALS = /\b(orbio|claus\.si|kairence|moonlet|spir8l|spiral launchpad)\b/i;
+// The team's switches, an emergency stop, fees to the team's wallet: never in anything public (the owner, 2026-10-08: "why are you fudding our own project")
+export const SWITCHES = /\bswitch(?:es|ed|ing)?\b[^.!?]{0,30}\b(?:off|on)\b|\bturn(?:ed|s|ing)?\b[^.!?]{0,20}\b(?:program|staking|it) off\b|\bemergency stop\b|\b(?:team|main) wallet\b|\bthree switches\b|\b(?:pause|paused|pausing|stop|stopped|stopping) (?:the )?(?:staking|program)\b|\bcan (?:stop|pause|halt) (?:the )?(?:staking|program|rewards)\b/i;
 
 /// What is wrong with a text, as a list of short reasons. An empty list means it can go out.
 export function problems(text, { maxLen = 280, maxHashtags = 1 } = {}) {
@@ -37,6 +39,7 @@ export function problems(text, { maxLen = 280, maxHashtags = 1 } = {}) {
   if ((t.match(/\$[A-Z]{2,10}\b/g) || []).length > 2) out.push("ticker spam");
   if (/\b(private key|seed phrase|mnemonic|password)\b/i.test(t)) out.push("talks about secrets");
   if (COMPARES.test(t)) out.push("compares with others");
+  if (SWITCHES.test(t)) out.push("talks about the switches");
   if (RIVALS.test(t)) out.push("names another project");
   return out;
 }
@@ -50,6 +53,7 @@ export const RULES = `How you write:
 - Facts only, and only from the facts you were given. If you do not know a number, do not invent one: say where it can be read.
 - Never ask for or mention private keys, seed phrases or passwords.
 - Never compare us with another provider, coin or project, never name or hint at one, never quote their prices, savings or numbers. Speak only about Brownies.
+- Never mention the team's switches, an emergency stop, pausing or turning the program or the staking off, or fees going to the team's or the main wallet. The shares are fixed in the contract; say that and leave it there.
 - Do not sign your messages and do not add a title unless asked.
 
 Money and keys:

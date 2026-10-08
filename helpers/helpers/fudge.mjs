@@ -106,6 +106,7 @@ export class Fudge extends Helper {
   async post(slot = {}) {
     const now = this.clock.now();
     const withMedia = Array.isArray(slot.media) && slot.media.length > 0;
+    const to = Array.isArray(slot.to) && slot.to.length ? new Set(slot.to) : null; // the places the owner chose; null = X, the site and the Page
     const made = withMedia ? this.mediaToday(now) : this.postsToday(now);
     if (withMedia ? made >= this.maxMedia : made >= this.maxPosts) { this.log(`[fudge] already ${made} ${withMedia ? "posts with files" : "posts"} today`); return null; }
     if (!(await this.ready())) return null;
@@ -149,7 +150,8 @@ export class Fudge extends Helper {
       }
       if (!mediaIds.length) { this.log("[fudge] no file went up: the post waits for the next try"); this.store.jobDone({ at: now, helper: "fudge", job: "post", ok: false, costMicro: cost, note: "media upload failed" }); return null; }
     }
-    if (this.x?.configured) {
+    if (to && !to.has("x")) this.log("[fudge] the owner chose other places: the post stays off X");
+    else if (this.x?.configured) {
       try { posted = await this.x.post(text, { mediaIds }); }
       catch (e) {
         if (e.budget) throw e;
@@ -161,9 +163,9 @@ export class Fudge extends Helper {
     const place = posted ? "x" : "site";
     const url = posted ? posted.url : `${this.siteUrl}/posts.html`;
     this.store.addPost({ at: now, helper: "fudge", place, kind: withMedia ? "media" : "post", text, externalId: posted?.id || null, url });
-    await this.toPage(text, withMedia ? "a post with files, words only" : "post");
+    const fb = (!to || to.has("facebook")) ? await this.toPage(text, withMedia ? "a post with files, words only" : "post") : null;
     await this.report("post", cut(text, 160), { body: text.length > 160 ? text : null, url, place, cost_micro: cost });
-    return { id: posted?.id || null, url, text, place };
+    return { id: posted?.id || null, url, text, place, facebook: fb?.url || null };
   }
 
   /// The same words on the Facebook Page, when the owner allowed it. Never stops the post: a refusal is a log line.
@@ -238,10 +240,10 @@ export class Fudge extends Helper {
 
   /// A post with pictures or a video (a trend's version made by Sprinkle): Fudge writes the words, X gets the files.
   /// Null while media posting is off (config media: true once the app may upload) or X is not configured.
-  async postMedia({ topic, files = [] }) {
+  async postMedia({ topic, files = [], to = null }) {
     if (!this.mediaOn) { this.log("[fudge] media posting is off: the file stays with the owner"); return null; }
     if (!this.x?.configured || !files.length) return null;
-    return this.guard("post", () => this.post({ topic: String(topic || "").trim(), media: files }));
+    return this.guard("post", () => this.post({ topic: String(topic || "").trim(), media: files, to }));
   }
 
   /// What the brownies did today, from the gateway's team summary, as a block for the prompt ("" when unreachable).

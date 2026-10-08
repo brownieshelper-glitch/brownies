@@ -349,7 +349,12 @@ async function intro() {
   ok("the page under it is the home page", await p.ev(`document.querySelector(".hero h1").getBoundingClientRect().top < 400 && document.querySelectorAll(".lineup.all .m").length === 4`));
   await p.shot("intro-after-enter-1440.png", true);
   await p.go(`${SITE}/`);
-  ok("the same visit does not see the intro twice", !(await on()));
+  ok("a fresh arrival plays it again", await on());
+  await p.go(`${SITE}/team.html`);
+  await p.ev(`document.querySelector("a.brand").click()`);
+  await wait(() => p.ev(`location.pathname === "/" && document.readyState === "complete"`), 8000);
+  await sleep(700);
+  ok("coming from another page of the site skips it", !(await on()));
   await p.go(`${SITE}/?intro=1`);
   ok("?intro=1 plays it again", await on());
   await p.ev(`sessionStorage.clear()`);

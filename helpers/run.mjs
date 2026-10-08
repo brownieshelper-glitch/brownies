@@ -86,7 +86,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
-  const fudge = new Fudge({ ...deps("fudge"), x, siteUrl: S.siteUrl, telegram, ownerChatId: S.telegram.ownerChatId });
+  const fudge = new Fudge({ ...deps("fudge"), x, siteUrl: S.siteUrl, telegram, ownerChatId: S.telegram.ownerChatId, instagram });
   const crumb = new Crumb({ ...deps("crumb"), telegram, github, siteUrl: S.siteUrl, groupChatId: S.telegram.groupChatId, ownerChatId: S.telegram.ownerChatId, onDecision: (id, d, ctx) => { const a = store.approval(id); const h = a ? all[a.helper] : null; return (h && typeof h.decide === "function" ? h : chip).decide(id, d, ctx); }, onNote: (id, t) => chip.addNote(id, t), onButton: (data, ctx) => { const h = all[String(data).split(":")[0]]; return h && typeof h.onButton === "function" ? h.onButton(data, ctx) : null; } });
   const nib = new Nib({ ...deps("nib"), github, siteUrl: S.siteUrl, rpcUrl: S.rpcUrl });
   // the recruits: brownies hired at runtime by Dough (lib/hiring.mjs), kept as specs in the store, never as code
@@ -172,6 +172,14 @@ export async function build({ env = process.env, configFile = null } = {}) {
       return W.instagram.facebook
         ? `Open this link, log in to Facebook with your own account (the one that manages the Brownies Page), tick the Brownies Page and the Brownies Instagram account when asked, and allow:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`
         : `Open this link, log in to Instagram with the Brownies account (a business or creator account) and allow the app:\n${W.instagramAuth.link()}\nIt works once, for ten minutes.`;
+    }
+    if (cmd === "facebook") {
+      if (!W.instagram.page) return "The Facebook Page comes with the Instagram connection: send /instagram first.";
+      const sub = text.trim().toLowerCase();
+      if (sub === "on" || sub === "off") store.setMeta("facebook:posts", sub === "on" ? "1" : "0");
+      const t = W.instagram.tokens();
+      const may = (t?.permissions || []).includes("pages_manage_posts");
+      return `Facebook Page ${t?.page_name || t?.page_id}: ${!may ? "the app may not post there yet. Send /instagram, open the link and allow the permission to manage the Page's posts." : W.instagram.canPage() ? "the brownies post there too (every clip, meme and post of Fudge). /facebook off stops it." : "posting is off. /facebook on starts it."}`;
     }
     if (cmd === "linkedin") {
       if (!W.linkedin.configured) return "LinkedIn is not set up: LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET are empty in the helpers env.";

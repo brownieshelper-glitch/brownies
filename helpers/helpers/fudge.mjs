@@ -56,6 +56,7 @@ export class Fudge extends Helper {
     this.x = deps.x;
     this.tg = deps.telegram || null;
     this.ownerChatId = String(deps.ownerChatId || "");
+    this.page = deps.instagram || null; // the Facebook Page behind the Instagram account: every post goes there too (lib/instagram.mjs canPage)
     this.siteUrl = String(deps.siteUrl || "https://feedthebrownies.com").replace(/\/$/, "");
     this.topics = this.config.topics?.length ? this.config.topics : DEFAULT_TOPICS;
     this.maxPosts = this.config.maxPostsPerDay ?? 3;
@@ -156,8 +157,16 @@ export class Fudge extends Helper {
     const place = posted ? "x" : "site";
     const url = posted ? posted.url : `${this.siteUrl}/posts.html`;
     this.store.addPost({ at: now, helper: "fudge", place, kind: "post", text, externalId: posted?.id || null, url });
+    await this.toPage(text, slot.media ? "a post with files, words only" : "post");
     await this.report("post", cut(text, 160), { body: text.length > 160 ? text : null, url, place, cost_micro: cost });
     return { id: posted?.id || null, url, text, place };
+  }
+
+  /// The same words on the Facebook Page, when the owner allowed it. Never stops the post: a refusal is a log line.
+  async toPage(text, what = "post") {
+    if (!this.page?.canPage?.()) return null;
+    try { const fb = await this.page.pagePost({ message: text }); this.log(`[fudge] the ${what} is on the Facebook Page too: ${fb.url}`); return fb; }
+    catch (e) { this.log(`[fudge] Facebook did not take the ${what}: ${cut(e.message, 120)}`); return null; }
   }
 
   /// A text that waits for the owner: a card on Telegram with Approve and Reject. Returns { approvalId, text }.
@@ -192,6 +201,7 @@ export class Fudge extends Helper {
     try {
       const posted = await this.x.post(rec.text, { replyTo: rec.replyTo || null, approved: true });
       this.store.addPost({ at: now, helper: "fudge", place: "x", kind, text: rec.text, ref: rec.replyTo || "", externalId: posted.id, url: posted.url });
+      if (kind === "post") await this.toPage(rec.text, "approved post");
       await this.report(kind, kind === "reply" ? `Answered @${rec.author || "someone"}: ${cut(rec.text, 120)}` : cut(rec.text, 160), { body: kind === "post" && rec.text.length > 160 ? rec.text : null, url: posted.url, place: "x", cost_micro: 0 });
       if (this.tg?.configured && this.ownerChatId) await this.tg.sendMessage(this.ownerChatId, `Posted: ${posted.url}`);
       return true;

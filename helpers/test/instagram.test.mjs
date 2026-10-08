@@ -111,6 +111,12 @@ test("Facebook Login: the dialog asks the Page scopes, the code becomes a long u
   mf.on("GET", /graph\.facebook\.com\/v21\.0\/c-\d+\?/, () => ({ json: { status_code: "FINISHED" } }));
   mf.on("POST", /graph\.facebook\.com\/v21\.0\/17841499\/media_publish\?/, (c) => { if (!authed(c)) return { status: 401, json: { error: { code: 190, message: "no" } } }; m.published.push(new URLSearchParams(String(c.body)).get("creation_id")); return { json: { id: `p-${m.published.length}` } }; });
   mf.on("GET", /graph\.facebook\.com\/v21\.0\/p-\d+\?/, () => ({ json: { permalink: "https://www.instagram.com/reel/FB123/" } }));
+  let grantedNow = ["pages_show_list", "business_management", "instagram_basic", "instagram_content_publish", "pages_read_engagement", "pages_manage_posts", "public_profile"];
+  mf.on("GET", /graph\.facebook\.com\/v21\.0\/me\/permissions\?/, () => ({ json: { data: grantedNow.map((p) => ({ permission: p, status: "granted" })) } }));
+  const pagePosts = [], pagePhotos = [], pageVideos = [];
+  mf.on("POST", /graph\.facebook\.com\/v21\.0\/p1\/feed\?/, (c) => { if (!authed(c)) return { status: 401, json: { error: { code: 190, message: "no" } } }; pagePosts.push(Object.fromEntries(new URLSearchParams(String(c.body)))); return { json: { id: `p1_${100 + pagePosts.length}` } }; });
+  mf.on("POST", /graph\.facebook\.com\/v21\.0\/p1\/photos\?/, (c) => { if (!authed(c)) return { status: 401, json: { error: { code: 190, message: "no" } } }; pagePhotos.push(Object.fromEntries(new URLSearchParams(String(c.body)))); return { json: { id: `ph${pagePhotos.length}`, post_id: `p1_${200 + pagePhotos.length}` } }; });
+  mf.on("POST", /graph\.facebook\.com\/v21\.0\/p1\/videos\?/, (c) => { if (!authed(c)) return { status: 401, json: { error: { code: 190, message: "no" } } }; pageVideos.push(Object.fromEntries(new URLSearchParams(String(c.body)))); return { json: { id: `v${pageVideos.length}` } }; });
   const ig = new Instagram({ appId: "app", appSecret: "sec", login: "facebook", redirectUri: "https://gw.test/instagram/callback", store, clock, fetch: mf, log: (l) => lines.push(String(l)), sleep: async () => {} });
   let told = null;
   const auth = new Connect({ name: "instagram", client: ig, store, clock, log: (l) => lines.push(String(l)), baseUrl: "https://gw.test", onConnected: async (me) => { told = me; } });
@@ -123,7 +129,7 @@ test("Facebook Login: the dialog asks the Page scopes, the code becomes a long u
     const r = await get(auth.link().replace("https://gw.test", ""));
     const to = new URL(r.headers.get("location"));
     assert.equal(to.origin + to.pathname, "https://www.facebook.com/v21.0/dialog/oauth");
-    assert.equal(to.searchParams.get("scope"), "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management");
+    assert.equal(to.searchParams.get("scope"), "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management,pages_manage_posts");
     assert.equal(to.searchParams.get("response_type"), "code");
     const state = to.searchParams.get("state");
     assert.equal((await get(`/instagram/callback?error=access_denied&error_reason=user_denied&state=${state}`)).status, 400);
@@ -139,11 +145,31 @@ test("Facebook Login: the dialog asks the Page scopes, the code becomes a long u
     assert.deepEqual(out, { id: "p-1", url: "https://www.instagram.com/reel/FB123/", container: "c-1" });
     assert.equal(m.containers[0].media_type, "REELS"); assert.equal(m.containers[0].video_url, "https://gw.test/clips/abc.mp4");
     assert.deepEqual(await ig.me(), { id: "17841499", username: "feedthebrownies", name: "Brownies", account_type: "professional" });
+    // the Page behind the account: posts, photos and videos go there with the Page token; /facebook off stops it
+    assert.deepEqual(ig.page, { id: "p1", name: "Brownies" });
+    assert.ok(ig.tokens().permissions.includes("pages_manage_posts"));
+    assert.equal(ig.canPage(), true);
+    assert.deepEqual(await ig.pagePost({ message: "Four brownies work for the coin." }), { id: "p1_101", url: "https://www.facebook.com/p1_101" });
+    assert.equal(pagePosts[0].message, "Four brownies work for the coin.");
+    assert.deepEqual(await ig.pagePhoto({ imageUrl: "https://gw.test/clips/meme.png", caption: "A meme" }), { id: "p1_201", url: "https://www.facebook.com/p1_201" });
+    assert.deepEqual(pagePhotos[0], { url: "https://gw.test/clips/meme.png", caption: "A meme", published: "true" });
+    assert.deepEqual(await ig.pageVideo({ videoUrl: "https://gw.test/clips/abc.mp4", description: "Ep. 1", title: "The Bell" }), { id: "v1", url: "https://www.facebook.com/p1/videos/v1" });
+    assert.deepEqual(pageVideos[0], { file_url: "https://gw.test/clips/abc.mp4", description: "Ep. 1", title: "The Bell" });
+    store.setMeta("facebook:posts", "0");
+    assert.equal(ig.canPage(), false, "/facebook off");
+    store.setMeta("facebook:posts", null);
+    // without the posting permission the Page is known but not written to
+    grantedNow = grantedNow.filter((p) => p !== "pages_manage_posts");
+    ig.disconnect();
+    const linkP = auth.link(); const stateP = new URL((await get(linkP.replace("https://gw.test", ""))).headers.get("location")).searchParams.get("state");
+    assert.equal((await get(`/instagram/callback?code=good-code&state=${stateP}`)).status, 200);
+    assert.equal(ig.canPage(), false, "no pages_manage_posts, no Page posts");
+    grantedNow.push("pages_manage_posts");
     // ten days on: the user token behind the Page token is renewed once, the Page token keeps working
     clock.t += 10 * 86400_000;
     await ig.me();
-    assert.equal(m.longs, 2);
-    assert.equal(ig.tokens().access_token, "long-2");
+    assert.equal(m.longs, 3, "two logins and one renewal");
+    assert.equal(ig.tokens().access_token, "long-3");
     // a Page owned by a business portfolio: /me/accounts is empty, the portfolio lookup finds it and reads its token
     m.pages = [];
     let bizData = [{ id: "biz1", name: "Brownies", owned_pages: { data: [{ id: "p7", name: "Feedthebrownies", instagram_business_account: { id: "17841499", username: "feedthebrownies" } }] } }];

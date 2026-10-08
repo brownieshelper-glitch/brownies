@@ -37,7 +37,7 @@ export class Instagram {
 
   /// Where the owner's browser goes to allow the app.
   authUrl(state) {
-    if (this.facebook) return `https://www.facebook.com/${VERSION}/dialog/oauth?${new URLSearchParams({ client_id: this.appId, redirect_uri: this.redirectUri, state, response_type: "code", scope: FB_SCOPES.join(",") })}`;
+    if (this.facebook) return `https://www.facebook.com/${VERSION}/dialog/oauth?${new URLSearchParams({ client_id: this.appId, redirect_uri: this.redirectUri, state, response_type: "code", scope: FB_SCOPES.join(","), auth_type: "rerequest" })}`;
     return `https://www.instagram.com/oauth/authorize?${new URLSearchParams({ client_id: this.appId, redirect_uri: this.redirectUri, response_type: "code", scope: SCOPES.join(","), state, force_reauth: "true" })}`;
   }
 
@@ -71,7 +71,11 @@ export class Instagram {
     const pages = await pr.json().catch(() => ({}));
     if (!pr.ok || !Array.isArray(pages.data)) throw cred(`Facebook did not list the Pages (${pr.status}${pages.error?.message ? ": " + pages.error.message : ""})`);
     const page = pages.data.find((p) => p.instagram_business_account?.id);
-    if (!page) throw cred(`no Facebook Page you manage has a linked Instagram professional account (${pages.data.length} Page${pages.data.length === 1 ? "" : "s"} seen): link the Brownies Instagram to the Brownies Page, then connect again`);
+    if (!page) {
+      let granted = "unknown";
+      try { const g = await (await this.fetch(`${FB_API}/${VERSION}/me/permissions?${new URLSearchParams({ access_token: l.access_token })}`)).json(); if (Array.isArray(g.data)) granted = g.data.filter((x) => x.status === "granted").map((x) => x.permission).join(", ") || "none"; } catch { granted = "unknown"; }
+      throw cred(`no Facebook Page you manage has a linked Instagram professional account (${pages.data.length} Page${pages.data.length === 1 ? "" : "s"} seen; permissions granted: ${granted}): in the Facebook screen tick the Brownies Page and the Brownies Instagram account, and make sure the Page has the Instagram account under Account collegati, then connect again`);
+    }
     const ig = page.instagram_business_account;
     const t = { login: "facebook", access_token: l.access_token, expiresAt: this.now() + Number(l.expires_in || 60 * 86400) * 1000, obtainedAt: this.now(), page_id: String(page.id), page_name: page.name || null, page_token: page.access_token || null, user_id: String(ig.id), username: ig.username || null, account_type: "professional", permissions: FB_SCOPES };
     this.saveTokens(t);

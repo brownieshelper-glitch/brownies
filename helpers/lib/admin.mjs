@@ -10,6 +10,7 @@
 //   POST /admin/command { helper, action, text?, id?, value? }     action: run | ask | off | on | cap | approve | reject | summary
 //   GET  /admin/log?n=200                  the last lines of the service log
 //   POST /admin/logout
+import { defang } from "./suggestions.mjs";
 import { clientIp } from "./net.mjs";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { applyAction as jobAction, totalsView as jobTotals, STATE_LABEL as JOB_STATE } from "./moneyjobs.mjs";
@@ -115,6 +116,7 @@ export class Admin {
       mode: S.mode, now: nowIso(now), timezone: config.timezone || "UTC", uptimeSeconds: Math.round((Date.now() - (this.W.startedAt || Date.now())) / 1000),
       helpers: list,
       approvals: store.pendingApprovals().map((a) => ({ id: a.id, helper: a.helper, title: a.title, url: a.url, at: nowIso(a.at) })),
+      suggestions: store.suggestions({ limit: 200 }).map((s) => ({ id: s.id, at: nowIso(s.at), place: s.place, who: s.who, chat: s.chat, text: defang(s.text), flags: s.flags, state: s.state, note: s.note, url: s.url })),
       videos: Number(store.getMeta("sprinkle:videos", 0)) || 0,
       jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => { let draft = null, contact = null; try { draft = JSON.parse(store.getMeta(`job:${j.id}:draft`) || "null"); } catch { draft = null; } try { contact = JSON.parse(store.getMeta(`job:${j.id}:contact`) || "null"); } catch { contact = null; } return { ...j, stateLabel: JOB_STATE[j.state] || j.state, draft, contact }; }) },
       group: store.getMeta("tg:group:auto") || this.W.S.telegram.groupChatId || "",
@@ -137,6 +139,15 @@ export class Admin {
         }
         const r = jobAction(store, { id: Number(id), action: String(value || ""), text, value: text, by: "owner", now });
         return r.error ? { ok: false, error: r.error } : { ok: true, job: r.job, note: `Job ${r.job.id} is now ${JOB_STATE[r.job.state]}.` };
+      }
+      case "suggest": {
+        // the owner's decision on a suggestion from the public: listen (the brownies may consider it), ignore, or back to new
+        const s = store.suggestion(Number(id));
+        if (!s) return { ok: false, error: "no such suggestion" };
+        const state = String(value || "");
+        if (!["listen", "ignore", "new"].includes(state)) return { ok: false, error: "listen, ignore or new" };
+        store.decideSuggestion(s.id, state, String(text || "").trim() || null, this.W.clock.now());
+        return { ok: true, note: state === "listen" ? "The brownies will consider it. They still promise nothing and post no link or address from it." : state === "ignore" ? "Ignored." : "Back to new." };
       }
       case "approve": case "reject": {
         const a = store.approval(Number(id));

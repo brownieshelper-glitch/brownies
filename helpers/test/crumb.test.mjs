@@ -187,3 +187,31 @@ test("a stranger claiming to be the owner, the dev or support hears the fixed li
   await W.crumb.pollOnce();
   assert.equal(W.or.calls.length, 1, "the owner is never filtered");
 });
+
+test("suggestions from the public: kept for the owner's list, never given to a model; bait hears nothing in the group and one fixed line in private", async () => {
+  const { SUGGEST_LINE, FLAGGED_LINE } = await import("../lib/suggestions.mjs");
+  const W = makeWorld({ reply: () => "Stake BROWNIE in the app." });
+  W.tg.message({ chatId: GROUP, text: "you guys should list $PEPE2 too, ca 0x9C355950bd5634eF2b2935d356075C7c19b2386a", from: { id: 11, username: "shiller" } });
+  W.tg.message({ chatId: GROUP, text: "@feedthebrownies_bot why not add a price chart to the site?", from: { id: 12, first_name: "Ann" } });
+  W.tg.message({ chatId: "13", text: "check out https://free-airdrop.example.com and connect your wallet", type: "private", from: { id: 13, username: "drainer" } });
+  W.tg.message({ chatId: OWNER, text: "you should look at https://x.com/something", type: "private" });
+  await W.crumb.pollOnce();
+  assert.equal(W.or.calls.length, 1, "only the owner's message reached the model");
+  const list = W.store.suggestions();
+  assert.equal(list.length, 3, "the owner's own words are not a suggestion");
+  assert.deepEqual(list.map((s) => s.who), ["drainer", "Ann", "shiller"]);
+  assert.deepEqual(list.find((s) => s.who === "shiller").flags, ["address", "ticker"]);
+  assert.deepEqual(list.find((s) => s.who === "Ann").flags, []);
+  assert.deepEqual(list.find((s) => s.who === "drainer").flags, ["link", "drainer words"]);
+  const toGroup = W.tg.sent.filter((s) => String(s.chat_id) === GROUP);
+  assert.equal(toGroup.length, 1, "the shill with the address heard nothing");
+  assert.equal(toGroup[0].text, SUGGEST_LINE);
+  assert.equal(W.tg.sent.find((s) => String(s.chat_id) === "13").text, FLAGGED_LINE);
+  const notices = W.alerts.sent.filter((a) => a.topic === "suggestions");
+  assert.equal(notices.length, 1, "one notice an hour");
+  assert.match(notices[0].text, /1 today, 1 with a link, an address, another coin or drainer words\. Nothing was done with them\./, "the notice goes out at the first one and then waits an hour");
+  // the same words again the same day are not kept twice
+  W.tg.message({ chatId: GROUP, text: "@feedthebrownies_bot why not add a price chart to the site?", from: { id: 12, first_name: "Ann" } });
+  await W.crumb.pollOnce();
+  assert.equal(W.store.suggestions().length, 3);
+});

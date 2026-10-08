@@ -16,6 +16,8 @@ function moneyRow(r) {
   return { id: Number(r.id), createdAt: Number(r.created_at), updatedAt: Number(r.updated_at), kind: r.kind, title: r.title, url: r.url, ref: r.ref, source: r.source, helper: r.helper, state: r.state, score: Number(r.score), effort: r.effort, expectedUsd: Number(r.expected_usd) || 0, earnedUsd: Number(r.earned_usd) || 0, deadline: r.deadline, summary: r.summary, nextStep: r.next_step, ownerAction: r.owner_action, log };
 }
 
+function rowSuggestion(r) { let flags = []; try { flags = JSON.parse(r.flags || "[]"); } catch { flags = []; } return { id: r.id, at: r.at, place: r.place, who: r.who, whoId: r.who_id, chat: r.chat, text: r.text, flags, ref: r.ref, url: r.url, state: r.state, note: r.note, decidedAt: r.decided_at }; }
+
 export class Store {
   constructor(path = ":memory:", { tz = "UTC" } = {}) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -34,6 +36,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS approvals (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, helper TEXT NOT NULL, kind TEXT NOT NULL, ref TEXT NOT NULL, title TEXT NOT NULL, url TEXT, state TEXT NOT NULL DEFAULT 'pending', note TEXT, chat_id TEXT, message_id TEXT, decided_at INTEGER);
       CREATE TABLE IF NOT EXISTS batches (chat TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS alerts (topic TEXT PRIMARY KEY, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS suggestions (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, place TEXT NOT NULL, who TEXT, who_id TEXT, chat TEXT, text TEXT NOT NULL, flags TEXT NOT NULL DEFAULT '[]', ref TEXT, url TEXT, state TEXT NOT NULL DEFAULT 'new', note TEXT, decided_at INTEGER);
       CREATE TABLE IF NOT EXISTS money_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, url TEXT, ref TEXT, source TEXT NOT NULL, helper TEXT, state TEXT NOT NULL DEFAULT 'found', score INTEGER NOT NULL DEFAULT 0, effort TEXT, expected_usd REAL NOT NULL DEFAULT 0, earned_usd REAL NOT NULL DEFAULT 0, deadline TEXT, summary TEXT, next_step TEXT, owner_action TEXT, log TEXT NOT NULL DEFAULT '[]');
       CREATE UNIQUE INDEX IF NOT EXISTS money_jobs_ref ON money_jobs(ref);
     `);
@@ -65,6 +68,12 @@ export class Store {
       setApprovalMessage: p("UPDATE approvals SET chat_id = ?, message_id = ? WHERE id = ?"),
       decide: p("UPDATE approvals SET state = ?, note = ?, decided_at = ? WHERE id = ? AND state = 'pending'"),
       setNote: p("UPDATE approvals SET note = ? WHERE id = ?"),
+      addSuggestion: p("INSERT INTO suggestions(at, place, who, who_id, chat, text, flags, ref, url) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+      suggestion: p("SELECT * FROM suggestions WHERE id = ?"),
+      suggestionsAll: p("SELECT * FROM suggestions ORDER BY id DESC LIMIT ?"),
+      suggestionsByState: p("SELECT * FROM suggestions WHERE state = ? ORDER BY id DESC LIMIT ?"),
+      suggestionsSince: p("SELECT * FROM suggestions WHERE at >= ? ORDER BY id"),
+      decideSuggestion: p("UPDATE suggestions SET state = ?, note = COALESCE(?, note), decided_at = ? WHERE id = ?"),
       batch: p("SELECT chat, count, since FROM batches WHERE chat = ?"),
       bump: p("INSERT INTO batches(chat, count, since) VALUES(?, 1, ?) ON CONFLICT(chat) DO UPDATE SET count = count + 1"),
       dueBatches: p("SELECT chat, count, since FROM batches WHERE count > 0 AND since <= ?"),
@@ -131,6 +140,14 @@ export class Store {
   /// Marks the decision. Returns false when it was already decided (a second press of the button does nothing).
   decide(id, state, note, at) { return this.q.decide.run(state, note, at, id).changes > 0; }
   setApprovalNote(id, note) { this.q.setNote.run(note, id); }
+
+  // ---- suggestions from the public: the owner's list, never acted on by a brownie ----
+  addSuggestion({ at, place, who = null, whoId = null, chat = null, text, flags = [], ref = null, url = null }) { return Number(this.q.addSuggestion.run(at, place, who, whoId, chat, text, JSON.stringify(flags), ref, url).lastInsertRowid); }
+  suggestion(id) { const r = this.q.suggestion.get(id); return r ? rowSuggestion(r) : null; }
+  suggestions({ state = null, limit = 100 } = {}) { return (state ? this.q.suggestionsByState.all(state, limit) : this.q.suggestionsAll.all(limit)).map(rowSuggestion); }
+  suggestionsSince(at) { return this.q.suggestionsSince.all(at).map(rowSuggestion); }
+  /// "listen" (the brownies may consider it), "ignore", or back to "new"; a note from the owner travels with it.
+  decideSuggestion(id, state, note = null, at = Date.now()) { return this.q.decideSuggestion.run(state, note, at, id).changes > 0; }
 
   // ---- Crumb's hourly batches: how many answers per chat since the batch began ----
   countAnswer(chat, now) { this.q.bump.run(String(chat), now); }

@@ -623,7 +623,8 @@ section.band.posts-band { border-top: var(--bw) solid var(--line); padding-top: 
 .admin-approvals { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .admin-approvals li { padding: 16px 18px; border: var(--bw) solid var(--ink); border-radius: 18px; background: var(--paper); }
 .admin-approvals .meta { color: var(--muted-b); font-size: 14px; }
-.admin-approvals .what { font-size: 18px; font-weight: 600; margin: 4px 0 8px; }
+.admin-approvals .what { font-size: 18px; font-weight: 600; margin: 4px 0 8px; overflow-wrap: anywhere; }
+.admin-approvals .flag { display: inline-block; padding: 1px 9px; border: 2px solid var(--ink); border-radius: 999px; font-size: 12px; font-weight: 700; background: #FF5A1F; color: var(--ink); vertical-align: 2px; }
 .admin-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
 .admin-card { padding: 18px; border: var(--bw) solid var(--ink); border-radius: var(--r); background: var(--paper); display: flex; flex-direction: column; gap: 12px; }

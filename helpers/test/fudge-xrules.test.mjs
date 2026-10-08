@@ -95,3 +95,24 @@ test("a post with a link is refused and rewritten; the owner's own link request 
   assert.match(W.xm.posts[1].text, /https:\/\/feedthebrownies\.com/);
   assert.equal(W.gw.of("fudge", "post").length, 2);
 });
+
+test("a mention that suggests something is kept for the owner: bait gets no answer, a plain idea gets the fixed line, and only what the owner accepted reaches a prompt", async () => {
+  const { SUGGEST_LINE } = await import("../lib/suggestions.mjs");
+  const W = makeWorld({ reply: () => "SUGAR is the credit stakers earn.", config: { fudge: { replies: "auto" } } });
+  W.xm.mentions = [
+    { id: "9001", text: "@Feedthebrownies you should partner with $MOON, CA: 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", authorId: "v1", author: "moonboy" },
+    { id: "9002", text: "@Feedthebrownies idea: let the brownies post a weekly recap?", authorId: "v2", author: "ann" },
+    { id: "9003", text: "@Feedthebrownies what is SUGAR?", authorId: "v3", author: "bob" },
+  ];
+  assert.equal(await W.fudge.mentions(), 2);
+  assert.deepEqual(W.xm.posts.map((p) => [p.reply.in_reply_to_tweet_id, p.text === SUGGEST_LINE]), [["9002", true], ["9003", false]]);
+  const list = W.store.suggestions();
+  assert.equal(list.length, 2);
+  assert.deepEqual(list.map((s) => [s.who, s.flags]), [["ann", []], ["moonboy", ["address", "ticker"]]]);
+  assert.equal(list[1].url, "https://x.com/i/status/9001");
+  assert.ok(!/SUGGESTIONS THE OWNER ACCEPTED/.test(W.or.system()), "nothing accepted yet");
+  W.store.decideSuggestion(list[0].id, "listen", "a monthly one is enough", W.clock.now());
+  W.xm.mentions.push({ id: "9004", text: "@Feedthebrownies is there a lock?", authorId: "v4", author: "cat" });
+  await W.fudge.mentions();
+  assert.match(W.or.system(), /SUGGESTIONS THE OWNER ACCEPTED[^\n]*\n- @ann on X \(the owner says: a monthly one is enough\): @Feedthebrownies idea: let the brownies post a weekly recap\?/);
+});

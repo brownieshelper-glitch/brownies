@@ -855,3 +855,23 @@ h1 .dot, .intro-word .dot { animation: cube-drop 700ms cubic-bezier(0.34, 1.56, 
   h1 .dot, .intro-word .dot, .jump { animation: none; }
   [data-mascot] .pupils, .feed li, .brand img { transition: none; }
 }
+
+/* ---- the socials button in the header: a round "@" that opens the six networks ---- */
+.socials { position: relative; flex: none; }
+.menu-btn.at { display: inline-flex; flex-direction: row; font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1; color: var(--ink); padding-bottom: 2px; transition: transform 160ms var(--ease-out), background-color 140ms ease, color 140ms ease; }
+.menu-btn.at:active { transform: scale(0.95); }
+.socials.open .menu-btn.at { background: var(--ink); color: var(--bone); }
+.social-menu { position: absolute; right: 0; top: calc(100% + 12px); width: 276px; max-width: calc(100vw - 2 * var(--gut)); background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 20px; padding: 8px; box-shadow: 6px 6px 0 var(--ink); z-index: 31; transform-origin: top right; opacity: 0; transform: translateY(-6px) scale(0.98); visibility: hidden; transition: opacity 120ms ease, transform 120ms var(--ease-out), visibility 0s 120ms; }
+.socials.open .social-menu { opacity: 1; transform: none; visibility: visible; transition: opacity 160ms ease, transform 180ms var(--ease-out), visibility 0s; }
+.social-menu a { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 10px; border-radius: 12px; text-decoration: none; color: var(--ink); font-weight: 600; font-size: 16px; transition: background-color 120ms ease, color 120ms ease; }
+.social-menu a svg { width: 22px; height: 22px; flex: none; }
+.social-menu a span { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.social-menu a small { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--muted-b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.social-menu a:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) {
+  .social-menu a:hover { background: var(--ink); color: var(--bone); }
+  .social-menu a:hover small { color: var(--bone); opacity: 0.8; }
+}
+@media (max-width: 760px) { .socials { position: static; } .social-menu { right: var(--gut); top: calc(100% + 10px); width: min(300px, calc(100vw - 2 * var(--gut))); } }
+@media (max-width: 420px) { .brand span { display: none; } }
+@media (prefers-reduced-motion: reduce) { .social-menu { transform: none; transition: opacity 120ms ease, visibility 0s 120ms; } .menu-btn.at, .social-menu a { transition: none; } }

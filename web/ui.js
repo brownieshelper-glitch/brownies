@@ -18,6 +18,22 @@
     window.addEventListener("resize", function () { if (window.innerWidth > 760) close(); });
   }
 
+  // the socials: the "@" button shows the six networks in a card under the header; one card open at a time
+  var soc = doc.getElementById("socials");
+  var socBtn = doc.getElementById("socialBtn");
+  if (soc && socBtn) {
+    var closeSoc = function () { soc.classList.remove("open"); socBtn.setAttribute("aria-expanded", "false"); };
+    socBtn.addEventListener("click", function () {
+      var open = !soc.classList.contains("open");
+      if (open && nav && btn) { nav.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); btn.setAttribute("aria-label", "Menu"); }
+      soc.classList.toggle("open", open);
+      socBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    if (btn) btn.addEventListener("click", closeSoc);
+    doc.addEventListener("click", function (e) { if (soc.classList.contains("open") && !soc.contains(e.target)) closeSoc(); });
+    doc.addEventListener("keydown", function (e) { if (e.key === "Escape") closeSoc(); });
+  }
+
   var reduce = false;
   try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
 

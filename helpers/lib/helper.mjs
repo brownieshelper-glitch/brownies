@@ -29,7 +29,8 @@ export class Helper {
     return c.ok;
   }
 
-  think(opts) { return this.brain.chat(this.name, opts); }
+  /// `this.job` is the scheduled job running right now (run.mjs sets it); the ledger line of every thought carries it.
+  think(opts) { return this.brain.chat(this.name, { job: this.job || null, ...opts }); }
 
   /// "Writing today's second post": what the Kitchen shows as the task of the moment.
   status(title) { if (this.hidden) { this.log(`[${this.name}] ${title}`); return Promise.resolve(null); } return this.gateway.report({ helper: this.name, kind: "status", title }); }

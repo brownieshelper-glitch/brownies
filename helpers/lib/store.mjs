@@ -16,6 +16,8 @@ function moneyRow(r) {
   return { id: Number(r.id), createdAt: Number(r.created_at), updatedAt: Number(r.updated_at), kind: r.kind, title: r.title, url: r.url, ref: r.ref, source: r.source, helper: r.helper, state: r.state, score: Number(r.score), effort: r.effort, expectedUsd: Number(r.expected_usd) || 0, earnedUsd: Number(r.earned_usd) || 0, deadline: r.deadline, summary: r.summary, nextStep: r.next_step, ownerAction: r.owner_action, log };
 }
 
+function ledgerRow(r) { return { id: Number(r.id), at: Number(r.at), day: r.day, helper: r.helper, kind: r.kind, model: r.model, job: r.job, tokensIn: Number(r.tokens_in), tokensOut: Number(r.tokens_out), tokensThink: Number(r.tokens_think), seconds: Number(r.seconds), micro: Number(r.cost_micro), guessed: Boolean(r.guessed), ms: Number(r.ms), note: r.note }; }
+
 function rowSuggestion(r) { let flags = []; try { flags = JSON.parse(r.flags || "[]"); } catch { flags = []; } return { id: r.id, at: r.at, place: r.place, who: r.who, whoId: r.who_id, chat: r.chat, text: r.text, flags, ref: r.ref, url: r.url, state: r.state, note: r.note, decidedAt: r.decided_at }; }
 
 export class Store {
@@ -39,6 +41,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS suggestions (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, place TEXT NOT NULL, who TEXT, who_id TEXT, chat TEXT, text TEXT NOT NULL, flags TEXT NOT NULL DEFAULT '[]', ref TEXT, url TEXT, state TEXT NOT NULL DEFAULT 'new', note TEXT, decided_at INTEGER);
       CREATE TABLE IF NOT EXISTS money_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, url TEXT, ref TEXT, source TEXT NOT NULL, helper TEXT, state TEXT NOT NULL DEFAULT 'found', score INTEGER NOT NULL DEFAULT 0, effort TEXT, expected_usd REAL NOT NULL DEFAULT 0, earned_usd REAL NOT NULL DEFAULT 0, deadline TEXT, summary TEXT, next_step TEXT, owner_action TEXT, log TEXT NOT NULL DEFAULT '[]');
       CREATE UNIQUE INDEX IF NOT EXISTS money_jobs_ref ON money_jobs(ref);
+      CREATE TABLE IF NOT EXISTS ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, day TEXT NOT NULL, helper TEXT NOT NULL, kind TEXT NOT NULL, model TEXT, job TEXT, tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, tokens_think INTEGER NOT NULL DEFAULT 0, seconds REAL NOT NULL DEFAULT 0, cost_micro INTEGER NOT NULL DEFAULT 0, guessed INTEGER NOT NULL DEFAULT 0, ms INTEGER NOT NULL DEFAULT 0, note TEXT);
+      CREATE INDEX IF NOT EXISTS ledger_day ON ledger(day, helper);
+      CREATE INDEX IF NOT EXISTS ledger_at ON ledger(at);
     `);
     const p = (sql) => this.db.prepare(sql);
     this.q = {
@@ -88,6 +93,15 @@ export class Store {
       moneyJobs: p("SELECT * FROM money_jobs ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?"),
       moneyJobsByState: p("SELECT * FROM money_jobs WHERE state = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?"),
       moneyTotals: p("SELECT state, COUNT(*) AS n, SUM(expected_usd) AS expected, SUM(earned_usd) AS earned FROM money_jobs GROUP BY state"),
+      addEntry: p("INSERT INTO ledger(at, day, helper, kind, model, job, tokens_in, tokens_out, tokens_think, seconds, cost_micro, guessed, ms, note) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+      ledgerDay: p("SELECT helper, kind, COUNT(*) AS n, SUM(cost_micro) AS micro, SUM(tokens_in) AS tin, SUM(tokens_out) AS tout, SUM(tokens_think) AS tthink, SUM(seconds) AS seconds, MAX(cost_micro) AS max_micro, SUM(guessed) AS guessed FROM ledger WHERE day = ? GROUP BY helper, kind"),
+      ledgerModels: p("SELECT helper, kind, model, job, COUNT(*) AS n, SUM(cost_micro) AS micro, SUM(tokens_in) AS tin, SUM(tokens_out) AS tout FROM ledger WHERE day = ? GROUP BY helper, kind, model, job"),
+      ledgerDays: p("SELECT day, kind, COUNT(*) AS n, SUM(cost_micro) AS micro FROM ledger WHERE day >= ? GROUP BY day, kind ORDER BY day"),
+      ledgerKindSince: p("SELECT kind, COUNT(*) AS n, SUM(cost_micro) AS micro FROM ledger WHERE at >= ? GROUP BY kind"),
+      ledgerHelperKindDay: p("SELECT COUNT(*) AS n, SUM(cost_micro) AS micro, SUM(seconds) AS seconds FROM ledger WHERE helper = ? AND kind = ? AND day = ?"),
+      ledgerRecent: p("SELECT * FROM ledger ORDER BY at DESC, id DESC LIMIT ?"),
+      ledgerBiggest: p("SELECT * FROM ledger WHERE day = ? ORDER BY cost_micro DESC, id DESC LIMIT ?"),
+      spendDays: p("SELECT helper, day, micro, calls FROM spend WHERE day >= ? ORDER BY day"),
     };
   }
 
@@ -134,6 +148,27 @@ export class Store {
   // ---- money, per helper per local day ----
   addSpend(helper, micro, now) { this.q.addSpend.run(helper, this.dayKey(now), Math.max(0, Math.round(micro))); }
   spentToday(helper, now) { const r = this.q.spend.get(helper, this.dayKey(now)); return r ? { micro: Number(r.micro), calls: Number(r.calls) } : { micro: 0, calls: 0 }; }
+  /// The AI spend rows of every helper from a day on (for the bill's history).
+  spendDays(fromDay) { return this.q.spendDays.all(String(fromDay)).map((r) => ({ helper: r.helper, day: r.day, micro: Number(r.micro), calls: Number(r.calls) })); }
+
+  // ---- the ledger: one line per paid call (an AI answer, a video render), what it was and what it cost (lib/costs.mjs reads it) ----
+  /// kind: "ai" | "video". guessed: the price came from our own table, not from the provider.
+  addEntry({ at, helper, kind = "ai", model = null, job = null, tokensIn = 0, tokensOut = 0, tokensThink = 0, seconds = 0, costMicro = 0, guessed = false, ms = 0, note = null }) {
+    const n = (v) => Math.max(0, Math.round(Number(v) || 0));
+    return Number(this.q.addEntry.run(at, this.dayKey(at), helper, kind, model, job, n(tokensIn), n(tokensOut), n(tokensThink), Math.max(0, Number(seconds) || 0), n(costMicro), guessed ? 1 : 0, n(ms), note == null ? null : String(note).slice(0, 200)).lastInsertRowid);
+  }
+  /// Per helper and kind on one day: count, cost, tokens, seconds, the biggest line, how many prices were guessed.
+  ledgerDay(day) { return this.q.ledgerDay.all(String(day)).map((r) => ({ helper: r.helper, kind: r.kind, n: Number(r.n), micro: Number(r.micro), tokensIn: Number(r.tin), tokensOut: Number(r.tout), tokensThink: Number(r.tthink), seconds: Number(r.seconds), maxMicro: Number(r.max_micro), guessed: Number(r.guessed) })); }
+  /// Per helper, kind, model and job on one day.
+  ledgerModels(day) { return this.q.ledgerModels.all(String(day)).map((r) => ({ helper: r.helper, kind: r.kind, model: r.model, job: r.job, n: Number(r.n), micro: Number(r.micro), tokensIn: Number(r.tin), tokensOut: Number(r.tout) })); }
+  /// Per day and kind from a day on.
+  ledgerDays(fromDay) { return this.q.ledgerDays.all(String(fromDay)).map((r) => ({ day: r.day, kind: r.kind, n: Number(r.n), micro: Number(r.micro) })); }
+  /// Per kind since a time (the month so far).
+  ledgerSince(at) { return this.q.ledgerKindSince.all(at).map((r) => ({ kind: r.kind, n: Number(r.n), micro: Number(r.micro) })); }
+  /// One helper's lines of one kind today: { n, micro, seconds } (Sprinkle's video cap reads this).
+  ledgerToday(helper, kind, now) { const r = this.q.ledgerHelperKindDay.get(helper, kind, this.dayKey(now)); return { n: Number(r?.n || 0), micro: Number(r?.micro || 0), seconds: Number(r?.seconds || 0) }; }
+  ledgerRecent(n = 30) { return this.q.ledgerRecent.all(n).map(ledgerRow); }
+  ledgerBiggest(day, n = 5) { return this.q.ledgerBiggest.all(String(day), n).map(ledgerRow); }
 
   // ---- approvals the owner decides on Telegram ----
   addApproval({ at, helper, kind, ref, title, url = null }) { return Number(this.q.addApproval.run(at, helper, kind, String(ref), title, url).lastInsertRowid); }

@@ -16,6 +16,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import { applyAction as jobAction, totalsView as jobTotals, STATE_LABEL as JOB_STATE } from "./moneyjobs.mjs";
 import { verifyMessage, getAddress, isAddress } from "ethers";
 import { cap } from "./facts.mjs";
+import { costsView } from "./costs.mjs";
 
 const CODE_TTL = 10 * 60_000, SESSION_TTL = 24 * 3_600_000, NONCE_TTL = 10 * 60_000;
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
@@ -30,7 +31,10 @@ export class Admin {
     this.sendSummary = sendSummary;
     this.attempts = new Map(); // ip -> [times]
     this.paused = new Set(this.W.store.getMeta("admin:paused", "").split(",").filter(Boolean));
-    for (const [h, c] of Object.entries(this.W.brain.helpers || {})) { const v = this.W.store.getMeta(`admin:cap:${h}`); if (v != null) c.dailyCapUsd = Number(v); }
+    for (const [h, c] of Object.entries(this.W.brain.helpers || {})) {
+      const v = this.W.store.getMeta(`admin:cap:${h}`); if (v != null) c.dailyCapUsd = Number(v);
+      const vc = this.W.store.getMeta(`admin:videocap:${h}`); if (vc != null) c.videoDailyCapUsd = Number(vc);
+    }
   }
 
   // ---- proofs ----
@@ -97,9 +101,27 @@ export class Admin {
 
   // ---- what the page shows ----
   isPaused(helper) { return this.paused.has(helper) || this.W.off.includes(helper); }
-  state() {
+  /// The Higgsfield balance the owner set after a top-up ({ usd, at }), or null.
+  refill() { try { const r = JSON.parse(this.W.store.getMeta("video:refill") || "null"); return r && Number(r.usd) > 0 ? r : null; } catch { return null; } }
+  /// The bill (lib/costs.mjs): every brownie's AI and video spend against its caps, the history, the balances.
+  async bill() {
+    const { store, clock, helpers, brain, config } = this.W;
+    const roster = Object.keys(helpers);
+    const openrouter = typeof brain.openrouterBalance === "function" ? await brain.openrouterBalance() : null;
+    return costsView({
+      store, now: clock.now(), helpers: roster, timezone: config.timezone || "UTC",
+      caps: Object.fromEntries(roster.map((n) => [n, brain.capMicro(n) / 1e6])),
+      videoCaps: Object.fromEntries(roster.map((n) => [n, brain.helpers?.[n]?.videoDailyCapUsd])),
+      videoMakers: roster.filter((n) => Boolean(helpers[n].higgsfield)),
+      models: Object.fromEntries(roster.map((n) => [n, brain.model(n)])),
+      hidden: roster.filter((n) => helpers[n].hidden), paused: roster.filter((n) => this.isPaused(n)),
+      openrouter, refill: this.refill(),
+    });
+  }
+  async state() {
     const { S, store, clock, scheduler, helpers, brain, config } = this.W;
     const now = clock.now();
+    const costs = await this.bill();
     const list = Object.entries(helpers).map(([name, h]) => {
       const c = config.helpers[name] || {};
       const jobs = scheduler.jobs.filter((j) => j.helper === name).map((j) => ({ id: j.id, next: j.next ? nowIso(j.next) : null, runs: j.runs, daily: j.daily ? j.daily.hours : null, everyMinutes: j.every ? Math.round(j.every / 60_000) : null }));
@@ -121,6 +143,7 @@ export class Admin {
       jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => { let draft = null, contact = null; try { draft = JSON.parse(store.getMeta(`job:${j.id}:draft`) || "null"); } catch { draft = null; } try { contact = JSON.parse(store.getMeta(`job:${j.id}:contact`) || "null"); } catch { contact = null; } return { ...j, stateLabel: JOB_STATE[j.state] || j.state, draft, contact }; }) },
       group: store.getMeta("tg:group:auto") || this.W.S.telegram.groupChatId || "",
       reports: this.W.gateway.reports, thoughts: brain.calls,
+      costs,
     };
   }
 
@@ -157,6 +180,14 @@ export class Admin {
         await owner.decide(a.id, action === "approve" ? "approve" : "reject");
         return { ok: true };
       }
+      case "refill": {
+        // Higgsfield has no balance endpoint: the owner tells us the balance after a top-up, the clips count down from it
+        const v = Number(value);
+        if (!Number.isFinite(v) || v < 0 || v > 100_000) return { ok: false, error: "the Higgsfield balance in dollars, as its page shows it; 0 stops the count" };
+        if (!v) { store.setMeta("video:refill", null); return { ok: true, note: "The Higgsfield balance is not counted any more." }; }
+        store.setMeta("video:refill", JSON.stringify({ usd: v, at: this.W.clock.now() }));
+        return { ok: true, note: `Higgsfield balance set to ${v} USD. Every clip from now on counts down from it.` };
+      }
     }
     if (!h) return { ok: false, error: "no such helper" };
     switch (action) {
@@ -176,7 +207,16 @@ export class Admin {
         if (!Number.isFinite(v) || v < 0 || v > 1000) return { ok: false, error: "the cap is dollars a day, 0 to 1000" };
         (this.W.brain.helpers[helper] ||= {}).dailyCapUsd = v;
         store.setMeta(`admin:cap:${helper}`, v);
-        return { ok: true, capUsd: v };
+        return { ok: true, capUsd: v, note: `${cap(helper)}'s cap is now ${v} USD a day.` };
+      }
+      case "videocap": {
+        // the most a brownie may spend on Higgsfield clips in a day; 0 removes the limit (no cap = no limit, as before)
+        const v = Number(value);
+        if (!h) return { ok: false, error: "no such brownie" };
+        if (!Number.isFinite(v) || v < 0 || v > 1000) return { ok: false, error: "the video cap is dollars a day, 0 to 1000; 0 removes it" };
+        (this.W.brain.helpers[helper] ||= {}).videoDailyCapUsd = v;
+        store.setMeta(`admin:videocap:${helper}`, v || null);
+        return { ok: true, videoCapUsd: v, note: v ? `${cap(helper)}'s video cap is now ${v} USD a day.` : `${cap(helper)} has no video cap.` };
       }
       case "run": {
         const job = scheduler.jobs.find((j) => j.helper === helper && (!id || j.id === id)) || scheduler.jobs.find((j) => j.helper === helper);
@@ -227,7 +267,7 @@ export class Admin {
         return json(200, s);
       }
       if (!this.authed(req)) return json(401, { error: "log in first" });
-      if (req.method === "GET" && url.pathname === "/admin/state") return json(200, this.state());
+      if (req.method === "GET" && url.pathname === "/admin/state") return json(200, await this.state());
       if (req.method === "GET" && url.pathname === "/admin/log") { const n = Math.min(500, Math.max(1, Number(url.searchParams.get("n") || 200))); return json(200, { lines: this.ring.slice(-n) }); }
       if (req.method === "POST" && url.pathname === "/admin/command") return json(200, await this.command(await readJson(req)));
       if (req.method === "POST" && url.pathname === "/admin/logout") { this.logout(req); return json(200, { ok: true }); }

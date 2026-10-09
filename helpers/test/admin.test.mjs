@@ -98,7 +98,7 @@ test("commands: pause skips scheduled runs but not a run by hand, resume, cap, a
     await scheduler.idle();
     assert.equal(W.xm.posts.length, 1, "Fudge posted");
     // the cap is changed and remembered
-    assert.deepEqual(await cmd({ helper: "crumb", action: "cap", value: 4.5 }), { ok: true, capUsd: 4.5 });
+    assert.deepEqual(await cmd({ helper: "crumb", action: "cap", value: 4.5 }), { ok: true, capUsd: 4.5, note: "Crumb's cap is now 4.5 USD a day." });
     assert.equal(W.brain.capMicro("crumb"), 4_500_000);
     assert.equal(W.store.getMeta("admin:cap:crumb"), "4.5");
     assert.equal((await cmd({ helper: "crumb", action: "cap", value: -1 })).ok, false);
@@ -160,5 +160,50 @@ test("the control room lists the suggestions with links unclickable and lets the
     assert.equal(W.store.suggestion(id).note, "only the chart idea");
     assert.deepEqual(await cmd({ action: "suggest", id, value: "ignore" }), { ok: true, note: "Ignored." });
     assert.equal((await cmd({ action: "suggest", id: 999, value: "listen" })).ok, false);
+  } finally { await close(); }
+});
+
+test("the bill: every helper's AI and video spend against its caps, the balances, videocap and refill", async () => {
+  const { admin, W } = room();
+  W.fetch.on("GET", "openrouter.ai/api/v1/credits", () => ({ json: { data: { total_credits: 60, total_usage: 10.5 } } }));
+  W.fetch.on("GET", "openrouter.ai/api/v1/key", () => ({ json: { data: { usage_daily: 2.4, limit: 100, limit_remaining: 89.5 } } }));
+  await W.brain.chat("fudge", { prompt: "One line.", job: "fudge-post" });
+  W.store.addEntry({ at: W.clock.now(), helper: "fudge", kind: "video", seconds: 8, costMicro: 3_000_000, note: "Clip 1" });
+  const { call, close } = await serve(admin);
+  try {
+    const token = (await call("POST", "/admin/login", { code: admin.newCode() })).body.token;
+    const c = (await call("GET", "/admin/state", null, token)).body.costs;
+    assert.equal(c.day, W.store.dayKey(W.clock.now())); assert.equal(c.timezone, "UTC");
+    assert.deepEqual(c.helpers.map((h) => h.name), ["fudge", "crumb", "nib", "chip"]);
+    const f = c.helpers[0];
+    assert.equal(f.aiUsd, 0.001); assert.equal(f.calls, 1); assert.equal(f.capUsd, W.brain.capMicro("fudge") / 1e6); assert.equal(f.model, W.brain.model("fudge"));
+    assert.equal(f.videoUsd, 3); assert.equal(f.videos, 1); assert.equal(f.videoCapUsd, null); assert.equal(f.state, "ok");
+    assert.equal(f.makesVideo, true, "it filmed one today"); assert.equal(c.helpers[1].makesVideo, false);
+    assert.deepEqual(f.jobs, [{ job: "post", usd: 0.001, calls: 1 }]);
+    assert.equal(c.helpers[2].hidden, true, "Nib is hidden in this room");
+    assert.equal(c.today.usd, 3.001); assert.equal(c.history.length, 14); assert.equal(c.history.at(-1).videoUsd, 3); assert.equal(c.recent.length, 2);
+    assert.deepEqual(c.openrouter, { boughtUsd: 60, usedUsd: 10.5, leftUsd: 49.5, usageDailyUsd: 2.4, limitUsd: 100, limitLeftUsd: 89.5 });
+    assert.equal(c.higgsfield, null);
+    const cmd = (x) => call("POST", "/admin/command", x, token).then((r) => r.body);
+    // a video cap for a brownie, kept in the store and read back by a new room; 0 removes it
+    assert.deepEqual(await cmd({ helper: "fudge", action: "videocap", value: 12 }), { ok: true, videoCapUsd: 12, note: "Fudge's video cap is now 12 USD a day." });
+    assert.equal(W.store.getMeta("admin:videocap:fudge"), "12"); assert.equal(W.brain.helpers.fudge.videoDailyCapUsd, 12);
+    assert.equal((await cmd({ helper: "nobody", action: "videocap", value: 12 })).ok, false);
+    assert.equal((await cmd({ helper: "fudge", action: "videocap", value: 2000 })).ok, false);
+    const again = new Admin({ W: admin.W, ring: [], wallets: [], origins: [] });
+    assert.equal(again.W.brain.helpers.fudge.videoDailyCapUsd, 12);
+    // the Higgsfield balance the owner sets: counted down by the clips from then on (the clip above came before)
+    W.clock.advance(1000);
+    assert.equal((await cmd({ action: "refill", value: 100 })).ok, true);
+    W.clock.advance(1000);
+    W.store.addEntry({ at: W.clock.now(), helper: "fudge", kind: "video", seconds: 8, costMicro: 2_500_000 });
+    const c2 = (await call("GET", "/admin/state", null, token)).body.costs;
+    assert.equal(c2.helpers[0].videoCapUsd, 12); assert.equal(c2.helpers[0].videoUsd, 5.5); assert.equal(c2.helpers[0].videoPct, 46);
+    assert.deepEqual(c2.higgsfield, { refillUsd: 100, refillAt: W.clock.now() - 1000, spentUsd: 2.5, leftUsd: 97.5, clips: 1 });
+    assert.equal((await cmd({ action: "refill", value: "abc" })).ok, false);
+    assert.equal((await cmd({ action: "refill", value: 0 })).ok, true);
+    assert.equal((await cmd({ helper: "fudge", action: "videocap", value: 0 })).note, "Fudge has no video cap.");
+    const c3 = (await call("GET", "/admin/state", null, token)).body.costs;
+    assert.equal(c3.higgsfield, null); assert.equal(c3.helpers[0].videoCapUsd, null); assert.equal(W.store.getMeta("admin:videocap:fudge"), null);
   } finally { await close(); }
 });

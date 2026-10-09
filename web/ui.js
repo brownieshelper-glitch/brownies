@@ -15,7 +15,7 @@
     });
     doc.addEventListener("click", function (e) { if (nav.classList.contains("open") && !nav.contains(e.target)) close(); });
     doc.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
-    window.addEventListener("resize", function () { if (window.innerWidth > 760) close(); });
+    window.addEventListener("resize", function () { if (window.innerWidth > 900) close(); });
   }
 
   // the socials: the "@" button shows the six networks in a card under the header; one card open at a time

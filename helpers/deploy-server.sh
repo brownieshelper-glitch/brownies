@@ -52,6 +52,14 @@ EMPTY=$(node -e 'const fs=require("fs"); console.log(fs.readFileSync(process.arg
 
 echo "== server reachable: $($SSH 'echo yes && node --version')"
 
+# ---- never restart while a video is being made or sent (a restart mid-publish loses the networks still to come) ----
+BUSY=$($SSH 'R=$(pgrep -af "render|request.mjs|ffmpeg" | grep -v pgrep | wc -l); M=$(node -e "const {DatabaseSync}=require(\"node:sqlite\");try{const db=new DatabaseSync(\"/var/lib/brownies/helpers.sqlite\",{readOnly:true});const r=db.prepare(\"select v from meta where k=?\").get(\"sprinkle:busy\");console.log(r?Math.round((Date.now()-Number(r.v))/60000):-1)}catch(e){console.log(-1)}" 2>/dev/null); echo "$R $M"')
+set -- $BUSY
+if [ "${FORCE:-0}" != "1" ] && { [ "${1:-0}" != "0" ] || { [ "${2:--1}" != "-1" ] && [ "${2:--1}" -lt 20 ]; }; }; then
+  echo "== Sprinkle is busy (renders running: ${1:-0}; a video or a send started ${2:-?} min ago): NOT restarting. Run again later, or FORCE=1 to override."
+  exit 2
+fi
+
 # ---- code ----
 PRIVATE=""; [ -f helpers/private.json ] && PRIVATE="helpers/private.json"
 VIDEO=""; [ -d helpers/video ] && VIDEO="helpers/video"

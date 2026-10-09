@@ -142,7 +142,8 @@ export class Seller {
     const a = payload.payload.authorization;
     const sig = Signature.from(payload.payload.signature);
     try {
-      const tx = await this.token.transferWithAuthorization(a.from, a.to, BigInt(a.value), BigInt(a.validAfter), BigInt(a.validBefore), a.nonce, sig.v, sig.r, sig.s);
+      // a fixed gas limit: the transfer takes about 80k, and no estimate call is needed (an estimate can fail on a busy node)
+      const tx = await this.token.transferWithAuthorization(a.from, a.to, BigInt(a.value), BigInt(a.validAfter), BigInt(a.validBefore), a.nonce, sig.v, sig.r, sig.s, { gasLimit: 150_000 });
       const rc = await tx.wait(1);
       if (!rc || rc.status !== 1) return { ok: false, error: "the transfer reverted" };
       const micro = Number(BigInt(a.value));
@@ -151,7 +152,7 @@ export class Seller {
       this.log(`[x402] settled ${(micro / 1e6).toFixed(2)} USDC from ${a.from} to ${a.to} (tx ${rc.hash})`);
       return { ok: true, tx: rc.hash, payer: getAddress(a.from), micro };
     } catch (e) {
-      const why = String(e.shortMessage || e.reason || e.message || "").slice(0, 160);
+      const why = String(e.reason || e.info?.error?.message || e.error?.message || e.shortMessage || e.message || "").slice(0, 160);
       this.log(`[x402] settlement failed: ${why}`);
       return { ok: false, error: `the transfer did not go through: ${why}` };
     }

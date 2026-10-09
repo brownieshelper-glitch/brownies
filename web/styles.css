@@ -486,7 +486,7 @@ textarea.prompt:focus { border-color: var(--accent); }
   .live .cell:nth-child(n+3) { border-top: 1.5px solid var(--line-b); }
   .two { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   /* phone header: the logo, the Menu button and the action on one row; the links open in a card */
   .menu-btn { display: flex; }
   .nav .links { display: none; position: absolute; left: var(--gut); right: var(--gut); top: calc(100% + 10px); flex-direction: column; align-items: stretch; gap: 2px; background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 20px; padding: 8px; box-shadow: 6px 6px 0 var(--ink); z-index: 30; }
@@ -645,6 +645,91 @@ section.band.posts-band { border-top: var(--bw) solid var(--line); padding-top: 
 .admin-log { margin-top: 0; max-height: 360px; overflow: auto; padding: 16px 18px; border: var(--bw) solid var(--ink); border-radius: 18px; background: var(--ink); font-family: var(--mono); font-size: 12.5px; line-height: 1.5; color: #E8DED0; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .admin-facts div { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* ---- the bill (admin.html): what each brownie spent against its cap, the two balances, two weeks of days ---- */
+.badge.hot { background: var(--accent); }
+.bill { display: grid; gap: 18px; }
+.bill-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.bill-tile { padding: 16px 18px; border: var(--bw) solid var(--ink); border-radius: 18px; background: var(--paper); display: grid; gap: 4px; align-content: start; }
+.bill-tile .k { font-size: 12px; color: var(--muted-b); text-transform: uppercase; letter-spacing: 0.06em; }
+.bill-tile .v { font-family: var(--mono); font-size: 26px; letter-spacing: -0.02em; line-height: 1.1; }
+.bill-tile .sub { font-size: 13px; line-height: 1.45; color: var(--muted-b); }
+.bill-tile .admin-row { margin-top: 6px; }
+.bill-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; align-items: start; }
+.bill-card { padding: 18px; border: var(--bw) solid var(--ink); border-radius: var(--r); background: var(--paper); }
+.bill-card h3 { font-size: 20px; margin: 0 0 12px; }
+.bill-key + h3 { margin-top: 22px; }
+.bill-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; padding: 14px 0; border-top: 1.5px solid var(--line-b); }
+.bill-row:first-child { border-top: 0; padding-top: 0; }
+.bill-row.paused { opacity: 0.72; }
+.bill-row .face { width: 44px; height: 44px; border-radius: 12px; border: var(--bw) solid var(--ink); background: var(--bone); overflow: hidden; align-self: start; }
+.bill-row .face svg { display: block; width: 100%; height: 100%; }
+.bill-row .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.bill-row .who b { font-family: var(--display); font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+.bill-row .who .meta { font-size: 13px; color: var(--muted-b); }
+.bill-row .nums { font-family: var(--mono); font-size: 15px; text-align: right; white-space: nowrap; }
+.bill-row .nums small { display: block; font-size: 12px; color: var(--muted-b); font-family: var(--font); }
+.bill-row .track, .bill-row .sub { grid-column: 2 / span 2; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+.bill-row .sub { font-size: 13px; color: var(--muted-b); }
+.bill-row .sub .bill-bar { width: 120px; height: 8px; }
+.bill-row .pct { font-family: var(--mono); font-size: 13px; min-width: 38px; text-align: right; }
+.bill-row .btn.sm { min-height: 34px; padding: 0 12px; font-size: 13px; box-shadow: 0 3px 0 var(--ink); }
+.bill-row .btn.sm:active { transform: translateY(3px); box-shadow: 0 0 0 var(--ink); }
+.bill-bar { height: 12px; border: 1.5px solid var(--ink); border-radius: 999px; background: var(--bone); overflow: hidden; }
+.bill-bar i { display: block; height: 100%; background: var(--ink); transform-origin: left center; transform: scaleX(var(--p, 0)); transition: transform 250ms var(--ease-out); }
+.bill-bar.near i { background: var(--accent); }
+.bill-bar.capped i { background: var(--accent-2); }
+.bill-bar.none { border-style: dashed; }
+.bill-chart { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 6px; align-items: end; height: 160px; padding-top: 20px; }
+.bill-col { position: relative; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 18px; }
+.bill-col .stack { display: flex; flex-direction: column; justify-content: flex-end; min-height: 0; }
+.bill-col i { display: block; }
+.bill-col .v { background: var(--accent); border: 1.5px solid var(--ink); border-bottom: 0; }
+.bill-col .a { background: var(--ink); border: 1.5px solid var(--ink); }
+.bill-col .d { font-family: var(--mono); font-size: 11px; color: var(--muted-b); text-align: center; line-height: 18px; }
+.bill-col.today .d { color: var(--ink); font-weight: 600; }
+.bill-col .amt { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+.bill-key { display: flex; gap: 16px; font-size: 13px; color: var(--muted-b); margin: 10px 0 0; }
+.bill-key i { display: inline-block; width: 12px; height: 12px; border: 1.5px solid var(--ink); vertical-align: -2px; margin-right: 6px; }
+.bill-key .a i { background: var(--ink); }
+.bill-key .v i { background: var(--accent); }
+.bill-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.bill-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; }
+.bill-list .name, .bill-list .num { font-family: var(--mono); font-size: 13px; }
+.bill-list .name { overflow-wrap: anywhere; }
+.bill-list .num { white-space: nowrap; }
+.bill-list .bill-bar { grid-column: 1 / -1; height: 8px; }
+.bill-recent summary { cursor: pointer; font-family: var(--display); font-size: 20px; font-weight: 700; }
+.bill-table-wrap { overflow-x: auto; margin-top: 12px; }
+.bill-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
+.bill-table th { text-align: left; font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--muted-b); text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 12px 6px 0; border-bottom: 1.5px solid var(--ink); }
+.bill-table td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--line-b); white-space: nowrap; vertical-align: top; }
+.bill-table td.num, .bill-table th.num { text-align: right; }
+.bill-table td.note { white-space: normal; font-family: var(--font); color: var(--muted-b); min-width: 180px; }
+@media (max-width: 980px) {
+  .bill-grid { grid-template-columns: 1fr; }
+  .bill-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .bill-tiles { gap: 10px; }
+  .bill-tile { padding: 14px; }
+  .bill-tile .v { font-size: 22px; }
+  .bill-row { grid-template-columns: 36px minmax(0, 1fr); }
+  .bill-row .face { width: 36px; height: 36px; }
+  .bill-row .nums { grid-column: 2; text-align: left; white-space: normal; }
+  .bill-row .track, .bill-row .sub { grid-column: 1 / -1; }
+  .bill-row .sub { grid-template-columns: minmax(0, 1fr) auto; }
+  .bill-row .sub .bill-bar { grid-column: 1 / -1; width: auto; }
+  .bill-row .btn.sm { min-height: 44px; padding: 0 16px; font-size: 14px; }
+  .bill-chart { gap: 3px; height: 130px; }
+  .bill-col .d { font-size: 9.5px; }
+}
+@media (max-width: 420px) {
+  .bill-tiles { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bill-bar i { transition: none; }
 }
 
 /* ---- the Bakery (bakery.html, bake.html): holders' brownies. ---- */
@@ -872,6 +957,6 @@ h1 .dot, .intro-word .dot { animation: cube-drop 700ms cubic-bezier(0.34, 1.56, 
   .social-menu a:hover { background: var(--ink); color: var(--bone); }
   .social-menu a:hover small { color: var(--bone); opacity: 0.8; }
 }
-@media (max-width: 760px) { .socials { position: static; } .social-menu { right: var(--gut); top: calc(100% + 10px); width: min(300px, calc(100vw - 2 * var(--gut))); } }
+@media (max-width: 900px) { .socials { position: static; } .social-menu { right: var(--gut); top: calc(100% + 10px); width: min(300px, calc(100vw - 2 * var(--gut))); } }
 @media (max-width: 420px) { .brand span { display: none; } }
 @media (prefers-reduced-motion: reduce) { .social-menu { transform: none; transition: opacity 120ms ease, visibility 0s 120ms; } .menu-btn.at, .social-menu a { transition: none; } }

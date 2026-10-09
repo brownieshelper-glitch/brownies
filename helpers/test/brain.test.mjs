@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Wallet } from "ethers";
 import { makeWorld } from "./mock.mjs";
-import { BudgetError, keyMessage, keyFromSignature, REASONING_HEADROOM } from "../lib/brain.mjs";
+import { Brain, BudgetError, keyMessage, keyFromSignature, REASONING_HEADROOM } from "../lib/brain.mjs";
 
 test("prelaunch: the call goes to OpenRouter with usage accounting, the cost is counted, the cap stops the helper", async () => {
   const W = makeWorld({ cost: 0.0023, config: { nib: { dailyCapUsd: 0.005 } } });
@@ -85,4 +85,30 @@ test("yesNo reads the first word", async () => {
   const out = [];
   for (let i = 0; i < answers.length; i++) out.push((await W.brain.yesNo("fudge", { prompt: "?" })).yes);
   assert.deepEqual(out, [true, false, true, false]);
+});
+
+test("every thought leaves a line on the ledger: model, tokens, job, price, time; the OpenRouter balance is read and cached", async () => {
+  const W = makeWorld({ cost: 0.0042 });
+  W.or.reply = () => ({ json: { choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: 321, completion_tokens: 45, completion_tokens_details: { reasoning_tokens: 12 }, cost: 0.0042 } } });
+  W.clock.advance(1500);
+  await W.brain.chat("chip", { prompt: "Build.", job: "chip-tasks" });
+  const [l] = W.store.ledgerRecent(1);
+  assert.equal(l.helper, "chip"); assert.equal(l.kind, "ai"); assert.equal(l.model, W.brain.model("chip")); assert.equal(l.job, "chip-tasks");
+  assert.equal(l.tokensIn, 321); assert.equal(l.tokensOut, 45); assert.equal(l.tokensThink, 12); assert.equal(l.micro, 4200); assert.equal(l.guessed, false);
+  assert.equal(l.day, W.store.dayKey(W.clock.now())); assert.equal(l.at, W.clock.now());
+  await W.brain.chat("chip", { prompt: "Again." });
+  assert.equal(W.store.ledgerRecent(1)[0].job, null, "no job named, no label");
+  assert.equal(W.store.ledgerDay(l.day).find((d) => d.helper === "chip").n, 2);
+  // the balance behind the key: bought, used, left; cached for five minutes; nothing without a key
+  let reads = 0;
+  W.fetch.on("GET", "openrouter.ai/api/v1/credits", () => { reads++; return { json: { data: { total_credits: 60, total_usage: 10.5 } } }; });
+  W.fetch.on("GET", "openrouter.ai/api/v1/key", () => ({ json: { data: { usage_daily: 2.4, limit: null, limit_remaining: null } } }));
+  assert.deepEqual(await W.brain.openrouterBalance(), { boughtUsd: 60, usedUsd: 10.5, leftUsd: 49.5, usageDailyUsd: 2.4, limitUsd: null, limitLeftUsd: null });
+  await W.brain.openrouterBalance(); assert.equal(reads, 1, "cached");
+  W.clock.advance(6 * 60_000); await W.brain.openrouterBalance(); assert.equal(reads, 2, "re-read after five minutes");
+  assert.equal(await new Brain({ store: W.store, clock: W.clock, fetch: W.fetch }).openrouterBalance(), null);
+  // the provider down: the last reading stays
+  W.fetch.on("GET", "openrouter.ai/api/v1/credits", () => ({ status: 500, json: {} }));
+  W.clock.advance(6 * 60_000);
+  assert.equal((await W.brain.openrouterBalance()).leftUsd, 49.5);
 });

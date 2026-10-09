@@ -89,6 +89,30 @@
       </div>
     </div>
 
+    <h2 class="admin-h">The bill</h2>
+    <p class="hint">What the brownies spent on AI and on video, today and before. AI prices come from OpenRouter with every answer. Video prices are Higgsfield's own estimate for each clip, asked before it is filmed.</p>
+    <section class="bill" id="bill" aria-label="The bill" hidden>
+      <div class="bill-tiles" id="billTiles"></div>
+      <div class="bill-grid">
+        <div class="bill-card">
+          <h3>Today, brownie by brownie</h3>
+          <div class="bill-rows" id="billRows"></div>
+        </div>
+        <div class="bill-card">
+          <h3>The last 14 days</h3>
+          <div class="bill-chart" id="billChart"></div>
+          <p class="bill-key"><span class="a"><i></i>AI</span><span class="v"><i></i>video</span></p>
+          <h3>By model today</h3>
+          <ul class="bill-list" id="billModels"></ul>
+          <p class="empty-line" id="billModelsEmpty" hidden>No AI call yet today.</p>
+        </div>
+      </div>
+      <details class="bill-card bill-recent">
+        <summary>The last 30 paid calls</summary>
+        <div class="bill-table-wrap"><table class="bill-table" id="billRecent"></table></div>
+      </details>
+    </section>
+
     <h2 class="admin-h">Waiting for you</h2>
     <ul class="admin-approvals" id="approvals"></ul>
     <p class="empty-line" id="approvalsEmpty" hidden>Nothing waits for a decision.</p>

@@ -66,7 +66,8 @@
   $("btnLogout").onclick = async () => { await api("/logout", { method: "POST" }); token = null; try { localStorage.removeItem(KEY); } catch (_) {} show(false); };
 
   // ---- the room ----
-  const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+  const money = (n) => { n = Number(n || 0); return "$" + (n === 0 || n >= 0.0095 ? n.toFixed(2) : n.toFixed(4)); };
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   const when = (iso) => (iso ? B.ago(new Date(iso).getTime()) : "");
   const upcoming = (iso) => { if (!iso) return ""; const d = new Date(iso).getTime() - Date.now(); if (d < 60_000) return "in under a minute"; if (d < 3_600_000) return `in ${Math.round(d / 60_000)} min`; return `in ${(d / 3_600_000).toFixed(1)} h`; };
 
@@ -78,6 +79,7 @@
     for (const [k, v] of [["Mode", s.mode], ["Up for", `${Math.floor(s.uptimeSeconds / 3600)} h ${Math.floor((s.uptimeSeconds % 3600) / 60)} min`], ["Reports", s.reports], ["AI calls", s.thoughts], ["Videos", s.videos], ["Group", s.group || "none yet"]]) {
       const d = el("div"); d.append(el("dt", null, k), el("dd", null, String(v))); stats.append(d);
     }
+    bill(s.costs);
     const ap = $("approvals"); ap.replaceChildren();
     for (const a of s.approvals) {
       const li = el("li");
@@ -123,6 +125,101 @@
     if (lg.ok) { const pre = $("adminLog"); const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8; pre.textContent = (lg.body.lines || []).join("\n"); if (atEnd) pre.scrollTop = pre.scrollHeight; }
   }
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  // ---- the bill: every brownie's AI and video spend against its caps, the history, the balances ----
+  const shortModel = (m) => String(m || "").replace(/^[^/]+\//, "");
+  const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const dateShort = (ms) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const monthName = (key) => new Date(`${key}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  const face = (name, cls) => { const f = el("span", cls); const known = window.Mascot ? window.Mascot.team.find((m) => m.id === name) : null; if (window.Mascot) f.innerHTML = known ? window.Mascot.face(known) : window.Mascot.coin({ shape: "square" }); return f; };
+  function bar(pct, state, { none = false, label = "" } = {}) {
+    const b = el("div", "bill-bar" + (state && state !== "ok" ? " " + state : "") + (none ? " none" : ""));
+    const i = el("i"); i.style.setProperty("--p", String(none ? 0 : Math.max(0, Math.min(100, pct)) / 100)); b.append(i);
+    b.setAttribute("role", "img"); b.setAttribute("aria-label", label || (none ? "no cap" : `${pct}% of the cap`));
+    return b;
+  }
+  function askCap(h, video) {
+    const v = prompt(video ? `${h.title}'s video cap in dollars a day (0 removes it)` : `${h.title}'s daily cap in dollars`, String(video ? h.videoCapUsd || 0 : h.capUsd));
+    if (v != null && v !== "") command({ helper: h.name, action: video ? "videocap" : "cap", value: Number(v) });
+  }
+  function billRow(h) {
+    const row = el("div", "bill-row" + (h.paused ? " paused" : ""));
+    row.append(face(h.name, "face"));
+    const who = el("div", "who");
+    who.append(el("b", null, h.title));
+    if (h.hidden) who.append(el("span", "badge", "hidden"));
+    if (h.paused) who.append(el("span", "badge", "paused"));
+    if (h.gone) who.append(el("span", "badge", "gone"));
+    if (h.state === "capped") who.append(el("span", "badge hot", "capped"));
+    else if (h.state === "near") who.append(el("span", "badge hot", "near the cap"));
+    who.append(el("span", "meta", `${plural(h.calls, "call")}${h.calls ? `, ${money(h.avgUsd)} a call` : ""}${h.model ? `, ${shortModel(h.model)}` : ""}`));
+    row.append(who);
+    const nums = el("div", "nums");
+    nums.append(document.createTextNode(h.capUsd ? `${money(h.aiUsd)} of ${money(h.capUsd)}` : money(h.aiUsd)));
+    nums.append(el("small", null, h.capUsd ? `${money(h.leftUsd)} left today` : "no cap"));
+    row.append(nums);
+    const track = el("div", "track");
+    track.append(bar(h.pct, h.state, { none: !h.capUsd }), el("span", "pct", h.capUsd ? `${h.pct}%` : ""));
+    if (!h.gone) { const b = el("button", "btn sm ghost", "Cap"); b.onclick = () => askCap(h, false); track.append(b); }
+    row.append(track);
+    if (h.makesVideo) {
+      const sub = el("div", "sub");
+      const text = `Video: ${money(h.videoUsd)}${h.videoCapUsd ? ` of ${money(h.videoCapUsd)}` : ", no cap"}, ${plural(h.videos, "clip")}${h.seconds ? `, ${h.seconds} s` : ""}${h.videoGuessed ? ` (${h.videoGuessed} priced from our table)` : ""}`;
+      sub.append(el("span", null, text), bar(h.videoPct, h.videoState, { none: !h.videoCapUsd, label: h.videoCapUsd ? `${h.videoPct}% of the video cap` : "no video cap" }));
+      if (!h.gone) { const b = el("button", "btn sm ghost", "Video cap"); b.onclick = () => askCap(h, true); sub.append(b); }
+      row.append(sub);
+    }
+    return row;
+  }
+  function bill(c) {
+    const box = $("bill");
+    if (!c) { box.hidden = true; return; }
+    box.hidden = false;
+    const tiles = $("billTiles"); tiles.replaceChildren();
+    const tile = (k, v, sub, action) => { const d = el("div", "bill-tile"); d.append(el("span", "k", k), el("span", "v", v)); if (sub) d.append(el("span", "sub", sub)); if (action) { const r = el("div", "admin-row"); r.append(action); d.append(r); } tiles.append(d); };
+    tile("Today", money(c.today.usd), `AI ${money(c.today.aiUsd)} in ${plural(c.today.calls, "call")}, video ${money(c.today.videoUsd)} in ${plural(c.today.videos, "clip")}. The caps add up to ${money(c.today.capUsd)}.`);
+    tile("This month", money(c.month.usd), `AI ${money(c.month.aiUsd)}, video ${money(c.month.videoUsd)}, since ${monthName(c.month.since)}.`);
+    tile("OpenRouter", c.openrouter ? `${money(c.openrouter.leftUsd)} left` : "not read", c.openrouter ? `Of ${money(c.openrouter.boughtUsd)} bought, ${money(c.openrouter.usedUsd)} used in all.` : "The balance could not be read from OpenRouter.");
+    const setBal = el("button", "btn sm ghost", c.higgsfield ? "New balance" : "Set the balance");
+    setBal.onclick = () => { const v = prompt("The Higgsfield balance in dollars, as its page shows it (0 stops the count)", c.higgsfield ? String(c.higgsfield.leftUsd) : ""); if (v != null && v !== "") command({ action: "refill", value: Number(v) }); };
+    tile("Higgsfield", c.higgsfield ? `about ${money(c.higgsfield.leftUsd)} left` : "not counted", c.higgsfield ? `${money(c.higgsfield.spentUsd)} in ${plural(c.higgsfield.clips, "clip")} since the ${money(c.higgsfield.refillUsd)} you set on ${dateShort(c.higgsfield.refillAt)}.` : "Higgsfield has no balance call. Tell the room your balance after a top-up and the clips count down from it.", setBal);
+    const rows = $("billRows"); rows.replaceChildren();
+    for (const h of c.helpers) rows.append(billRow(h));
+    // the last 14 days: AI below, video on top, the amount over today and over the biggest day
+    const chart = $("billChart"); chart.replaceChildren();
+    const max = Math.max(0, ...c.history.map((d) => d.usd));
+    const biggest = c.history.reduce((m, d) => (d.usd > (m?.usd || 0) ? d : m), null);
+    for (const d of c.history) {
+      const col = el("div", "bill-col" + (d.day === c.day ? " today" : ""));
+      col.title = `${d.day}: ${money(d.usd)} (AI ${money(d.aiUsd)} in ${plural(d.calls, "call")}, video ${money(d.videoUsd)} in ${plural(d.videos, "clip")})`;
+      const stack = el("div", "stack");
+      const v = el("i", "v"), a = el("i", "a");
+      v.style.height = max ? `${(100 * d.videoUsd) / max}%` : "0"; a.style.height = max ? `${(100 * d.aiUsd) / max}%` : "0";
+      if (!d.videoUsd) v.style.border = "0"; if (!d.aiUsd) a.style.border = "0";
+      stack.append(v, a);
+      if (d.day === c.day || (biggest && d.day === biggest.day && d.usd > 0)) col.append(el("span", "amt", money(d.usd)));
+      col.append(stack, el("span", "d", String(Number(d.day.slice(8)))));
+      chart.append(col);
+    }
+    const models = $("billModels"); models.replaceChildren();
+    const top = c.models[0]?.usd || 0;
+    for (const m of c.models.slice(0, 8)) {
+      const li = el("li");
+      li.append(el("span", "name", shortModel(m.model)), el("span", "num", `${money(m.usd)}, ${plural(m.calls, "call")}`), bar(top ? Math.round((100 * m.usd) / top) : 0, "ok", { label: `${money(m.usd)} of today's ${money(c.today.aiUsd)} on AI` }));
+      models.append(li);
+    }
+    $("billModelsEmpty").hidden = c.models.length > 0;
+    const table = $("billRecent"); table.replaceChildren();
+    const head = el("tr");
+    for (const [t, cls] of [["When", ""], ["Brownie", ""], ["Job", ""], ["Model", ""], ["Tokens in / out", "num"], ["Cost", "num"], ["Note", ""]]) head.append(el("th", cls, t));
+    table.append(head);
+    for (const r of c.recent) {
+      const tr = el("tr");
+      tr.append(el("td", null, `${dateShort(r.at)} ${hhmm(r.at)}`), el("td", null, r.title), el("td", null, r.kind === "video" ? `video, ${r.seconds} s` : r.job), el("td", null, shortModel(r.model)), el("td", "num", r.kind === "video" ? "" : `${r.tokensIn} / ${r.tokensOut}${r.tokensThink ? ` (${r.tokensThink} thinking)` : ""}`), el("td", "num", money(r.usd) + (r.guessed ? " (our table)" : "")), el("td", "note", r.note || ""));
+      table.append(tr);
+    }
+    if (!c.recent.length) { const tr = el("tr"); const td = el("td", "note", "No paid call on the ledger yet."); td.colSpan = 7; tr.append(td); table.append(tr); }
+  }
 
   const usd = (n) => "$" + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
   function jobRow(j) {
@@ -226,6 +323,32 @@
         { id: 5, kind: "grant", state: "paid", stateLabel: "paid", title: "Small tooling grant", url: "https://example.org/5", helper: "glaze", score: 75, expectedUsd: 4500, earnedUsd: 4500, summary: "Paid for the open-source gateway.", updatedAt: t0 - 2 * 86400e3 },
       ] },
     };
+    // the bill with made-up figures: one brownie near its cap, one capped, Sprinkle with two clips and a video cap
+    const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
+    const row = (name, title, o) => ({ name, title, gone: false, hidden: false, paused: false, model: "anthropic/claude-sonnet-5.5", capUsd: 31.5, aiUsd: 0, calls: 0, pct: 0, leftUsd: 31.5, state: "ok", tokensIn: 0, tokensOut: 0, tokensThink: 0, avgUsd: 0, biggestUsd: 0, makesVideo: false, videoUsd: 0, videos: 0, seconds: 0, videoCapUsd: null, videoPct: 0, videoState: "ok", videoGuessed: 0, totalUsd: 0, models: [], jobs: [], ...o });
+    const costs = {
+      day: dayKey(t0), timezone: "Europe/Rome",
+      today: { usd: 9.86, aiUsd: 0.62, videoUsd: 9.24, calls: 41, videos: 2, seconds: 20, tokensIn: 180_000, tokensOut: 22_000, tokensThink: 1_400, capUsd: 157.5, videoGuessed: 1 },
+      month: { since: dayKey(t0).slice(0, 8) + "01", usd: 61.4, aiUsd: 7.9, videoUsd: 53.5, calls: 380, videos: 12 },
+      history: Array.from({ length: 14 }, (_, i) => { const ai = [0.3, 0.5, 0.4, 0.9, 0.6, 0.7, 0.2, 0.8, 0.5, 0.6, 0.4, 0.9, 0.7, 0.62][i], video = [0, 4.6, 0, 9.2, 4.6, 0, 0, 4.6, 9.2, 0, 4.6, 0, 4.6, 9.24][i]; return { day: dayKey(t0 - (13 - i) * 86400e3), aiUsd: ai, videoUsd: video, usd: ai + video, calls: Math.round(ai * 60), videos: Math.round(video / 4.6) }; }),
+      helpers: [
+        row("fudge", "Fudge", { model: "anthropic/claude-haiku-4.5", capUsd: 1.5, aiUsd: 1.26, calls: 14, pct: 84, leftUsd: 0.24, state: "near", avgUsd: 0.09, tokensIn: 40_000, models: [{ model: "anthropic/claude-haiku-4.5", usd: 1.26, calls: 14 }], jobs: [{ job: "post", usd: 0.9, calls: 5 }, { job: "mentions", usd: 0.36, calls: 9 }] }),
+        row("crumb", "Crumb", { model: "anthropic/claude-haiku-4.5", capUsd: 2, aiUsd: 0.18, calls: 6, pct: 9, leftUsd: 1.82, avgUsd: 0.03 }),
+        row("nib", "Nib", { capUsd: 1, aiUsd: 1, calls: 3, pct: 100, leftUsd: 0, state: "capped", avgUsd: 0.33 }),
+        row("chip", "Chip", { capUsd: 3, aiUsd: 0.17, calls: 5, pct: 6, leftUsd: 2.83, avgUsd: 0.034, paused: true }),
+        row("sprinkle", "Sprinkle", { hidden: true, model: "anthropic/claude-opus-5.5", capUsd: 31, aiUsd: 0.21, calls: 3, pct: 1, leftUsd: 30.79, avgUsd: 0.07, makesVideo: true, videoUsd: 9.24, videos: 2, seconds: 20, videoCapUsd: 20, videoPct: 46, videoGuessed: 1 }),
+      ],
+      models: [{ model: "anthropic/claude-haiku-4.5", usd: 1.44, calls: 20, tokensIn: 60_000, tokensOut: 8_000 }, { model: "anthropic/claude-sonnet-5.5", usd: 1.17, calls: 8, tokensIn: 80_000, tokensOut: 9_000 }, { model: "anthropic/claude-opus-5.5", usd: 0.21, calls: 3, tokensIn: 40_000, tokensOut: 5_000 }],
+      recent: [
+        { id: 3, at: t0 - 4 * 60e3, helper: "sprinkle", title: "Sprinkle", kind: "video", model: "bytedance/seedance-2.5/text-to-video", job: "clip", usd: 4.62, tokensIn: 0, tokensOut: 0, tokensThink: 0, seconds: 10, guessed: false, ms: 0, note: "Clip 12: Trend: Pumpkin Head Illusion" },
+        { id: 2, at: t0 - 6 * 60e3, helper: "sprinkle", title: "Sprinkle", kind: "ai", model: "anthropic/claude-opus-5.5", job: "clip", usd: 0.0712, tokensIn: 9_800, tokensOut: 620, tokensThink: 0, seconds: 0, guessed: false, ms: 5200, note: null },
+        { id: 1, at: t0 - 25 * 60e3, helper: "crumb", title: "Crumb", kind: "ai", model: "anthropic/claude-haiku-4.5", job: "flush", usd: 0.0031, tokensIn: 2_100, tokensOut: 140, tokensThink: 0, seconds: 0, guessed: false, ms: 900, note: null },
+      ],
+      biggest: [],
+      openrouter: { boughtUsd: 60, usedUsd: 10.43, leftUsd: 49.57, usageDailyUsd: 2.39, limitUsd: 100, limitLeftUsd: 89.57 },
+      higgsfield: { refillUsd: 100, refillAt: t0 - 2 * 86400e3, spentUsd: 32.34, leftUsd: 67.66, clips: 7 },
+    };
+    state.costs = costs;
     const lines = ["[helpers] running", "[crumb] answering in the group -1004498393263 \"Brownies\" from now on", "[chip] a pull request waits for the owner", "[glaze] deal: Draft 1: Ask Programmable to index BROWNIE", "[admin] login (code)"].map((l, i) => `${new Date(t0 - (5 - i) * 60e3).toISOString()} ${l}`);
     return async (path) => {
       if (path === "/state") return { ok: true, status: 200, body: state };

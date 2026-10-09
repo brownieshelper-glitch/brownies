@@ -40,6 +40,7 @@ import { Clips } from "./lib/clips.mjs";
 import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { listText as suggestionsList } from "./lib/suggestions.mjs";
+import { billText } from "./lib/costs.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
 import { Nib } from "./helpers/nib.mjs";
 import { Chip } from "./helpers/chip.mjs";
@@ -200,8 +201,16 @@ export async function build({ env = process.env, configFile = null } = {}) {
       const [who = "", usd = ""] = text.split(/\s+/);
       if (!all[who.toLowerCase()]) return `Which brownie? /cap <name> <usd a day>. Names: ${names.join(", ")}.`;
       const r = await W.admin.command({ helper: who.toLowerCase(), action: "cap", value: usd });
-      return r.ok ? `${who[0].toUpperCase() + who.slice(1).toLowerCase()}'s cap is now ${r.capUsd} USD a day.` : r.error;
+      return r.ok ? r.note : r.error;
     }
+    if (cmd === "videocap") {
+      const [who = "", usd = ""] = text.split(/\s+/);
+      if (!all[who.toLowerCase()]) return `Which brownie? /videocap <name> <usd a day>, 0 removes it. Names: ${names.join(", ")}.`;
+      const r = await W.admin.command({ helper: who.toLowerCase(), action: "videocap", value: usd });
+      return r.ok ? r.note : r.error;
+    }
+    if (cmd === "refill") { if (!text.trim()) return "After a Higgsfield top-up: /refill <the balance in dollars its page shows>. /refill 0 stops the count."; const r = await W.admin.command({ action: "refill", value: text.trim() }); return r.ok ? r.note : r.error; }
+    if (cmd === "bill") return billText(await W.admin.bill());
     if (cmd === "summary") { await sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }); return true; }
     if (cmd === "suggestions") return suggestionsList(store, S.siteUrl);
     if (cmd === "fudge") { if (!text) return `Tell Fudge what to post: /fudge <what>. Or /fudge replies auto|approve|off|status for the answers on X (now: ${fudge.repliesMode()}), /fudge delete <X link> to take a post down everywhere.`; const r = await fudge.onRequest(text); return typeof r === "string" ? r : r ? true : "Fudge could not write that one now (budget, the cap, or an error). Check the log."; }
@@ -210,7 +219,9 @@ export async function build({ env = process.env, configFile = null } = {}) {
   };
   const scheduler = new Scheduler({ clock, tz: config.timezone || "UTC", flags: store, log });
   scheduler.add({ id: "team-summary", helper: "team", daily: { hours: [config.summaryHour ?? 22], minute: 0 }, run: () => sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log }).catch((e) => log(`[summary] failed: ${e.message}`)) });
-  for (const h of Object.values(all)) if (!off.includes(h.name)) for (const j of h.jobs()) scheduler.add(j);
+  // while a scheduled job runs, the helper knows its name, so every thought's line on the bill says which job paid for it
+  const labelled = (h, j) => ({ ...j, run: async (info) => { h.job = j.id; try { return await j.run(info); } finally { h.job = null; } } });
+  for (const h of Object.values(all)) if (!off.includes(h.name)) for (const j of h.jobs()) scheduler.add(labelled(h, j));
   W.scheduler = scheduler;
   // the control room: the owner's page talks to it through /admin/*; a paused helper skips its scheduled runs
   const summaryNow = () => sendSummary({ store, clock, telegram, ownerChatId: S.telegram.ownerChatId, helpers: names, caps: Object.fromEntries(names.map((n) => [n, config.helpers[n]?.dailyCapUsd])), mode: S.mode, hidden, log });

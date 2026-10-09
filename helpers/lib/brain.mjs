@@ -98,8 +98,10 @@ export class Brain {
   }
 
   /// One chat completion. Returns { text, costMicro, model, usage }. Throws BudgetError when the helper cannot pay.
-  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning, plugins = null } = {}) {
+  /// `job` is the name of the job this thought belongs to (the ledger line carries it; lib/costs.mjs groups by it).
+  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning, plugins = null, job = null } = {}) {
     await this.budgetOrThrow(helper);
+    const started = this.clock.now();
     // the effort: the call's own, else the brownie's config (a thinker like Chip gets medium with more headroom), else low
     const cfg = this.helpers[helper] || {};
     if (reasoning === undefined) reasoning = cfg.reasoning ?? DEFAULT_REASONING;
@@ -122,6 +124,7 @@ export class Brain {
     if (!costMicro && j?.brownies?.charged_usd) costMicro = Math.ceil(Number(j.brownies.charged_usd) * 1e6);
     const now = this.clock.now();
     this.store.addSpend(helper, costMicro, now);
+    this.store.addEntry({ at: now, helper, kind: "ai", model: body.model, job, tokensIn: usage.prompt_tokens, tokensOut: usage.completion_tokens, tokensThink: usage.completion_tokens_details?.reasoning_tokens, costMicro, ms: now - started });
     this.calls++;
     const spentNow = this.store.spentToday(helper, now).micro, capNow = this.capMicro(helper);
     if (spentNow >= capNow) await this.alerts?.budget(helper, `daily cap of ${(capNow / 1e6).toFixed(2)} USD reached`);
@@ -135,6 +138,23 @@ export class Brain {
     const r = await this.chat(helper, { ...opts, temperature: 0.2, maxTokens: opts.maxTokens || 200 });
     const t = r.text.trim();
     return { yes: /^\W*yes\b/i.test(t), text: t, costMicro: r.costMicro };
+  }
+
+  /// The OpenRouter account behind the key: what was bought, what was used, what is left, and the key's usage
+  /// today by OpenRouter's clock (UTC). Re-read at most every five minutes. Null without a key or when it did not answer.
+  async openrouterBalance({ fresh = false } = {}) {
+    if (!this.openrouterKey) return null;
+    const c = this._orBalance;
+    if (!fresh && c && this.clock.now() - c.at < 5 * 60_000) return c.value;
+    const get = async (path) => { const r = await this.fetch(`${this.openrouterUrl}/${path}`, { headers: { authorization: `Bearer ${this.openrouterKey}` } }); if (!r.ok) throw new Error(`OpenRouter answered ${r.status} on ${path}`); return (await r.json())?.data || {}; };
+    let value = null;
+    try {
+      const [credits, key] = await Promise.all([get("credits"), get("key").catch(() => ({}))]);
+      const bought = Number(credits.total_credits || 0), used = Number(credits.total_usage || 0);
+      value = { boughtUsd: bought, usedUsd: used, leftUsd: Math.max(0, bought - used), usageDailyUsd: Number(key.usage_daily || 0), limitUsd: key.limit == null ? null : Number(key.limit), limitLeftUsd: key.limit_remaining == null ? null : Number(key.limit_remaining) };
+    } catch (e) { this.log(`[brain] the OpenRouter balance could not be read: ${e.message}`); }
+    if (value) this._orBalance = { at: this.clock.now(), value };
+    return value || c?.value || null;
   }
 
   async _viaOpenRouter(helper, body) {

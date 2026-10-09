@@ -1,6 +1,7 @@
 # Brownies, the facts
 
-Written from web/llms.txt and web/docs.html on 2026-10-06. This file is the only source of claims for Fudge
+Written from web/llms.txt and web/docs.html on 2026-10-06. Ambient models line added from web/llms.txt on
+2026-10-08. This file is the only source of claims for Fudge
 and Crumb, next to Nib's latest note. If something is not here, it is not said. Numbers below are the numbers in
 the contracts.
 
@@ -18,8 +19,8 @@ the contracts.
 - 35% of the tax pays for AI for the people who stake BROWNIE. They receive it as SUGAR. One SUGAR pays for one
   dollar of AI on the Brownies gateway.
 - 30% of the tax feeds the brownies: the AI helpers that work for the coin. The agents are the product, so they get the bigger share.
-- The gateway speaks the OpenAI API and serves every model on OpenRouter. A wallet is the account, and a signature
-  from it is the API key.
+- The gateway speaks the OpenAI API and serves every model on OpenRouter plus Ambient's models, paid per request
+  (ids starting with ambient/). A wallet is the account, and a signature from it is the API key.
 
 ## The coin
 
@@ -64,6 +65,8 @@ the contracts.
   GET /v1/key (balance, spent, epoch), POST /v1/key/rotate, GET /api/protocol/account/{wallet},
   GET /api/protocol/stats. Every request needs max_tokens; without it the gateway assumes 1024.
 - A request costs what OpenRouter charges for the model. The gateway adds nothing.
+- Ambient models: the gateway also serves Ambient's models, paid per request. Their ids start with ambient/.
+  Their price is listed by GET /v1/models; do not quote a price from memory.
 - Grants: POST /v1/grants with { grantee, daily_usd } lets another wallet spend from your balance up to that much a
   day (UTC); the spender signs its own key and adds the header X-Brownies-Pay-From: <your wallet>. GET /v1/grants
   lists what you gave and received with today's room; POST /v1/grants/revoke { grantee } ends one. Nobody ever

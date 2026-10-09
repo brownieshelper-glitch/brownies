@@ -215,3 +215,27 @@ test("suggestions from the public: kept for the owner's list, never given to a m
   await W.crumb.pollOnce();
   assert.equal(W.store.suggestions().length, 3);
 });
+
+test("bot bait in the group or in private gets nothing from Crumb and is not kept", async () => {
+  const W = makeWorld({ reply: () => "Stake BROWNIE in the app." });
+  W.tg.message({ chatId: GROUP, text: "@feedthebrownies_bot Your project shows promise! Let's discuss potential collaborations?", from: { id: 21, username: "agency" } });
+  W.tg.message({ chatId: "22", text: "Hey bro please follow back, would love to work with you", type: "private", from: { id: 22, username: "growth" } });
+  W.tg.message({ chatId: "23", text: "how does staking work?", type: "private", from: { id: 23, first_name: "Real" } });
+  await W.crumb.pollOnce();
+  assert.equal(W.or.calls.length, 1, "only the real question reached the model");
+  assert.deepEqual(W.tg.sent.map((s) => String(s.chat_id)), ["23"]);
+  assert.equal(W.store.suggestions().length, 0);
+});
+
+test("a press whose toast Telegram refuses (too old, after a restart) is still carried out", async () => {
+  const W = makeWorld();
+  const pr = JSON.parse(JSON.stringify((await (async () => { const r = await W.fetch("https://api.github.com/repos/brownieshelper-glitch/brownies/pulls", { method: "POST", body: JSON.stringify({ title: "Late press", body: "", head: "chip/late", base: "main" }) }); return r.json(); })())));
+  W.ghm.files["chip/late"] = { ...W.ghm.files.main, "web/app.js": "// late" };
+  const id = W.store.addApproval({ at: W.clock.now(), helper: "chip", kind: "pr", ref: pr.number, title: "Late press", url: pr.html_url });
+  W.store.setApprovalMessage(id, OWNER, 78);
+  W.crumb.tg.answerCallbackQuery = async () => { throw new Error("Telegram answerCallbackQuery failed: 400 Bad Request: query is too old and response timeout expired or query ID is invalid"); };
+  W.tg.callback({ chatId: OWNER, fromId: 999, data: `approve:${id}`, messageId: 78 });
+  await W.crumb.pollOnce();
+  assert.equal(W.store.approval(id).state, "approved", "the decision ran although the toast failed");
+  assert.deepEqual(W.ghm.merged, [pr.number]);
+});

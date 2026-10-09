@@ -16,6 +16,8 @@ function moneyRow(r) {
   return { id: Number(r.id), createdAt: Number(r.created_at), updatedAt: Number(r.updated_at), kind: r.kind, title: r.title, url: r.url, ref: r.ref, source: r.source, helper: r.helper, state: r.state, score: Number(r.score), effort: r.effort, expectedUsd: Number(r.expected_usd) || 0, earnedUsd: Number(r.earned_usd) || 0, deadline: r.deadline, summary: r.summary, nextStep: r.next_step, ownerAction: r.owner_action, log };
 }
 
+function orderRow(r) { let result = null; try { result = r.result ? JSON.parse(r.result) : null; } catch { result = null; } return { id: Number(r.id), at: Number(r.at), updatedAt: Number(r.updated_at), key: r.key, item: r.item, prompt: r.prompt, payer: r.payer, micro: Number(r.micro), tx: r.tx, state: r.state, result, note: r.note, costMicro: Number(r.cost_micro) }; }
+
 function ledgerRow(r) { return { id: Number(r.id), at: Number(r.at), day: r.day, helper: r.helper, kind: r.kind, model: r.model, job: r.job, tokensIn: Number(r.tokens_in), tokensOut: Number(r.tokens_out), tokensThink: Number(r.tokens_think), seconds: Number(r.seconds), micro: Number(r.cost_micro), guessed: Boolean(r.guessed), ms: Number(r.ms), note: r.note }; }
 
 function rowSuggestion(r) { let flags = []; try { flags = JSON.parse(r.flags || "[]"); } catch { flags = []; } return { id: r.id, at: r.at, place: r.place, who: r.who, whoId: r.who_id, chat: r.chat, text: r.text, flags, ref: r.ref, url: r.url, state: r.state, note: r.note, decidedAt: r.decided_at }; }
@@ -44,6 +46,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, day TEXT NOT NULL, helper TEXT NOT NULL, kind TEXT NOT NULL, model TEXT, job TEXT, tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, tokens_think INTEGER NOT NULL DEFAULT 0, seconds REAL NOT NULL DEFAULT 0, cost_micro INTEGER NOT NULL DEFAULT 0, guessed INTEGER NOT NULL DEFAULT 0, ms INTEGER NOT NULL DEFAULT 0, note TEXT);
       CREATE INDEX IF NOT EXISTS ledger_day ON ledger(day, helper);
       CREATE INDEX IF NOT EXISTS ledger_at ON ledger(at);
+      CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, updated_at INTEGER NOT NULL, key TEXT NOT NULL, item TEXT NOT NULL, prompt TEXT NOT NULL, payer TEXT NOT NULL, micro INTEGER NOT NULL, tx TEXT, state TEXT NOT NULL DEFAULT 'paid', result TEXT, note TEXT, cost_micro INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS nonces (nonce TEXT PRIMARY KEY, at INTEGER NOT NULL);
     `);
     const p = (sql) => this.db.prepare(sql);
     this.q = {
@@ -102,6 +106,13 @@ export class Store {
       ledgerRecent: p("SELECT * FROM ledger ORDER BY at DESC, id DESC LIMIT ?"),
       ledgerBiggest: p("SELECT * FROM ledger WHERE day = ? ORDER BY cost_micro DESC, id DESC LIMIT ?"),
       spendDays: p("SELECT helper, day, micro, calls FROM spend WHERE day >= ? ORDER BY day"),
+      addOrder: p("INSERT INTO orders(at, updated_at, key, item, prompt, payer, micro, tx, state) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'paid')"),
+      order: p("SELECT * FROM orders WHERE id = ?"),
+      orders: p("SELECT * FROM orders ORDER BY id DESC LIMIT ?"),
+      ordersByState: p("SELECT * FROM orders WHERE state = ? ORDER BY id LIMIT ?"),
+      setOrder: p("UPDATE orders SET state = ?, result = COALESCE(?, result), note = COALESCE(?, note), cost_micro = cost_micro + ?, updated_at = ? WHERE id = ?"),
+      sales: p("SELECT COUNT(*) AS n, COALESCE(SUM(micro), 0) AS micro, COALESCE(SUM(cost_micro), 0) AS cost FROM orders WHERE at >= ?"),
+      useNonce: p("INSERT OR IGNORE INTO nonces(nonce, at) VALUES(?, ?)"),
     };
   }
 
@@ -169,6 +180,18 @@ export class Store {
   ledgerToday(helper, kind, now) { const r = this.q.ledgerHelperKindDay.get(helper, kind, this.dayKey(now)); return { n: Number(r?.n || 0), micro: Number(r?.micro || 0), seconds: Number(r?.seconds || 0) }; }
   ledgerRecent(n = 30) { return this.q.ledgerRecent.all(n).map(ledgerRow); }
   ledgerBiggest(day, n = 5) { return this.q.ledgerBiggest.all(String(day), n).map(ledgerRow); }
+
+  // ---- the shop's orders (lib/shop.mjs): paid, making, done, failed; and the payment nonces, each used once ----
+  addOrder({ at, key, item, prompt, payer, micro, tx = null }) { return Number(this.q.addOrder.run(at, at, String(key), item, String(prompt), String(payer).toLowerCase(), Math.round(micro), tx).lastInsertRowid); }
+  order(id) { const r = this.q.order.get(Number(id)); return r ? orderRow(r) : null; }
+  orders({ state = null, limit = 50 } = {}) { return (state ? this.q.ordersByState.all(state, limit) : this.q.orders.all(limit)).map(orderRow); }
+  /// The oldest order in a state (the next one to make), or null.
+  nextOrder(state = "paid") { const r = this.q.ordersByState.get(state, 1); return r ? orderRow(r) : null; }
+  setOrder(id, { state, result = null, note = null, costMicro = 0, at }) { this.q.setOrder.run(state, result == null ? null : JSON.stringify(result), note, Math.round(costMicro), at, Number(id)); return this.order(id); }
+  /// Since a time: how many orders, what they paid, what they cost us.
+  sales(since) { const r = this.q.sales.get(since); return { n: Number(r.n), micro: Number(r.micro), costMicro: Number(r.cost) }; }
+  /// True the first time a nonce is seen; false ever after (the same authorization cannot buy twice).
+  useNonce(nonce, at) { return this.q.useNonce.run(String(nonce).toLowerCase(), at).changes > 0; }
 
   // ---- approvals the owner decides on Telegram ----
   addApproval({ at, helper, kind, ref, title, url = null }) { return Number(this.q.addApproval.run(at, helper, kind, String(ref), title, url).lastInsertRowid); }

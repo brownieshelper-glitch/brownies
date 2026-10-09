@@ -37,6 +37,8 @@ helpers/helpers/swirl.mjs
 helpers/test/swirl.test.mjs
 helpers/helpers/sprinkle.mjs
 helpers/test/sprinkle.test.mjs
+helpers/helpers/toffee.mjs
+helpers/test/toffee.test.mjs
 helpers/test/video.test.mjs
 helpers/video/
 helpers/test/renderchild.test.mjs
@@ -58,3 +60,6 @@ helpers/test/contests.test.mjs
 
 # the team-buy bundle launcher and its records: kept off the public repository on purpose (keys never live here either)
 eth-launch/bundle/
+
+.vercel
+web/deployments/*.test-*.json

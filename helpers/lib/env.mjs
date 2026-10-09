@@ -15,6 +15,7 @@ export const NAMES = [
   "INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET", "LINKEDIN_VERSION", "TRUFFLE_PRIVATE_KEY",
   "FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY", "GLAZE_PRIVATE_KEY", "SWIRL_PRIVATE_KEY", "SPRINKLE_PRIVATE_KEY", "HELPERS_MNEMONIC", "VIDEOS_DIR", "FFMPEG_PATH",
   "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF", "ADMIN_WALLETS", "ADMIN_ORIGINS",
+  "SHOP_PAY_TO", "SHOP_SETTLER_PRIVATE_KEY", "BASE_RPC_URL", "SHOP_CHAIN_ID",
 ];
 
 /// The helpers switched off for now, from HELPERS_OFF="fudge,chip" (names, any case, spaces allowed). A helper
@@ -79,6 +80,8 @@ export function settings(env = process.env) {
     adminWallets: String(env.ADMIN_WALLETS || "").split(/[\s,]+/).filter(Boolean), // wallets that may log into the control room with a signature
     adminOrigins: String(env.ADMIN_ORIGINS || "").split(/[\s,]+/).filter(Boolean), // extra page origins allowed to call /admin (the site's own is always allowed)
   };
+  // the shop's settings (lib/shop.mjs): the payout address (the first admin wallet unless SHOP_PAY_TO is set), the settler's key, the Base RPC, the chain id
+  s.shop = { payTo: env.SHOP_PAY_TO || s.adminWallets[0] || "", settlerKey: env.SHOP_SETTLER_PRIVATE_KEY || "", rpcUrl: env.BASE_RPC_URL || "https://mainnet.base.org", chainId: Number(env.SHOP_CHAIN_ID || 8453) };
   if (mode === "prelaunch") need(env, "OPENROUTER_API_KEY");
   if (mode === "live") for (const k of ["FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY"]) need(env, k);
   if (s.github.repo && !/^[\w.-]+\/[\w.-]+$/.test(s.github.repo)) throw new Error("GITHUB_REPO must be owner/name.");

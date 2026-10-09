@@ -122,6 +122,8 @@ export class Admin {
     const { S, store, clock, scheduler, helpers, brain, config } = this.W;
     const now = clock.now();
     const costs = await this.bill();
+    let shop = null;
+    if (this.W.shop) { try { shop = await this.W.shop.view(); } catch (e) { this.log(`[admin] the shop's view failed: ${e.message}`); } }
     const list = Object.entries(helpers).map(([name, h]) => {
       const c = config.helpers[name] || {};
       const jobs = scheduler.jobs.filter((j) => j.helper === name).map((j) => ({ id: j.id, next: j.next ? nowIso(j.next) : null, runs: j.runs, daily: j.daily ? j.daily.hours : null, everyMinutes: j.every ? Math.round(j.every / 60_000) : null }));
@@ -143,7 +145,7 @@ export class Admin {
       jobs: { totals: jobTotals(store), list: store.moneyJobs({ limit: 80 }).map((j) => { let draft = null, contact = null; try { draft = JSON.parse(store.getMeta(`job:${j.id}:draft`) || "null"); } catch { draft = null; } try { contact = JSON.parse(store.getMeta(`job:${j.id}:contact`) || "null"); } catch { contact = null; } return { ...j, stateLabel: JOB_STATE[j.state] || j.state, draft, contact }; }) },
       group: store.getMeta("tg:group:auto") || this.W.S.telegram.groupChatId || "",
       reports: this.W.gateway.reports, thoughts: brain.calls,
-      costs,
+      costs, shop,
     };
   }
 

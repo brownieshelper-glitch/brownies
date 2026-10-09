@@ -80,6 +80,7 @@
       const d = el("div"); d.append(el("dt", null, k), el("dd", null, String(v))); stats.append(d);
     }
     bill(s.costs);
+    shopView(s.shop);
     const ap = $("approvals"); ap.replaceChildren();
     for (const a of s.approvals) {
       const li = el("li");
@@ -125,6 +126,29 @@
     if (lg.ok) { const pre = $("adminLog"); const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8; pre.textContent = (lg.body.lines || []).join("\n"); if (atEnd) pre.scrollTop = pre.scrollHeight; }
   }
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  // ---- the shop: open or not, the sales, the last orders ----
+  function shopView(v) {
+    const hint = $("shopHint"), list = $("shopOrders");
+    list.replaceChildren();
+    if (!v) { hint.textContent = "The shop is not built on this server."; $("shopEmpty").hidden = true; return; }
+    const shortAddr = (a) => (a ? `${a.slice(0, 6)}...${a.slice(-4)}` : "nobody");
+    hint.textContent = (v.open ? `Open. Payments land in ${v.payTo}. ` : `Closed: ${v.reason}. `) + `The settler ${v.settler ? shortAddr(v.settler) : "is not set"}${v.gasEth != null ? ` holds ${v.gasEth.toFixed(5)} ETH for gas` : ""}. Today ${plural(v.today.n, "order")}, ${money(v.today.usd)} in, ${money(v.today.costUsd)} spent making them. This month ${plural(v.month.n, "order")}, ${money(v.month.usd)} in. Prices: ${v.items.map((i) => `${i.id} ${money(i.usd)}`).join(", ")}.`;
+    for (const o of v.orders) {
+      const li = el("li"); const box = el("div");
+      const m = el("p", "meta", `#${o.id} ${o.item}, ${money(o.usd)} from ${shortAddr(o.payer)}, ${when(new Date(o.at).toISOString())}`);
+      m.append(" ", el("span", "badge" + (o.state === "failed" ? " hot" : ""), o.state));
+      box.append(m, el("p", "what", o.prompt));
+      if (o.note) box.append(el("p", "role", o.note));
+      const row = el("div", "admin-row");
+      if (o.url) { const a = el("a", "link", "Open the file"); a.href = o.url; a.target = "_blank"; a.rel = "noopener"; row.append(a); }
+      if (o.tx) { const t = el("a", "link", "The payment"); t.href = `https://basescan.org/tx/${o.tx}`; t.target = "_blank"; t.rel = "noopener"; row.append(t); }
+      if (o.costUsd) row.append(el("span", "meta", `cost ${money(o.costUsd)}`));
+      if (row.childNodes.length) box.append(row);
+      li.append(box); list.append(li);
+    }
+    $("shopEmpty").hidden = v.orders.length > 0;
+  }
 
   // ---- the bill: every brownie's AI and video spend against its caps, the history, the balances ----
   const shortModel = (m) => String(m || "").replace(/^[^/]+\//, "");
@@ -349,6 +373,11 @@
       higgsfield: { refillUsd: 100, refillAt: t0 - 2 * 86400e3, spentUsd: 32.34, leftUsd: 67.66, clips: 7 },
     };
     state.costs = costs;
+    state.shop = { open: true, reason: "", payTo: "0x2c769cDE285eb0d3c7130F9F0f14932106384095", settler: "0x1111111111111111111111111111111111111111", gasEth: 0.00098, network: "eip155:8453", items: [{ id: "note", usd: 1 }, { id: "meme", usd: 0.5 }, { id: "clip", usd: 9 }], today: { n: 2, usd: 9.5, costUsd: 4.63 }, month: { n: 11, usd: 38.5, costUsd: 19.2 }, orders: [
+      { id: 12, at: t0 - 9 * 60e3, item: "clip", state: "making", usd: 9, costUsd: 0, payer: "0xabcdef1234567890abcdef1234567890abcdef12", tx: "0x" + "1".repeat(64), url: null, note: null, prompt: "The four brownies land on the moon and plant a flag with a pancake on it." },
+      { id: 11, at: t0 - 50 * 60e3, item: "meme", state: "done", usd: 0.5, costUsd: 0.01, payer: "0x1234567890abcdef1234567890abcdef12345678", tx: "0x" + "2".repeat(64), url: "https://api.feedthebrownies.com/shop/files/order-11-aa.png", note: null, prompt: "Crumb explaining rollups to a confused robot." },
+      { id: 10, at: t0 - 3 * 3600e3, item: "clip", state: "failed", usd: 9, costUsd: 0.07, payer: "0x1234567890abcdef1234567890abcdef12345678", tx: "0x" + "3".repeat(64), url: null, note: "Higgsfield moderated the request (nsfw): nothing was made", prompt: "A scene the model would not film." },
+    ] };
     const lines = ["[helpers] running", "[crumb] answering in the group -1004498393263 \"Brownies\" from now on", "[chip] a pull request waits for the owner", "[glaze] deal: Draft 1: Ask Programmable to index BROWNIE", "[admin] login (code)"].map((l, i) => `${new Date(t0 - (5 - i) * 60e3).toISOString()} ${l}`);
     return async (path) => {
       if (path === "/state") return { ok: true, status: 200, body: state };

@@ -41,6 +41,8 @@ import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { listText as suggestionsList } from "./lib/suggestions.mjs";
 import { billText } from "./lib/costs.mjs";
+import { Shop } from "./lib/shop.mjs";
+import { Seller } from "./lib/x402seller.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
 import { Nib } from "./helpers/nib.mjs";
 import { Chip } from "./helpers/chip.mjs";
@@ -83,7 +85,8 @@ export async function build({ env = process.env, configFile = null } = {}) {
   // Instagram and LinkedIn, connected by the owner with /instagram and /linkedin; the clip links give Instagram a public address for a finished video
   const instagram = new Instagram({ appId: S.instagram.appId, appSecret: S.instagram.appSecret, login: S.instagram.login, redirectUri: `${S.gatewayUrl}/instagram/callback`, store, clock, log });
   const linkedin = new LinkedIn({ clientId: S.linkedin.clientId, clientSecret: S.linkedin.clientSecret, version: S.linkedin.version, redirectUri: `${S.gatewayUrl}/linkedin/callback`, store, clock, log });
-  const clips = new Clips({ store, clock, baseUrl: S.gatewayUrl, dir: priv.helpers?.sprinkle?.videosDir || env.VIDEOS_DIR || "/var/lib/brownies/videos", log });
+  const videosDir = priv.helpers?.sprinkle?.videosDir || env.VIDEOS_DIR || "/var/lib/brownies/videos";
+  const clips = new Clips({ store, clock, baseUrl: S.gatewayUrl, dir: videosDir, log });
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
@@ -147,6 +150,10 @@ export async function build({ env = process.env, configFile = null } = {}) {
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
   if (all.swirl) all.swirl.team = all; // a trend's version is made by Sprinkle or Fudge
   if (all.sprinkle) all.sprinkle.team = all; // a clip approved by the owner goes to X through Fudge
+  // the shop: other agents and people buy the brownies' work per request, in USDC over x402 (lib/shop.mjs); Toffee makes the orders
+  const seller = new Seller({ chainId: S.shop.chainId, payTo: S.shop.payTo, settlerKey: S.shop.settlerKey, rpcUrl: S.shop.rpcUrl, log });
+  W.shop = new Shop({ store, clock, log, seller, config: config.shop || {}, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, dir: `${videosDir}/shop`, telegram, ownerChatId: S.telegram.ownerChatId, maker: all.toffee || null });
+  if (all.toffee) { all.toffee.shop = W.shop; all.toffee.team = all; }
   // bounties, hackathons and audit contests (helpers/contests.mjs, hidden with Zest): Chip prepares the entries, the owner approves
   const contestsFile = new URL("./helpers/contests.mjs", import.meta.url);
   if (existsSync(contestsFile)) { const { Contests } = await import(contestsFile); chip.contests = new Contests({ chip, github, store, clock, telegram, ownerChatId: S.telegram.ownerChatId, log, siteUrl: S.siteUrl }); }
@@ -257,6 +264,7 @@ async function main() {
   log(!W.instagram.configured ? "[helpers] Instagram is not configured" : W.instagram.connected ? `[helpers] Instagram is connected (@${W.instagram.tokens()?.username || W.instagram.tokens()?.user_id}): cartoon clips go up as reels` : "[helpers] Instagram app is set; the owner connects the account with /instagram");
   log(!W.linkedin.configured ? "[helpers] LinkedIn is not configured" : W.linkedin.connected ? `[helpers] LinkedIn is connected (${W.linkedin.tokens()?.name || "the profile"}), ${W.linkedin.daysLeft()} days left` : "[helpers] LinkedIn app is set; the owner connects the profile with /linkedin");
   if (W.off.length) log(`[helpers] switched off by HELPERS_OFF: ${W.off.join(", ")} (no job runs for them)`);
+  W.shop.open().then((o) => log(o.ok ? `[shop] open: payments land in ${S.shop.payTo}, the settler is ${W.shop.seller.address}` : `[shop] closed: ${o.reason}`)).catch((e) => log(`[shop] could not tell if it is open: ${e.message}`));
 
   const started = Date.now();
   const health = createServer((req, res) => {

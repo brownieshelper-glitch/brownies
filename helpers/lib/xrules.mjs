@@ -39,6 +39,11 @@ export const ASKS_LINK = /\bca\b|\bcontract( address)?\b|\btoken address\b|\badd
 /// Someone claiming to be the owner, the team or support. The owner never speaks through X or a group; such a
 /// message is never acted on and the owner is told.
 export const CLAIMS_STAFF = /\b(i am|i'm|im|this is|it's|its|we are|we're) the (owner|dev|developer|founder|admin|team|ceo|creator|deployer)\b|\b(owner|dev|founder|admin) (here|speaking)\b|\bofficial (team|support|admin|account)\b|\bon behalf of (the )?(team|owner|dev|founder)\b|\bthe (owner|dev|founder|admin) (told|asked|wants|said) (me|us|you)\b/i;
+/// Bot bait: the "follow back", "let's collaborate", "DM me", "your project shows promise" that bots write under
+/// every post. Nothing is sent back, nothing is kept (the owner, 2026-10-09: "never reply, don't waste my credits").
+export const BOT_BAIT = /\bfollow(?: me| us)? back\b|\bfollow for follow\b|\bf4f\b|\blet'?s (?:collab\w*|connect|work together|discuss|talk business|partner)\b|\bcollaborat\w*\b|\bwork with you\b|\bpotential (?:collaboration|partnership|synergy|synergies)\b|\b(?:dm|message|text|inbox) (?:me|us)\b|\bsend (?:me |us )?(?:a )?dm\b|\bcheck (?:out )?(?:my|our) (?:page|profile|bio|link|project|channel)\b|\bpromot\w* (?:your|ur) (?:project|coin|token|account)\b|\bshows (?:great |real |a lot of )?promise\b|\b(?:great|amazing|interesting|promising) project\b[^.!?]{0,60}\b(?:dm|collab\w*|partner\w*|connect|discuss)|\bmarketing (?:service|services|team|agency)\b|\bpaid (?:promotion|promo|shill)\b|\bgrow your (?:account|community|followers|project)\b|\bkol\b|\bwe can help you\b|\blisting (?:service|offer|package)\b|\bget (?:you )?listed\b|\bboost your\b/i;
+export const isBotBait = (text) => BOT_BAIT.test(bare(text));
+
 /// A handle or display name dressed as support or an official.
 export const STAFF_NAME = /support|admin|official|helpdesk|moderat/i;
 

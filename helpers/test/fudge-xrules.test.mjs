@@ -116,3 +116,18 @@ test("a mention that suggests something is kept for the owner: bait gets no answ
   await W.fudge.mentions();
   assert.match(W.or.system(), /SUGGESTIONS THE OWNER ACCEPTED[^\n]*\n- @ann on X \(the owner says: a monthly one is enough\): @Feedthebrownies idea: let the brownies post a weekly recap\?/);
 });
+
+test("bot bait under our posts gets nothing: no reply, no card, no model, no place in the suggestions list", async () => {
+  const W = makeWorld({ reply: () => "SUGAR is the credit stakers earn.", config: { fudge: { replies: "auto" } } });
+  W.xm.mentions = [
+    { id: "9101", text: "@Feedthebrownies Hey bro Please follow back. Would love to work with you!", authorId: "b1", author: "growthguy" },
+    { id: "9102", text: "@Feedthebrownies Hey, let's collaborat! Follow me back send me DM", authorId: "b2", author: "collab_king" },
+    { id: "9103", text: "@Feedthebrownies Your project shows promise! Let's discuss potential collaborations.", authorId: "b3", author: "agency" },
+    { id: "9104", text: "@Feedthebrownies what is SUGAR?", authorId: "u1", author: "ann" },
+  ];
+  assert.equal(await W.fudge.mentions(), 1, "only ann");
+  assert.equal(W.xm.posts.length, 1); assert.deepEqual(W.xm.posts[0].reply, { in_reply_to_tweet_id: "9104" });
+  assert.equal(W.or.calls.length, 1, "one model call, for ann");
+  assert.equal(W.store.suggestions().length, 0, "bait is not a suggestion");
+  assert.equal(W.fudge.pendingReplies(), 0);
+});

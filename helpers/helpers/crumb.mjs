@@ -9,7 +9,7 @@
 import { Helper } from "../lib/helper.mjs";
 import { tidy, problems } from "../lib/voice.mjs";
 import { cut } from "../lib/text.mjs";
-import { claimsStaff } from "../lib/xrules.mjs";
+import { claimsStaff, isBotBait } from "../lib/xrules.mjs";
 import { isSuggestion, flags as suggestionFlags, SUGGEST_LINE, FLAGGED_LINE, noticeText } from "../lib/suggestions.mjs";
 
 const RULES = `Your task now: answer a message in a Telegram chat.
@@ -160,6 +160,7 @@ export class Crumb extends Helper {
       if (typeof reply === "string" && reply) { await this.tg.sendMessage(chatId, reply, { replyTo: m.message_id }); return "holder"; }
     }
     // a suggestion from anyone but the owner (post this, add that coin, look at this link): kept for his list, whatever happens next
+    if (!isOwner && isBotBait(m.text)) { this.log(`[crumb] bot bait in chat ${chatId}: nothing sent, nothing kept`); return null; } // "follow back", "let's collaborate", "DM me": the owner's rule
     if (!isOwner && !MONEY_ASK.test(m.text) && isSuggestion(m.text)) await this.noteSuggestion(m);
     if (m.chat.type === "private" || isOwner) return this.answer(m);
     if (chatId === this.groupChatId) {
@@ -373,22 +374,29 @@ ${text}
   }
 
   /// A press on Approve or Reject. Only the owner's press counts; the decision itself is Chip's.
+  /// The little toast Telegram shows on a press. It fails when the press is older than Telegram allows (a press made
+  /// while the brownies were restarting, for one); that must never stop the decision itself, so a failure is a log line.
+  async ack(cq, text) {
+    try { await this.tg.answerCallbackQuery(cq.id, text); return true; }
+    catch (e) { this.log(`[crumb] the press toast could not be shown (${cut(e.message, 90)}); the press still counts`); return false; }
+  }
+
   async callback(cq) {
     const m = String(cq.data || "").match(/^(approve|reject):(\d+)$/);
     const chatId = String(cq.message?.chat?.id || "");
     const isOwner = this.ownerChatId && (chatId === this.ownerChatId || String(cq.from?.id || "") === this.ownerChatId);
     if (!m) {
       // a brownie's own card (TikTok's post settings, for one): the owner's press goes to it, the answer comes back
-      if (!this.onButton || !cq.data) return this.tg.answerCallbackQuery(cq.id, "Unknown button.");
-      if (!isOwner) return this.tg.answerCallbackQuery(cq.id, "Only the owner decides.");
+      if (!this.onButton || !cq.data) return this.ack(cq, "Unknown button.");
+      if (!isOwner) return this.ack(cq, "Only the owner decides.");
       const answer = await this.onButton(String(cq.data), { chatId, messageId: cq.message?.message_id });
-      return this.tg.answerCallbackQuery(cq.id, answer || "Unknown button.");
+      return this.ack(cq, answer || "Unknown button.");
     }
-    if (!isOwner) return this.tg.answerCallbackQuery(cq.id, "Only the owner decides.");
+    if (!isOwner) return this.ack(cq, "Only the owner decides.");
     const a = this.store.approval(Number(m[2]));
-    if (!a) return this.tg.answerCallbackQuery(cq.id, "Nothing to decide.");
-    if (a.state !== "pending") return this.tg.answerCallbackQuery(cq.id, "Already decided.");
-    await this.tg.answerCallbackQuery(cq.id, m[1] === "approve" ? "Approved." : "Rejected.");
+    if (!a) return this.ack(cq, "Nothing to decide.");
+    if (a.state !== "pending") return this.ack(cq, "Already decided.");
+    await this.ack(cq, m[1] === "approve" ? "Approved." : "Rejected.");
     if (this.onDecision) await this.onDecision(a.id, m[1], { chatId, messageId: cq.message?.message_id });
     return m[1];
   }

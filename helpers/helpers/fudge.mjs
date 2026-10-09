@@ -15,7 +15,7 @@
 import { Helper, ordinal } from "../lib/helper.mjs";
 import { tidy, problems } from "../lib/voice.mjs";
 import { cut, oneLine } from "../lib/text.mjs";
-import { xProblems, X_RULES, BIO_LINE, LINK, ADDRESS, bare, wantsOptOut, asksForLink, claimsStaff, isSensitive, staffLikeName } from "../lib/xrules.mjs";
+import { xProblems, X_RULES, BIO_LINE, LINK, ADDRESS, bare, wantsOptOut, asksForLink, claimsStaff, isSensitive, staffLikeName, isBotBait } from "../lib/xrules.mjs";
 import { isSuggestion, flags as suggestionFlags, SUGGEST_LINE, noticeText } from "../lib/suggestions.mjs";
 
 const DEFAULT_TOPICS = [
@@ -317,6 +317,7 @@ export class Fudge extends Helper {
         continue;
       }
       if (isSensitive(t.text) || isSensitive(author)) { this.log(`[fudge] mention ${t.id} carries sensitive words: no answer`); continue; }
+      if (isBotBait(t.text)) { this.log(`[fudge] bot bait from @${author}: nothing sent, nothing kept`); continue; } // "follow back", "let's collaborate", "DM me": the owner's rule
       let suggested = null; // a suggestion: kept for the owner, answered with one fixed line unless it carries bait
       if (isSuggestion(t.text)) {
         const f = suggestionFlags(t.text);

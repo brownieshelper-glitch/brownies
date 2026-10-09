@@ -3,7 +3,7 @@
 // a staff claim and sensitive words.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { xProblems, xHardProblems, likeness, wantsOptOut, asksForLink, claimsStaff, isSensitive, staffLikeName, BIO_LINE, X_RULES } from "../lib/xrules.mjs";
+import { xProblems, xHardProblems, likeness, wantsOptOut, asksForLink, claimsStaff, isSensitive, staffLikeName, isBotBait, BIO_LINE, X_RULES } from "../lib/xrules.mjs";
 
 test("what may not go out on X: links, addresses, bait, hashtag storms, handles, scam talk, private asks, trend talk, person claims, DM talk", () => {
   const bad = (t, o) => xProblems(t, o);
@@ -60,4 +60,9 @@ test("what a mention means: stop, a link ask, a staff claim, sensitive words, a 
   for (const h of ["brownies_support", "AdminHelp", "OfficialBrownies", "mod_helpdesk"]) assert.ok(staffLikeName(h), h);
   for (const h of ["ann", "Feedthebrownies", "alice_dev", "teamwork"]) assert.ok(!staffLikeName(h), h);
   assert.match(X_RULES, /No links, no web addresses and no contract or wallet addresses/);
+});
+
+test("bot bait is recognised: follow back, collaborate, DM me, shows promise; real questions are not", () => {
+  for (const t of ["Hey bro Please follow back. Would love to work with you!", "Hey, let's collaborat! Follow me back send me DM", "Your project shows promise! Let's discuss potential collaborations.", "Great project, DM me for a listing offer", "we can help you grow your community", "check out my page"]) assert.ok(isBotBait(t), t);
+  for (const t of ["how does staking work?", "what is SUGAR?", "love the cartoon", "when is the next episode?", "is there a lock?", "the brownies work together well"]) assert.ok(!isBotBait(t), t);
 });

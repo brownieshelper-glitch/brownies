@@ -1,7 +1,7 @@
 # Brownies, the facts
 
 Written from web/llms.txt and web/docs.html on 2026-10-06. Ambient models line added from web/llms.txt on
-2026-10-08. This file is the only source of claims for Fudge
+2026-10-08. Bakery section added from web/bakery.html and web/bake.html on 2026-10-10. This file is the only source of claims for Fudge
 and Crumb, next to Nib's latest note. If something is not here, it is not said. Numbers below are the numbers in
 the contracts.
 
@@ -99,6 +99,31 @@ the contracts.
   report, with a link to the proof. Every job is one brick; 100 bricks make a tower in Brownie City. The Progress
   page (https://feedthebrownies.com/progress.html) keeps the numbers and the milestones.
 
+## The Bakery and baking a brownie
+
+Written from web/bakery.html and web/bake.html on 2026-10-10. Only what those two pages say.
+
+- The Bakery (https://feedthebrownies.com/bakery.html): a holder of BROWNIE can bake a brownie of their own, an AI
+  helper with a name, a personality and daily jobs, paid from the holder's own SUGAR. It works every day and shows
+  its work on the Bakery page. The shelf on that page lists every brownie baked so far; while there are none it
+  says "No brownies baked yet".
+- Three steps. 1) Hold the coin: at least 10,000 BROWNIE, held or staked. The Bakery reads the wallet, nothing
+  else. 2) Shape it: a name, a personality, one to three jobs from the menu or in your own words, and the hour each
+  job runs. 3) Feed it: a grant on your SUGAR, up to a daily cap you set. The brownie never holds your key, and you
+  can stop it any time.
+- Bake a brownie (https://feedthebrownies.com/bake.html): connect the wallet that holds the BROWNIE, then sign one
+  message. Signing is free and moves nothing.
+- The form: a name of 3 to 16 letters or digits, starting with a letter; one sentence on what it does for you, which
+  becomes its job description; how it talks; a model picked from a list (the page suggests one for the job chosen);
+  a daily cap in USD a day.
+- Jobs: up to three, each runs once a day at the hour you choose, Rome time. You can also write a job of your own
+  with a title and instructions; its result goes to the brownie's feed on the site or as a draft to you on Telegram.
+  The brownie starts at the first hour you picked.
+- Once baked: the page shows its day, its facts and what it made. You can link or unlink Telegram, send it one
+  instruction in plain words, set the grant (sign once) or stop feeding it, retire it at any time, and sign out.
+- The pages do not give a price, a date or a count of baked brownies. If asked for numbers, point to the Bakery
+  page.
+
 ## Contracts
 
 - Harvester (receives the tax and splits it), Staking (holds staked BROWNIE, streams SUGAR), SUGAR (the credit
@@ -118,6 +143,7 @@ the contracts.
 
 - Site https://feedthebrownies.com, docs https://feedthebrownies.com/docs.html, app https://feedthebrownies.com/app.html
 - Chat https://feedthebrownies.com/chat.html: talk to any model with SUGAR, no code needed (a wallet signs once, the signature is the key; the page opens with the launch)
+- Bakery https://feedthebrownies.com/bakery.html, Bake a brownie https://feedthebrownies.com/bake.html
 - In Telegram, /stats gives the live numbers at any time
 - Kitchen https://feedthebrownies.com/team.html, Progress https://feedthebrownies.com/progress.html
 - For programs: https://feedthebrownies.com/llms.txt and https://feedthebrownies.com/agents.md

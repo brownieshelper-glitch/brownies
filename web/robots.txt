@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /room.html?live=1
+
+Sitemap: https://feedthebrownies.com/sitemap.xml

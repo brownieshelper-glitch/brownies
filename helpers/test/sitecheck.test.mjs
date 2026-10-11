@@ -9,7 +9,7 @@ const PAYER = "0xAbCdEf1234567890aBcDeF1234567890AbCdEf12";
 /// A fake site: the home page with a few sins, an exposed .env, a dead link, a listing, no HSTS.
 function fakeSite({ proof = PAYER, hsts = false, exposeEnv = true } = {}) {
   const calls = [];
-  const HOME = `<!doctype html><html><head><title>Shop</title><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/assets/site.css"><script src="https://cdn.example.net/jquery-1.12.4.min.js"></script><script>var x = 1;</script></head><body><h1>Shop</h1><img src="/a.png"><img src="http://img.example.com/b.png" alt="b"><form action="http://api.example.com/login"><input type="password"></form><a href="/about">About</a><a href="/gone">Gone</a><a href="https://other.example/x">Other</a><a href="/privacy">Privacy</a></body></html>`;
+  const HOME = `<!doctype html><html><head><title>Shop</title><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/assets/site.css"><script src="https://cdn.example.net/jquery-1.12.4.min.js"></script><script>var x = 1;</script></head><body><h1>Shop</h1><img src="/a.png"><img src="http://img.example.com/b.png" alt="b"><form action="http://api.example.com/login"><input type="password"></form><a href="/about">About</a><a href="/gone">Gone</a><a href="https://other.example/x">Other</a><a href="/privacy">Privacy</a><a href="team.html">Team</a><a href="mailto:x@y.z">Mail</a><a href="site.css">Style</a></body></html>`;
   const fetch = async (url, init = {}) => {
     const u = String(url), method = init.method || "GET";
     calls.push(`${method} ${u}`);
@@ -24,7 +24,7 @@ function fakeSite({ proof = PAYER, hsts = false, exposeEnv = true } = {}) {
     if (u === "https://example.com/sitemap.xml") return res(404);
     if (u === "https://example.com/.well-known/security.txt") return res(404);
     if (u === "https://example.com/assets/") return res(200, "<html><title>Index of /assets/</title></html>");
-    if (u === "https://example.com/about") return res(200);
+    if (u === "https://example.com/about" || u === "https://example.com/team.html") return res(200);
     if (u === "https://example.com/gone") return res(404);
     if (u === "https://example.com/privacy") return res(200);
     return res(404);
@@ -58,7 +58,7 @@ test("the checks over a fake site: the redirect, the headers, the cookies, the e
   assert.equal(R.html.scripts, 2); assert.equal(R.html.inlineScripts, 1); assert.deepEqual(R.html.externalScriptHosts, ["cdn.example.net"]); assert.deepEqual(R.html.mixed, ["http://img.example.com/b.png"], "the form to http is counted apart"); assert.equal(R.html.formsToHttp, 1); assert.equal(R.html.passwordFields, 1);
   assert.deepEqual(R.html.libraries, ["jquery 1.12.4"]); assert.equal(R.html.privacyLink, true); assert.equal(R.html.termsLink, false);
   assert.equal(R.robots, "present"); assert.equal(R.sitemap, "absent"); assert.equal(R.securityTxt, "absent");
-  assert.deepEqual(R.broken, ["https://example.com/gone"]); assert.equal(R.linksTried, 3, "about, gone, privacy; the other host is not ours");
+  assert.deepEqual(R.broken, ["https://example.com/gone"]); assert.equal(R.linksTried, 4, "about, gone, privacy and the relative team.html; the other host, the mailto and the stylesheet are not links to try");
   assert.equal(R.server.poweredBy, "PHP/8.1"); assert.ok(R.htmlText.startsWith("<!doctype html>"));
   assert.ok(site.calls.includes("HEAD http://example.com/")); assert.ok(site.calls.includes("GET https://example.com/.git/config")); assert.ok(!site.calls.some((c) => /POST/.test(c)), "nothing is ever sent");
   const F = siteFindings(R);
@@ -71,7 +71,7 @@ test("the checks over a fake site: the redirect, the headers, the cookies, the e
   const text = checksText(R);
   assert.match(text, /^- Home page: 200, 1 KB of HTML\n- http redirects to https: yes\n- Certificate: valid until \d{4}-\d{2}-\d{2}, by Let's Encrypt\n- Security headers: strict transport security NO; content security policy NO; x content type options yes/);
   assert.match(text, /- Files that should not be public: EXPOSED \/\.env\n- Directory listing: ON at \/assets\/\n- Mixed content: 1; forms to http: 1; password fields: 1/);
-  assert.match(text, /- Links on the home page tried: 3, broken: 1\n- Server: nginx, x-powered-by PHP\/8\.1$/);
+  assert.match(text, /- Links on the home page tried: 4, broken: 1\n- Server: nginx, x-powered-by PHP\/8\.1$/);
   // a site that does not answer at all
   const dead = await checkSite("https://example.com", { fetch: async () => { throw Object.assign(new Error("fail"), { cause: { code: "ENOTFOUND" } }); } });
   assert.equal(dead.home.error, "ENOTFOUND"); assert.equal(siteFindings(dead)[0].title, "The site did not answer over https"); assert.equal(siteFindings(dead)[0].severity, "critical");

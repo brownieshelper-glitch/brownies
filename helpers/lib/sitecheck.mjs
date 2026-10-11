@@ -114,7 +114,8 @@ export async function checkSite(url, { fetch = globalThis.fetch, tlsInfo = null,
   const dirs = [...new Set([...html.matchAll(/(?:src|href)=["'](\/[^"']+\/)[^"'/]+\.(?:js|css|png|jpg|svg)["']/gi)].map((m) => m[1]))].slice(0, 3);
   for (const d of dirs) { const r = await get(`https://${host}${d}`, { max: 4000, timeout: 8000 }); if (r.ok && /<title>Index of/i.test(r.text)) R.listing.push(d); }
   // 8. broken links on the page, the site's own
-  const links = [...new Set([...html.matchAll(/href=["'](\/[^"'#?]*|https?:\/\/[^"'#?]+)["']/gi)].map((m) => m[1]).map((l) => (l.startsWith("/") ? `https://${host}${l}` : l)).filter((l) => sameHost(l, host) && !/\.(png|jpg|svg|css|js|pdf|zip|mp4)$/i.test(l)))].slice(0, MAX_LINKS);
+  const resolveLink = (l) => { try { return new URL(l, url).href.replace(/[#?].*$/, ""); } catch { return null; } };
+  const links = [...new Set([...html.matchAll(/href=["']([^"'#]+)["']/gi)].map((m) => m[1].trim()).filter((l) => l && !/^(mailto:|tel:|javascript:|data:)/i.test(l)).map(resolveLink).filter((l) => l && sameHost(l, host) && l !== url && l !== `${url}/` && !/\.(png|jpg|svg|css|js|pdf|zip|mp4|ico|webp)$/i.test(l)))].slice(0, MAX_LINKS);
   for (const l of links) { const r = await get(l, { method: "HEAD", timeout: 8000 }); if (r.status === 404 || r.status === 410) R.broken.push(l); }
   R.linksTried = links.length;
   return R;

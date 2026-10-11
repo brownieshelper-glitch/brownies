@@ -17,6 +17,8 @@ test("Markdown: headings, paragraphs, lists, bold, code, http links; HTML and od
     "<p>Text &amp; more.</p>",
   ].join("\n"));
   assert.equal(renderMarkdown(""), ""); assert.equal(renderMarkdown("just text"), "<p>just text</p>");
+  assert.equal(renderMarkdown("1. one\n\n2. two\n\n3. three\n\nAfter."), "<ol><li>one</li><li>two</li><li>three</li></ol>\n<p>After.</p>", "a list goes on across blank lines");
+  assert.equal(renderMarkdown("- a\n\n- b\n\n1. c"), "<ul><li>a</li><li>b</li></ul>\n<ol><li>c</li></ol>");
   assert.equal(escapeHtml('<a href="x">&'), "&lt;a href=&quot;x&quot;&gt;&amp;");
 });
 

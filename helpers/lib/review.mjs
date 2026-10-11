@@ -51,17 +51,17 @@ function inline(text) {
 export function renderMarkdown(md) {
   const lines = String(md ?? "").replace(/\r\n?/g, "\n").split("\n");
   const out = [];
-  let para = [], list = null; // list: { tag, items }
+  let para = [], list = null, gap = false; // list: { tag, items }; gap: a blank line since the last item (a list goes on across blank lines)
   const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(" "))}</p>`); para = []; } };
-  const flushList = () => { if (list) { out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join("")}</${list.tag}>`); list = null; } };
+  const flushList = () => { if (list) { out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join("")}</${list.tag}>`); list = null; } gap = false; };
   for (const raw of lines) {
     const line = raw.trimEnd();
     let m;
-    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (!line.trim()) { flushPara(); gap = true; continue; }
     if ((m = /^(#{1,3})\s+(.*)$/.exec(line))) { flushPara(); flushList(); const lvl = Math.max(2, m[1].length); out.push(`<h${lvl}>${inline(m[2].trim())}</h${lvl}>`); continue; } // the page's h1 is its title: "#" and "##" are both h2
-    if ((m = /^\s*[-*]\s+(.*)$/.exec(line))) { flushPara(); if (!list || list.tag !== "ul") { flushList(); list = { tag: "ul", items: [] }; } list.items.push(m[1]); continue; }
-    if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(line))) { flushPara(); if (!list || list.tag !== "ol") { flushList(); list = { tag: "ol", items: [] }; } list.items.push(m[1]); continue; }
-    if (list && /^\s{2,}\S/.test(raw)) { list.items[list.items.length - 1] += " " + line.trim(); continue; } // a wrapped list item
+    if ((m = /^\s*[-*]\s+(.*)$/.exec(line))) { flushPara(); if (!list || list.tag !== "ul") { flushList(); list = { tag: "ul", items: [] }; } list.items.push(m[1]); gap = false; continue; }
+    if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(line))) { flushPara(); if (!list || list.tag !== "ol") { flushList(); list = { tag: "ol", items: [] }; } list.items.push(m[1]); gap = false; continue; }
+    if (list && !gap && /^\s{2,}\S/.test(raw)) { list.items[list.items.length - 1] += " " + line.trim(); continue; } // a wrapped list item
     flushList(); para.push(line.trim());
   }
   flushPara(); flushList();
@@ -95,6 +95,7 @@ h3 { font-size: 19px; margin: 24px 0 6px; }
 p { margin: 0 0 14px; }
 ul, ol { padding-left: 24px; margin: 0 0 14px; }
 li { margin-bottom: 6px; }
+p, li, .foot { overflow-wrap: anywhere; }
 a { color: var(--ink); font-weight: 600; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 code { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 15px; background: var(--paper); border: 1.5px solid var(--line); border-radius: 6px; padding: 1px 6px; }
 .panel { margin: 20px 0 0; padding: 16px 18px; border: 3px solid var(--ink); border-radius: 18px; background: var(--paper); }

@@ -1,10 +1,9 @@
 /* The shop page: the live catalog from the API (prices as set on the server, open or closed), with the static
    list as the fallback when the API does not answer. */
 (async () => {
-  const B = window.Brownies;
   const $ = (id) => document.getElementById(id);
-  const S = await B.load();
-  const api = (S.gateway || "").replace(/\/$/, "");
+  const cfg = window.BROWNIES_CONFIG || {};
+  const api = String(cfg.gateway || "").replace(/\/$/, "");
   const state = $("shopState");
   if (!api) return;
   let c = null;

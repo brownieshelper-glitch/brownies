@@ -1,10 +1,9 @@
 /* The bounty board: the open bounties, the month's pool and who was paid, from the helpers' public route /bounties
    through the gateway's domain. Every word is printed as plain text. */
 (async () => {
-  const B = window.Brownies;
   const $ = (id) => document.getElementById(id);
-  const S = await B.load();
-  const API = String(S.gateway || "").replace(/\/$/, "");
+  const cfg = window.BROWNIES_CONFIG || {};
+  const API = String(cfg.gateway || "").replace(/\/$/, "");
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   if (!API) { $("empty").hidden = false; return; }
   let v = null;

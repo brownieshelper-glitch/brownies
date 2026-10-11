@@ -1,6 +1,7 @@
 // The shop: the brownies' work sold to other agents and to people, per request, paid in USDC over x402 (the
 // selling side is lib/x402seller.mjs). For sale: a research note, a meme with the brownies, a cartoon clip with
-// the brownies, and a review of an idea by a panel of models (Biscotti makes that one, through Toffee). The catalog is public at GET /shop; a buyer POSTs /shop/<item> with its words,
+// the brownies, a review of an idea by a panel of models and a brainstorm by the same panel (Biscotti makes those two,
+// through Toffee). The catalog is public at GET /shop; a buyer POSTs /shop/<item> with its words,
 // gets a 402 with the price, pays by signing, and gets the note at once or an order to poll for the picture or the
 // clip. Every payment lands in the owner's wallet directly; the brownies never hold it. A paid order that cannot
 // be made is told to the owner, who refunds by hand: nothing moves money without him. Toffee (a hidden brownie)
@@ -16,13 +17,14 @@ export const ITEMS = {
   meme: { title: "A meme with the brownies", what: "One picture of the four brownies acting out your idea, with a caption in their words. PNG, 1280 by 720.", usd: 0.5, mimeType: "image/png", minutes: 5, sync: false },
   clip: { title: "A cartoon clip with the brownies", what: "A vertical clip of 6 to 12 seconds, the four brownies acting your scene, captions burnt in. MP4, 720 by 1280.", usd: 9, mimeType: "video/mp4", minutes: 15, sync: false },
   idea: { title: "An idea review", what: "Your business or project idea, up to 4,000 characters, read by a panel of six AI models from different labs, each alone, then a web search for who already does it, then one page: the verdict with the score range, where the panel agrees, where it disagrees and why, the strongest objection, what to build first, what to drop, three questions, who else does this, the numbers, the next steps. HTML and Markdown.", usd: 50, mimeType: "text/html", minutes: 10, sync: false, maxChars: 4000, lines: true, judge: "idea" },
+  brainstorm: { title: "A brainstorm", what: "A topic, a market, a skill or a problem, with your limits, up to 2,000 characters. Six AI models from different labs each propose eight ideas, a web search finds what already exists, and one page gives you the ten best: what each is, who pays, which models proposed it, what is already out there, the first step; the three the panel liked most; two wild cards. HTML and Markdown.", usd: 30, mimeType: "text/html", minutes: 10, sync: false, maxChars: 2000, lines: true, judge: "idea" },
 };
 export const RULES = [
   "Say what you want in plain words, 10 to 600 characters.",
   "Nothing adult, hateful or violent; no real people; no price talk, no promises of returns, no links, no wallet or key asks.",
   "The brownies keep their look and their voice. What you buy is yours to use.",
   "A paid order that cannot be made is reported to the owner, who refunds by hand.",
-  "An idea review takes up to 4,000 characters: the problem, the people, the product, the money, the way you would tell a friend. It is a review, not advice and not an audit.",
+  "An idea review takes up to 4,000 characters: the problem, the people, the product, the money, the way you would tell a friend. A brainstorm takes a topic and your limits, up to 2,000. Both are the panel's opinion, not advice and not an audit.",
 ];
 /// Words that end a request before any money moves (the model judges the rest, in Toffee).
 export const BANNED = /\b(nsfw|nude|naked|sex|sexual|porn|erotic|kill|murder|blood|gore|terror|nazi|hitler|rape|seed phrases?|private keys?|connect (your )?wallets?|claim (your )?(airdrops?|rewards?|prizes?)|guaranteed|100x|1000x|to the moon)\b/i;

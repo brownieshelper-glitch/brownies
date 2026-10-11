@@ -131,7 +131,7 @@ export class Brain {
     if (spentNow >= capNow) await this.alerts?.budget(helper, `daily cap of ${(capNow / 1e6).toFixed(2)} USD reached`);
     else if (spentNow >= 0.8 * capNow) await this.alerts?.nearCap?.(helper, spentNow, capNow, now);
     if (this.mode === "live") this.balanceCache.delete(helper);
-    return { text: typeof text === "string" ? text : JSON.stringify(text), costMicro, model: body.model, usage };
+    return { text: typeof text === "string" ? text : JSON.stringify(text), costMicro, model: body.model, usage, cut: j?.choices?.[0]?.finish_reason === "length" }; // cut: the answer hit max_tokens and is not whole
   }
 
   /// A yes/no question to a model. Yes only when the first word of the answer is yes.

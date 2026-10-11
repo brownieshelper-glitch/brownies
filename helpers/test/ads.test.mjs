@@ -6,10 +6,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Store } from "../lib/store.mjs";
-import { playbookText, addLearned, learnedNotes, adProblems, rulesFor, section, KPI, LANES } from "../lib/ads/playbook.mjs";
+import { playbookText, addLearned, learnedNotes, adProblems, landingProblems, rulesFor, section, KPI, LANES } from "../lib/ads/playbook.mjs";
 import { cell, kpis, sum, money, pct } from "../lib/ads/metrics.mjs";
 import { judge, scaleBudget, pace } from "../lib/ads/decide.mjs";
-import { buildPlan, planText, utmLink } from "../lib/ads/plan.mjs";
+import { buildPlan, planText, utmLink, CONCEPTS } from "../lib/ads/plan.mjs";
 import { MetaAds, TikTokAds, XAds, missing } from "../lib/ads/connectors.mjs";
 import { oauth1Header } from "../lib/ads/oauth1.mjs";
 
@@ -32,6 +32,23 @@ test("the playbook: read whole, the learned notes appended, sections and rules b
   assert.deepEqual(adProblems("see https://feedthebrownies.com/shop.html?utm_source=meta&utm_medium=paid&utm_campaign=services"), []);
   assert.match(adProblems("café")[0], /plain ASCII/);
   assert.deepEqual(Object.keys(LANES), ["stories", "services"]); assert.equal(KPI.scaleStepPct, 20);
+  // no reference to crypto at all (the owner, 2026-10-11): the crypto words themselves, and the names in capitals
+  assert.match(adProblems("the first crypto cartoon")[0], /"crypto"/); assert.match(adProblems("our token is live")[0], /"token"/);
+  assert.match(adProblems("pay in USDC on Base")[0], /"USDC"/); assert.match(adProblems("built on Ethereum")[0], /"Ethereum"/); assert.match(adProblems("a 2% tax to holders")[0], /"tax"/);
+  assert.match(adProblems("one SUGAR, one dollar of AI")[0], /"SUGAR"/); assert.match(adProblems("BROWNIE is here")[0], /"BROWNIE"/);
+  assert.deepEqual(adProblems("a sugar cube falls in the jar; four brownies cheer"), [], "the cartoon's sugar and brownies are fine");
+  assert.deepEqual(adProblems("Nine dollars, fifteen minutes, your idea as a cartoon. Order one."), []);
+  // every concept, hook and lane description of the plan passes its own list
+  for (const lane of Object.keys(CONCEPTS)) {
+    assert.deepEqual(adProblems(LANES[lane].what), [], `${lane} what`); assert.deepEqual(adProblems(LANES[lane].ask), [], `${lane} ask`);
+    for (const c of CONCEPTS[lane]) { assert.deepEqual(adProblems(c.concept), [], `${c.id} concept`); for (const h of c.hooks) assert.deepEqual(adProblems(h), [], `${c.id} hook: ${h}`); }
+  }
+  // a landing page: the words anywhere on it, and those in the first screen
+  const page = "<html><head><title>The room</title><style>.x{color:red}</style><script>var tax = 1;</script></head><body><nav>Kitchen Room Docs</nav><h1>The room</h1><p>Four brownies at work. Click a jar for a sugar cube.</p>" + "<p>filler line</p>".repeat(120) + "<ul><li>2% tax on every buy and every sell</li><li>35% to stakers, paid as SUGAR</li></ul><footer><a>Contracts</a></footer></body></html>";
+  const lp = landingProblems(page);
+  assert.deepEqual([...lp.words].sort(), ["SUGAR", "buy", "contracts", "stakers", "tax"]); assert.deepEqual(lp.firstScreen, [], "the first screen is clean, the rest is not");
+  assert.deepEqual(landingProblems("<h1>Four brownies, one kitchen.</h1><p>Watch them work.</p>").words, []);
+  assert.deepEqual(landingProblems(page, { firstScreen: 100_000 }).firstScreen.length, 5);
 });
 
 test("the KPIs: rates and costs out of the counts, null where there is nothing to divide by, totals", () => {
@@ -88,7 +105,8 @@ test("a plan: the weekly budget split with the floors, a platform too small left
   assert.equal(buildPlan({ lane: "stories", platforms: ["tiktok"], weeklyUsd: 70 }).platforms.length, 0, "too small for anything: an empty plan with the note");
   const t = buildPlan({ lane: "stories", platforms: ["meta", "tiktok", "x"], weeklyUsd: 700 });
   assert.deepEqual(t.platforms, ["meta", "x"], "100 a day over three is 33 each: TikTok's 50 floor drops it first");
-  assert.equal(small.rules.targetUsd, 15); assert.equal(small.creatives[0].id, "clip-demo"); assert.match(small.creatives[0].landing, /\/shop\.html$/);
+  assert.equal(small.rules.targetUsd, 15); assert.equal(small.creatives[0].id, "socials-alone", "the services lane opens with the agents running their socials alone"); assert.match(small.creatives[0].landing, /\/shop\.html$/);
+  assert.equal(p.checks[1], "the landing page passes /butterscotch landing: no coin word anywhere on it");
   assert.throws(() => buildPlan({ lane: "coin", weeklyUsd: 100 }), /no lane called "coin"/);
   assert.throws(() => buildPlan({ lane: "stories", weeklyUsd: 0 }), /weekly budget/);
   const text = planText(p);

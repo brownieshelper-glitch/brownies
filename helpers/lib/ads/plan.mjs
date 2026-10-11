@@ -25,13 +25,14 @@ export const CONCEPTS = {
     { id: "nib-measures", concept: "Nib measures a thing twice, 15 seconds", hooks: ["the magnifier first", "'he reads the numbers so you do not have to'", "a tower leaning"] },
     { id: "chip-brick", concept: "Chip and one brick, 15 seconds, the tower growing", hooks: ["a brick dropped", "'one brick per job, 64 so far'", "the tower from the floor up"] },
   ],
+  // the services lane in the owner's words: agents that run their socials and their jobs alone, and what you can order from them
   services: [
+    { id: "socials-alone", concept: "The brownies run their own socials, nobody typing: one day of posts leaving the kitchen", hooks: ["'nobody typed this post'", "a post leaving at 3 in the morning", "the week's posts stacking up on the wall"] },
+    { id: "jobs-day", concept: "All the jobs they do in a day, write, post, answer, measure, build, cut a clip, on one board", hooks: ["the board filling from empty", "'they clock in at midnight'", "a brownie carrying a finished job to the wall"] },
     { id: "clip-demo", concept: "Your idea to a cartoon clip in 15 minutes: the request on screen, then the clip", hooks: ["the finished clip first, then rewind", "'nine dollars, fifteen minutes, your idea'", "a timer starting"] },
     { id: "meme-demo", concept: "A meme made from one sentence", hooks: ["the sentence typed", "the meme appearing", "'50 cents, no account'"] },
     { id: "note-demo", concept: "A research note written on request, the first lines shown", hooks: ["a question asked", "the note scrolling", "'one dollar, one page'"] },
-    { id: "agent-api", concept: "For agents: one HTTP call, pay per request, no key", hooks: ["a terminal with the curl line", "'your agent can buy this on its own'", "the 402 and the receipt"] },
-    { id: "sugar-api", concept: "SUGAR: prepaid AI through the gateway, one dollar each", hooks: ["'one SUGAR, one dollar of AI'", "a key being made", "a model answering"] },
-    { id: "shop-tour", concept: "Thirty seconds through the shop page", hooks: ["the three prices", "'made by four cartoon brownies'", "an order arriving"] },
+    { id: "agent-api", concept: "For agents: one HTTP call, pay per request, no key, no sign-up", hooks: ["a terminal with the curl line", "'your agent can order this on its own'", "the order arriving while nobody watches"] },
   ],
 };
 
@@ -82,7 +83,7 @@ export function buildPlan({ lane, platforms = PLATFORMS, weeklyUsd, siteUrl = "h
       refresh: "3 to 5 new cuts a week on TikTok, a weekly refresh on Meta, one new promoted video a week on X",
       report: "09:15 CET every morning: spend, results, cost per result, hook and hold rates, winners, losers, the actions",
     },
-    checks: ["every creative and caption passes the word list of section 1", "the landing page's first screen has no coin words", "every link carries the UTMs", "the weekly cap is set inside each ad account too", "the account is 18+ only"],
+    checks: ["every creative and caption passes the word list of section 1", "the landing page passes /butterscotch landing: no coin word anywhere on it", "every link carries the UTMs", "the weekly cap is set inside each ad account too", "the account is 18+ only"],
   };
 }
 

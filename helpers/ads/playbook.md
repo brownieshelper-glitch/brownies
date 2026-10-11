@@ -2,7 +2,10 @@
 
 Written 2026-10-11 from the platform policies and the practitioner literature read that day (the sources are
 listed at the end), and from the owner's own direction: we advertise an AI agent studio with a cartoon, not a
-coin. Butterscotch reads this before every plan, every morning decision and every report, and adds to the
+coin. The owner confirmed it the same day in his words: "we avoid all type of ads related to saying brownies is
+a token or a crypto project, we stay away from all that crap, no reference to be crypto related"; both lanes go;
+the services lane is "agents able to manage alone socials and all the jobs they do, and services available
+through us". Butterscotch reads this before every plan, every morning decision and every report, and adds to the
 "Learned" section at the end after each weekly study. Numbers in here are starting points; the account's own
 history replaces them once there is one.
 
@@ -12,18 +15,33 @@ Two lanes, each its own campaign with its own landing page and its own creatives
 
 - **Lane A, the stories.** The cartoon series: the four brownies at work, the daily episodes, the kitchen cam, the
   Room. Entertainment. The ask is to watch, follow, subscribe, join the Telegram group. Landing pages: the YouTube
-  channel, the TikTok profile, feedthebrownies.com/room.html. Nothing on these pages above the fold mentions a
-  coin, a price, staking or returns.
-- **Lane B, the services.** What the brownies make for people and for other agents: a cartoon clip of the four of
-  them about your idea, a meme, a research note, bought per request in the shop; and SUGAR as prepaid access to
-  AI through the gateway. Software and creative services. The ask is to buy one clip or try the API. Landing page:
-  feedthebrownies.com/shop.html, later a page for the API.
+  channel, the TikTok profile, and a page of our own (see "The landing pages" below).
+- **Lane B, the services.** Four AI agents that run their own socials and do all their jobs alone, all day (the
+  posts going out with nobody typing, the board of the day's jobs filling), and the services available through
+  them: a cartoon clip of the four brownies about your idea, a meme, a research note, bought per request; an API
+  an agent can call on its own. Software and creative services. The ask is to order one clip or try the API.
+  Landing page: a page of our own about the agents at work and what they make, whose order button leads to the
+  shop. Note: the shop takes USDC only today, so a person coming from an ad cannot order with a card; until a
+  card checkout exists (a new money flow, the owner's call) lane B sells the API to agents and shows the work to
+  people, whose ask is to watch and follow.
 
-Never in an ad, a headline, a caption, a thumbnail or a landing page reached from an ad: the coin's ticker or
-address, "buy", "stake", "earn", "yield", "returns", "price", "pump", "moon", "airdrop", "presale", "launch",
-charts, wallets, "not financial advice". Not because the coin is a secret (the site's Docs say everything) but
-because a paid ad that promotes a token is prohibited on every platform we use, and a page that reads like a
-token sale gets the account flagged. The ad reviewers judge the landing page too.
+Never in an ad, a headline, a caption, a thumbnail or ANYWHERE on a landing page reached from an ad: the coin's
+ticker or address, the names BROWNIE and SUGAR in capitals, "buy", "stake", "earn", "yield", "returns", "price",
+"pump", "moon", "airdrop", "presale", "launch", charts, wallets, "not financial advice", and every word that says
+crypto at all: crypto, token, coin, memecoin, blockchain, on-chain, Ethereum, ETH, web3, DeFi, NFT, USDC,
+stablecoin, holders, tax, trading, liquidity, swap, mint, contracts, x402. The full list is AD_BANNED in
+lib/ads/playbook.mjs; /butterscotch check <text> applies it to a line, /butterscotch landing to the lanes'
+landing pages. Not because the coin is a secret (the site's Docs say everything) but because the owner wants no
+reference, a paid ad that promotes a token is prohibited on every platform we use, and a page that reads like a
+token sale gets the account flagged. The ad reviewers judge the landing page too, the whole of it.
+
+**The landing pages, checked live on 2026-10-11.** room.html carries contracts, tax, buy, stakers and SUGAR (the
+SUGAR tip button in the first screen); shop.html carries USDC, x402, buy, price, Ethereum, returns, wallet,
+contracts and SUGAR (three of them in the first screen). Neither may receive an ad. Each lane gets a page of its
+own, with a trimmed header and footer (no Docs, Bakery or Contracts links), nothing from the list anywhere on it,
+and the visits beacon: lane A a watch page (the newest episodes, the kitchen cam, the follow buttons), lane B a
+page about the agents at work and what they make. Until those exist, /butterscotch landing says NOT clean and no
+plan passes its checks.
 
 Why this is the right strategy and not only the compliant one: the people who would like the brownies are
 people who like cartoons and people who need cheap creative work, and both groups are far larger than crypto
@@ -58,9 +76,11 @@ question, and Butterscotch does not plan it.
 - **Sources of creative.** The episodes Sprinkle already makes (cut to 15 to 30 seconds with a new opening), the
   kitchen cam (a real moment, captioned), the memes, the shop's samples (lane B: "we made this in 15 minutes
   for 9 dollars"). TikTok: our best organic posts as Spark Ads, which keep the likes and comments.
-- **Lane B specifics.** Show the product being made and the result side by side; say the price plainly; one
-  concrete use ("a clip for your launch day", "a meme for your group"); an agent-facing variant that reads like
-  documentation ("one HTTP call, pay per request, no key").
+- **Lane B specifics.** Open on the agents at work with nobody at the keyboard (a post leaving the kitchen at 3 in
+  the morning, the board of the day's jobs filling, a brownie carrying a finished job to the wall); then the thing
+  they make and the result side by side; say the number plainly ("nine dollars, fifteen minutes"); one concrete use
+  ("a clip for your product's first day", "a meme for your group"); an agent-facing variant that reads like
+  documentation ("one HTTP call, pay per request, no key, no sign-up"). Never the word for how it is paid.
 - **What every creative passes before it is uploaded.** No coin words (the list in section 1), no claims of
   gains, nothing adult or violent, no other brand's logo, music that is ours (the engine's) or the platform's
   commercial library, captions in plain ASCII, the brownies' look unchanged.
@@ -134,11 +154,12 @@ that would alter a rule above is proposed to the owner, not applied.
 
 ## 9. Before the first dollar
 
-What has to exist, in order: the ad accounts (Meta Ads with a Page and the Instagram account, TikTok Ads
-Manager under a Business Center, X Ads on the brownies' handle) with a card attached and a weekly cap set in
-each; the API access for each (section 2); the landing pages checked against section 1; the UTM convention and
-the first-party visits route live; at least six creatives per lane cut and checked; the kill rules and the cap
-written in the plan the owner approved.
+What has to exist, in order: the two landing pages of our own, clean by /butterscotch landing (section 1); the
+ad accounts (Meta Ads with a Page and the Instagram account, TikTok Ads Manager under a Business Center, X Ads
+on the brownies' handle) with a card attached and a weekly cap set in each; the API access for each (section 2);
+the UTM convention and the first-party visits route live (they are); at least six creatives per lane cut by
+Sprinkle with the site's own engine and checked against the list; the kill rules and the cap written in the plan
+the owner approved.
 
 ## Sources read on 2026-10-11
 

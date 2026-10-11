@@ -14,8 +14,8 @@ ENV_LOCAL="$S/brownies-ember.env"
 [ -f "$ENV_LOCAL" ] || { echo "no env file at $ENV_LOCAL"; exit 1; }
 HOSTIP=$(grep -E '^EMBER_HOST=' "$ENV_LOCAL" | head -1 | cut -d= -f2- | tr -d '[:space:]')
 [ -n "$HOSTIP" ] || { echo "EMBER_HOST is not set in $ENV_LOCAL (the server's IP)"; exit 1; }
-SSH="ssh -i $HOME/.ssh/brownies_key -o BatchMode=yes -o ConnectTimeout=15 root@$HOSTIP"
-SCP="scp -q -i $HOME/.ssh/brownies_key -o BatchMode=yes"
+SSH="ssh -i $HOME/.ssh/brownies_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 root@$HOSTIP"
+SCP="scp -q -i $HOME/.ssh/brownies_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 case "${1:-deploy}" in
   start) $SSH "systemctl start ember-browser ember-stream && sleep 12 && systemctl is-active ember-browser ember-stream && journalctl -u ember-stream --no-pager -n 3 -o cat"; echo "== started";;
   stop) $SSH "systemctl stop ember-stream ember-browser; systemctl is-active ember-stream || true"; echo "== stopped";;

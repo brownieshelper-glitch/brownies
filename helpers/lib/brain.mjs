@@ -99,7 +99,8 @@ export class Brain {
 
   /// One chat completion. Returns { text, costMicro, model, usage }. Throws BudgetError when the helper cannot pay.
   /// `job` is the name of the job this thought belongs to (the ledger line carries it; lib/costs.mjs groups by it).
-  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning, plugins = null, job = null } = {}) {
+  /// `model` asks another model than the brownie's own for this one thought (a panel of reviewers); the cost is the brownie's all the same.
+  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning, plugins = null, job = null, model = null } = {}) {
     await this.budgetOrThrow(helper);
     const started = this.clock.now();
     // the effort: the call's own, else the brownie's config (a thinker like Chip gets medium with more headroom), else low
@@ -113,7 +114,7 @@ export class Brain {
     // Claude 5 models think before they answer and that thinking is counted inside max_tokens. OpenRouter refuses
     // to switch it off, but "effort: low" leaves it at zero tokens on these jobs (measured), so that is the default;
     // a call may ask for more. The headroom stays as a belt to the braces.
-    const body = { model: this.model(helper), messages: list, max_tokens: maxTokens + headroom, temperature, usage: { include: true } };
+    const body = { model: model || this.model(helper), messages: list, max_tokens: maxTokens + headroom, temperature, usage: { include: true } };
     if (reasoning) body.reasoning = reasoning;
     if (Array.isArray(plugins) && plugins.length) body.plugins = plugins; // OpenRouter plugins, e.g. [{ id: "web" }] for a web search before the answer
     const j = this.mode === "live" ? await this._viaGateway(helper, body) : await this._viaOpenRouter(helper, body);

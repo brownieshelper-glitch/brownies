@@ -712,7 +712,7 @@ section.band.posts-band { border-top: var(--bw) solid var(--line); padding-top: 
 .shop-page { padding-bottom: 88px; }
 .shop-state { margin: 0 0 18px; font-family: var(--mono); font-size: 14px; color: var(--muted-b); }
 .shop-state.open { color: var(--ink); }
-.shop-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.shop-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .shop-item { padding: 22px; border: var(--bw) solid var(--ink); border-radius: var(--r); background: var(--paper); display: flex; flex-direction: column; gap: 10px; }
 .shop-item h2 { font-size: 24px; margin: 0; }
 .shop-item p { margin: 0; color: var(--muted-b); line-height: 1.5; }

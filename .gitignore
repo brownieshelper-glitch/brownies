@@ -79,3 +79,5 @@ eth-launch/bundle/
 web/deployments/*.test-*.json
 helpers/test/milestone.test.mjs
 helpers/test/setup-hidden.test.mjs
+helpers/helpers/biscotti.mjs
+helpers/test/biscotti.test.mjs

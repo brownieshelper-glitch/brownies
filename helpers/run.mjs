@@ -156,6 +156,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const seller = new Seller({ chainId: S.shop.chainId, payTo: S.shop.payTo, settlerKey: S.shop.settlerKey, rpcUrl: S.shop.rpcUrl, log });
   W.shop = new Shop({ store, clock, log, seller, config: config.shop || {}, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, dir: `${videosDir}/shop`, telegram, ownerChatId: S.telegram.ownerChatId, maker: all.toffee || null });
   if (all.toffee) { all.toffee.shop = W.shop; all.toffee.team = all; }
+  if (all.biscotti) { all.biscotti.shop = W.shop; all.biscotti.team = all; } // the idea reviews: Toffee hands the orders over, the shop keeps the pages
   // bounties, hackathons and audit contests (helpers/contests.mjs, hidden with Zest): Chip prepares the entries, the owner approves
   const contestsFile = new URL("./helpers/contests.mjs", import.meta.url);
   if (existsSync(contestsFile)) { const { Contests } = await import(contestsFile); chip.contests = new Contests({ chip, github, store, clock, telegram, ownerChatId: S.telegram.ownerChatId, log, siteUrl: S.siteUrl }); }

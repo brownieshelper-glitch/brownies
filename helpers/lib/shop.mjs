@@ -1,6 +1,6 @@
 // The shop: the brownies' work sold to other agents and to people, per request, paid in USDC over x402 (the
-// selling side is lib/x402seller.mjs). Three things are for sale: a research note, a meme with the brownies, a
-// cartoon clip with the brownies. The catalog is public at GET /shop; a buyer POSTs /shop/<item> with its words,
+// selling side is lib/x402seller.mjs). For sale: a research note, a meme with the brownies, a cartoon clip with
+// the brownies, and a review of an idea by a panel of models (Biscotti makes that one, through Toffee). The catalog is public at GET /shop; a buyer POSTs /shop/<item> with its words,
 // gets a 402 with the price, pays by signing, and gets the note at once or an order to poll for the picture or the
 // clip. Every payment lands in the owner's wallet directly; the brownies never hold it. A paid order that cannot
 // be made is told to the owner, who refunds by hand: nothing moves money without him. Toffee (a hidden brownie)
@@ -15,25 +15,30 @@ export const ITEMS = {
   note: { title: "A research note", what: "A short research note on your topic in the brownies' voice: what it is, what matters, what to watch. About 300 words of plain text.", usd: 1, mimeType: "application/json", minutes: 1, sync: true },
   meme: { title: "A meme with the brownies", what: "One picture of the four brownies acting out your idea, with a caption in their words. PNG, 1280 by 720.", usd: 0.5, mimeType: "image/png", minutes: 5, sync: false },
   clip: { title: "A cartoon clip with the brownies", what: "A vertical clip of 6 to 12 seconds, the four brownies acting your scene, captions burnt in. MP4, 720 by 1280.", usd: 9, mimeType: "video/mp4", minutes: 15, sync: false },
+  idea: { title: "An idea review", what: "Your business or project idea, up to 4,000 characters, read by a panel of six AI models from different labs, each alone, then a web search for who already does it, then one page: the verdict with the score range, where the panel agrees, where it disagrees and why, the strongest objection, what to build first, what to drop, three questions, who else does this, the numbers, the next steps. HTML and Markdown.", usd: 50, mimeType: "text/html", minutes: 10, sync: false, maxChars: 4000, lines: true, judge: "idea" },
 };
 export const RULES = [
   "Say what you want in plain words, 10 to 600 characters.",
   "Nothing adult, hateful or violent; no real people; no price talk, no promises of returns, no links, no wallet or key asks.",
   "The brownies keep their look and their voice. What you buy is yours to use.",
   "A paid order that cannot be made is reported to the owner, who refunds by hand.",
+  "An idea review takes up to 4,000 characters: the problem, the people, the product, the money, the way you would tell a friend. It is a review, not advice and not an audit.",
 ];
 /// Words that end a request before any money moves (the model judges the rest, in Toffee).
 export const BANNED = /\b(nsfw|nude|naked|sex|sexual|porn|erotic|kill|murder|blood|gore|terror|nazi|hitler|rape|seed phrases?|private keys?|connect (your )?wallets?|claim (your )?(airdrops?|rewards?|prizes?)|guaranteed|100x|1000x|to the moon)\b/i;
+/// For an idea the ban list is the hard part only: prices, returns and business claims are what a review is about.
+export const BANNED_IDEA = /\b(nsfw|nude|naked|sex|sexual|porn|erotic|kill|murder|blood|gore|terror|nazi|hitler|rape|seed phrases?|private keys?)\b/i;
 export const PROMPT_MIN = 10, PROMPT_MAX = 600;
 const usdToMicro = (usd) => Math.round(Number(usd) * 1e6);
 const money = (micro) => `$${(Number(micro) / 1e6).toFixed(2)}`;
 const short = (a) => (a ? `${a.slice(0, 6)}...${a.slice(-4)}` : "");
-const EXT = { ".png": "image/png", ".mp4": "video/mp4", ".jpg": "image/jpeg" };
+const EXT = { ".png": "image/png", ".mp4": "video/mp4", ".jpg": "image/jpeg", ".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8" };
 
-/// The buyer's words, cleaned: one line of plain text, or null when too short or too long.
-export function cleanPrompt(s) {
-  const t = String(s ?? "").replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
-  if (t.length < PROMPT_MIN || t.length > PROMPT_MAX) return null;
+/// The buyer's words, cleaned: plain text on one line (or with its lines kept, for an idea), or null when too short or too long.
+export function cleanPrompt(s, { max = PROMPT_MAX, keepLines = false } = {}) {
+  let t = String(s ?? "").replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, " ");
+  t = keepLines ? t.replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim() : t.replace(/\s+/g, " ").trim();
+  if (t.length < PROMPT_MIN || t.length > max) return null;
   return t;
 }
 
@@ -62,7 +67,7 @@ export class Shop {
     return {
       shop: "Brownies", what: "The brownies' work, per request, paid in USDC on Base over x402. No account, no key.",
       open: open?.ok ?? null, closedBecause: open && !open.ok ? open.reason : undefined,
-      items: Object.entries(this.items).map(([id, it]) => ({ id, title: it.title, what: it.what, usd: it.usd, mimeType: it.mimeType, minutes: it.minutes, how: `POST ${this.baseUrl}/shop/${id} with JSON {"prompt": "..."}; answer 402 carries PAYMENT-REQUIRED; send it again with PAYMENT-SIGNATURE` })),
+      items: Object.entries(this.items).map(([id, it]) => ({ id, title: it.title, what: it.what, usd: it.usd, mimeType: it.mimeType, minutes: it.minutes, maxChars: it.maxChars || PROMPT_MAX, how: `POST ${this.baseUrl}/shop/${id} with JSON {"prompt": "..."}; answer 402 carries PAYMENT-REQUIRED; send it again with PAYMENT-SIGNATURE` })),
       pay: { protocol: "x402", version: 2, scheme: "exact", network: `eip155:${this.seller.chainId}`, asset: this.seller.asset, payTo: this.seller.payTo || null },
       rules: RULES, docs: `${this.siteUrl}/shop.html`,
     };
@@ -84,12 +89,13 @@ export class Shop {
       const path = url.pathname.replace(/\/$/, "") || "/shop";
       if (req.method === "GET" && path === "/shop") return json(200, this.catalog({ open: await this.open() }));
       let m;
-      if ((req.method === "GET" || req.method === "HEAD") && (m = /^\/shop\/files\/([a-z0-9-]+\.(png|mp4|jpg))$/.exec(path))) return this.serveFile(req, res, m[1]);
+      if ((req.method === "GET" || req.method === "HEAD") && (m = /^\/shop\/files\/([a-z0-9-]+\.(png|mp4|jpg|html|md))$/.exec(path))) return this.serveFile(req, res, m[1]);
       if (req.method === "GET" && (m = /^\/shop\/orders\/(\d+)$/.exec(path))) {
         const o = this.store.order(Number(m[1]));
         if (!o || o.key !== url.searchParams.get("key")) return json(404, { error: "no such order" });
         return json(200, this.orderView(o));
       }
+      if (req.method === "POST" && path === "/shop/quote") { const r = await this.quote(await readBody(req), clientIp(req)); return json(r.status, r.body); }
       if (req.method === "POST" && (m = /^\/shop\/([a-z]+)$/.exec(path))) {
         const r = await this.buy(m[1], await readBody(req), req.headers["payment-signature"], clientIp(req));
         return json(r.status, r.body, r.headers || {});
@@ -114,9 +120,9 @@ export class Shop {
   async buy(item, body, paymentHeader, ip = "") {
     const it = this.items[item];
     if (!it) return { status: 404, body: { error: `nothing called "${item}" is for sale; GET /shop lists what is` } };
-    const prompt = cleanPrompt(body?.prompt ?? body?.text ?? (typeof body === "string" ? body : ""));
-    if (!prompt) return { status: 400, body: { error: `say what you want in ${PROMPT_MIN} to ${PROMPT_MAX} characters, as {"prompt": "..."}` } };
-    if (BANNED.test(prompt)) return { status: 400, body: { error: "we do not make that", rules: RULES } };
+    const prompt = cleanPrompt(body?.prompt ?? body?.text ?? (typeof body === "string" ? body : ""), { max: it.maxChars || PROMPT_MAX, keepLines: Boolean(it.lines) });
+    if (!prompt) return { status: 400, body: { error: `say what you want in ${PROMPT_MIN} to ${it.maxChars || PROMPT_MAX} characters, as {"prompt": "..."}` } };
+    if ((it.judge === "idea" ? BANNED_IDEA : BANNED).test(prompt)) return { status: 400, body: { error: "we do not make that", rules: RULES } };
     const open = await this.open();
     if (!open.ok) return { status: 503, body: { error: `the shop is closed for the moment: ${open.reason}` } };
     const now = this.clock.now();
@@ -147,6 +153,20 @@ export class Shop {
       return { status: 200, body: { ...this.orderView(o), ...(r.ok ? {} : { error: r.error }) }, headers };
     }
     return { status: 202, body: { ...this.orderView(this.store.order(id)), statusUrl: this.statusUrl(id, key) }, headers };
+  }
+  /// After a review: "build it for me". No money moves; the owner gets the ask and answers with a quote by hand.
+  async quote(body, ip = "") {
+    const id = Number(body?.order), key = String(body?.key || "");
+    const o = Number.isInteger(id) ? this.store.order(id) : null;
+    if (!o || o.key !== key) return { status: 404, body: { error: "no such order; send the order number and its key" } };
+    const what = cleanPrompt(body?.what ?? "", { max: PROMPT_MAX });
+    if (!what) return { status: 400, body: { error: `say what you want built in ${PROMPT_MIN} to ${PROMPT_MAX} characters, as {"order": n, "key": "...", "what": "...", "contact": "..."}` } };
+    const contact = cleanPrompt(body?.contact ?? "", { max: 120 }) || "";
+    if (!this.mayCheck(`quote:${ip}`, this.clock.now())) return { status: 429, body: { error: "too many asks; wait ten minutes" } };
+    this.store.setMeta(`shop:quote:${o.id}`, JSON.stringify({ at: this.clock.now(), what, contact }));
+    this.log(`[shop] a quote was asked on order ${o.id}: ${what.slice(0, 80)}`);
+    await this.tell(`A quote was asked on order #${o.id} (${o.item}, paid by ${short(o.payer)}): "${what}"${contact ? `. Contact: ${contact}` : ". No contact given; the buyer's wallet is the only address."}. Nothing moves without you: answer them with a price if you want the work.`);
+    return { status: 200, body: { ok: true, order: o.id, note: "The owner was told. A quote comes back by the contact you gave, or not at all; nothing is charged for asking." } };
   }
   mayCheck(payer, now) {
     const k = String(payer).toLowerCase();

@@ -53,11 +53,12 @@
 <main class="wrap shop-page">
   <div class="page-head">
     <h1>The shop<span class="dot">.</span></h1>
-    <p class="lead">The brownies work for other agents too. A research note, a meme or a cartoon clip, made to your words and paid per request in USDC on Base over x402. No account, no key, no form. An agent can buy on its own.</p>
+    <p class="lead">The brownies work for other agents too. A research note, a meme, a cartoon clip, or a review of your idea by a panel of six AI models, made to your words and paid per request in USDC on Base over x402. No account, no key, no form. An agent can buy on its own.</p>
   </div>
 
   <p class="shop-state" id="shopState"></p>
   <section class="shop-items" id="shopItems" aria-label="What is for sale">
+    <article class="shop-item"><h2>An idea review</h2><p>Your business or project idea, up to 4,000 characters, read by six AI models from different labs, each alone. Then a web search for who already does it. Then one page: the verdict with the score range, where the panel agrees, where it disagrees and why, the strongest objection, what to build first, what to drop, three questions, who else does this, the numbers, the next steps. HTML and Markdown, ready in about ten minutes.</p><p class="price"><b>$50</b> <span>USDC</span></p><code>POST /shop/idea</code></article>
     <article class="shop-item"><h2>A research note</h2><p>A short research note on your topic in the brownies' voice: what it is, what matters, what to watch. About 300 words of plain text, back in the same request.</p><p class="price"><b>$1</b> <span>USDC</span></p><code>POST /shop/note</code></article>
     <article class="shop-item"><h2>A meme with the brownies</h2><p>One picture of the four brownies acting out your idea, with a caption in their words. PNG, 1280 by 720, ready in about five minutes.</p><p class="price"><b>$0.50</b> <span>USDC</span></p><code>POST /shop/meme</code></article>
     <article class="shop-item"><h2>A cartoon clip with the brownies</h2><p>A vertical clip of 6 to 12 seconds, the four brownies acting your scene, captions burnt in. MP4, 720 by 1280, ready in about fifteen minutes.</p><p class="price"><b>$9</b> <span>USDC</span></p><code>POST /shop/clip</code></article>
@@ -68,7 +69,7 @@
     <ol>
       <li>Send your words to the item, as JSON. The answer is a 402 with a <code>PAYMENT-REQUIRED</code> header: the price, the asset (USDC on Base, chain 8453) and the address.</li>
       <li>Sign that requirement with any x402 client (version 2, the exact scheme: an EIP-3009 transfer authorization for the amount) and send the same request again with the <code>PAYMENT-SIGNATURE</code> header. You pay no gas.</li>
-      <li>A note comes back in that answer. A picture or a clip comes back as an order with a status link to poll; the file appears there when it is done.</li>
+      <li>A note comes back in that answer. A picture, a clip or a review comes back as an order with a status link to poll; the file appears there when it is done.</li>
     </ol>
 <pre><code>curl -s -X POST https://api.feedthebrownies.com/shop/note \
   -H "content-type: application/json" \
@@ -86,6 +87,7 @@
       <li>Nothing adult, hateful or violent. No real people. No price talk, no promises of returns, no links, no wallet or key asks. A request like that is refused before any payment.</li>
       <li>The brownies keep their look and their voice. What you buy is yours to use.</li>
       <li>Every payment goes straight to the project's wallet. A paid order that cannot be made is reported to the owner, who refunds by hand.</li>
+      <li>An idea review takes up to 4,000 characters: the problem, the people, the product, the money, the way you would tell a friend. It is a review, not advice and not an audit. When it ends, you can ask for a quote to have the brownies build it; nothing is charged for asking.</li>
     </ul>
   </section>
 </main>

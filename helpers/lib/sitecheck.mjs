@@ -26,6 +26,17 @@ export const lookupTxt = async (host) => (await dns.promises.resolveTxt(host)).m
 export const MAX_LINKS = 30; // internal links tried for a 404
 export const EXPOSED = ["/.env", "/.git/config", "/.git/HEAD", "/.DS_Store", "/wp-config.php.bak", "/backup.zip", "/backup.sql", "/config.json", "/.htpasswd", "/phpinfo.php", "/server-status", "/.svn/entries", "/composer.json", "/package.json"];
 export const HEADERS = ["strict-transport-security", "content-security-policy", "x-content-type-options", "x-frame-options", "referrer-policy", "permissions-policy"];
+export const USER_AGENT = "Mozilla/5.0 (compatible; BrowniesSiteCheck/1.0; +https://feedthebrownies.com/shop.html)";
+export const PAUSE_MS = 300; // between requests: a check, not a flood
+
+/// A firewall's challenge page instead of the site: who, or null. Vercel, Cloudflare, Akamai and the like.
+export function challenged(status, html = "", headers = {}) {
+  const t = String(html || "").slice(0, 20_000);
+  if (/Vercel Security Checkpoint|Attack Challenge Mode|_vercel_jwt|vercel-challenge/i.test(t) || String(headers["x-vercel-mitigated"] || "").toLowerCase() === "challenge") return "Vercel";
+  if (/<title>Just a moment\.\.\.|cf-chl|cf_chl_opt|cloudflare.*challenge/i.test(t) || headers["cf-mitigated"] === "challenge") return "Cloudflare";
+  if ((status === 403 || status === 503 || status === 429) && /challenge|checkpoint|captcha|verify you are human|access denied|bot detection|ddos/i.test(t)) return "the site's firewall";
+  return null;
+}
 
 /// "https://example.com, look at the checkout" -> { url, host, notes }. null when there is no https url.
 export function parseSiteRequest(text) {
@@ -46,9 +57,17 @@ export function proves(text, payer) {
   return Boolean(want && /^0x[0-9a-f]{40}$/.test(want) && String(text || "").toLowerCase().includes(want));
 }
 /// The buyer's wallet in the file or in the DNS record, else what to do. lookupTxt(host) -> [strings].
+/// A firewall that challenges the request is said as such: the proof cannot be read through a checkpoint.
 export async function ownership(host, payer, { fetch = globalThis.fetch, lookupTxt = null } = {}) {
   let file = null;
-  try { const r = await fetch(proofUrl(host), { redirect: "follow", signal: AbortSignal.timeout(10_000) }); if (r.ok) file = (await r.text()).slice(0, 4000); } catch { file = null; }
+  try {
+    const r = await fetch(proofUrl(host), { redirect: "follow", signal: AbortSignal.timeout(10_000), headers: { "user-agent": USER_AGENT, accept: "text/plain, text/html;q=0.9, */*;q=0.5" } });
+    const text = (await r.text()).slice(0, 20_000);
+    const hd = {}; try { for (const [k, v] of r.headers) hd[k.toLowerCase()] = v; } catch { /* a bare fake */ }
+    const by = challenged(r.status, text, hd);
+    if (by) return { ok: false, why: `${by} challenged our request to ${host} instead of serving the page, so nothing can be checked: allow the user agent "BrowniesSiteCheck" in the firewall, or pause the challenge mode, then buy again` };
+    if (r.ok) file = text.slice(0, 4000);
+  } catch { file = null; }
   if (file != null && proves(file, payer)) return { ok: true, how: "the file" };
   if (lookupTxt) {
     try { const recs = await lookupTxt(host); if (recs.some((t) => proves(t, payer))) return { ok: true, how: "the DNS record" }; } catch { /* no record */ }
@@ -64,9 +83,11 @@ const sameHost = (u, host) => { try { const x = new URL(u); return x.hostname ==
 export async function checkSite(url, { fetch = globalThis.fetch, tlsInfo = null, log = () => {} } = {}) {
   const host = new URL(url).hostname;
   const R = { url, host, at: Date.now(), home: null, http: null, tls: null, headers: {}, cookies: [], html: {}, exposed: [], listing: [], broken: [], robots: null, sitemap: null, securityTxt: null, notes: [] };
+  let first = true;
   const get = async (u, { method = "GET", redirect = "follow", max = MAX_HTML, timeout = 15_000 } = {}) => {
+    if (!first && PAUSE_MS) await new Promise((r) => setTimeout(r, PAUSE_MS)); first = false;
     try {
-      const r = await fetch(u, { method, redirect, signal: AbortSignal.timeout(timeout), headers: { "user-agent": "Mozilla/5.0 (compatible; BrowniesSiteCheck/1.0; +https://feedthebrownies.com/shop.html)" } });
+      const r = await fetch(u, { method, redirect, signal: AbortSignal.timeout(timeout), headers: { "user-agent": USER_AGENT, accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "accept-language": "en,it;q=0.8" } });
       const text = method === "GET" ? (await r.text()).slice(0, max) : "";
       const headers = {}; for (const [k, v] of r.headers) headers[k.toLowerCase()] = v;
       return { ok: r.ok, status: r.status, url: r.url || u, headers, text, setCookie: typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [] };
@@ -75,6 +96,8 @@ export async function checkSite(url, { fetch = globalThis.fetch, tlsInfo = null,
   // 1. the home page over https
   const home = await get(url);
   R.home = { status: home.status, finalUrl: home.url, bytes: home.text.length, error: home.error || null, contentType: home.headers["content-type"] || null };
+  R.challenged = challenged(home.status, home.text, home.headers);
+  if (R.challenged) { R.html = {}; R.notes.push(`${R.challenged} answered the home page request with a challenge instead of the site; nothing past it was looked at`); return R; } // the rest would only describe the checkpoint
   R.headers = Object.fromEntries(HEADERS.map((h) => [h, home.headers[h] || null]));
   R.server = { server: home.headers.server || null, poweredBy: home.headers["x-powered-by"] || null };
   R.cookies = home.setCookie.map((c) => { const name = c.split("=")[0].trim(); const l = c.toLowerCase(); return { name, secure: /;\s*secure/.test(l), httpOnly: /;\s*httponly/.test(l), sameSite: /;\s*samesite=/.test(l) }; });
@@ -125,6 +148,7 @@ export async function checkSite(url, { fetch = globalThis.fetch, tlsInfo = null,
 export function siteFindings(R) {
   const F = [];
   const add = (severity, title, where, what, why, failure_case, fix) => F.push({ title, severity, file: where, line: null, what, why_it_matters: why, failure_case, fix });
+  if (R.challenged) { add("medium", `${R.challenged} challenged the check instead of serving the site`, R.url, `The home page request got ${R.challenged}'s challenge page (status ${R.home?.status}), not the site, so nothing behind it was checked.`, "Any visitor or crawler the firewall does not trust sees the same wall: search engines, link previews, uptime checks.", `GET ${R.url} with the user agent BrowniesSiteCheck returns ${R.home?.status} and a challenge page.`, "Allow known good user agents in the firewall, or narrow the challenge to real attack patterns, then run the check again."); return F; }
   if (R.home?.error || !R.home || R.home.status === 0) add("critical", "The site did not answer over https", R.url, `The home page could not be fetched (${R.home?.error || "no answer"}).`, "Nobody can use a site that does not load.", `GET ${R.url} fails with ${R.home?.error || "no answer"}.`, "Check the server, the DNS and the certificate.");
   else if (R.home.status >= 400) add("high", `The home page answers ${R.home.status}`, R.url, `The home page returned status ${R.home.status}.`, "Visitors see an error.", `GET ${R.url} returns ${R.home.status}.`, "Fix the page or the server configuration.");
   for (const p of R.exposed || []) add(/\.env|\.git|htpasswd|\.sql|backup/.test(p) ? "critical" : "high", `${p} is readable by anyone`, `https://${R.host}${p}`, `The file ${p} answers with its contents.`, p === "/.env" ? "Secrets and keys in it are public." : p.startsWith("/.git") ? "The whole source history can be downloaded." : "Internal files leak.", `GET https://${R.host}${p} returns 200 with the file.`, "Block the path on the server, remove the file from the web root, rotate any secret it held.");
@@ -154,6 +178,7 @@ export function siteFindings(R) {
 /// The checks as a short table for the page: one line each, in Markdown.
 export function checksText(R) {
   const yes = (v) => (v ? "yes" : "NO");
+  if (R.challenged) return `- Home page: ${R.home?.status} from ${R.challenged}, a challenge page instead of the site. Nothing past it was looked at: allow the user agent BrowniesSiteCheck in the firewall, or pause the challenge mode, and run the check again.`;
   const lines = [
     `- Home page: ${R.home?.status || "no answer"}${R.home?.error ? ` (${R.home.error})` : ""}, ${Math.round((R.home?.bytes || 0) / 1024)} KB of HTML`,
     `- http redirects to https: ${yes(R.http?.toHttps)}`,

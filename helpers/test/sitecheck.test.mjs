@@ -2,7 +2,7 @@
 // the wallet that pays), the passive checks over a fake site, the findings they give by themselves, the table.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseSiteRequest, proofUrl, proofText, proves, ownership, checkSite, siteFindings, checksText, EXPOSED, HEADERS } from "../lib/sitecheck.mjs";
+import { parseSiteRequest, proofUrl, proofText, proves, ownership, checkSite, siteFindings, checksText, EXPOSED, HEADERS, challenged, USER_AGENT, PAUSE_MS } from "../lib/sitecheck.mjs";
 
 const PAYER = "0xAbCdEf1234567890aBcDeF1234567890AbCdEf12";
 
@@ -77,4 +77,23 @@ test("the checks over a fake site: the redirect, the headers, the cookies, the e
   assert.equal(dead.home.error, "ENOTFOUND"); assert.equal(siteFindings(dead)[0].title, "The site did not answer over https"); assert.equal(siteFindings(dead)[0].severity, "critical");
   assert.match(checksText(dead), /^- Home page: no answer \(ENOTFOUND\)/);
   assert.equal(EXPOSED.length, 14); assert.equal(HEADERS.length, 6);
+});
+
+test("a firewall's challenge page is recognised, refused at the gate, and ends the checks with one plain finding; the requests are paced", async () => {
+  const wall = `<!doctype html><html><head><title>Vercel Security Checkpoint</title></head><body>Attack Challenge Mode<script>window._vercel_jwt = "x"</script></body></html>`;
+  assert.equal(challenged(403, wall), "Vercel"); assert.equal(challenged(503, "<title>Just a moment...</title>"), "Cloudflare"); assert.equal(challenged(200, "<p>hello</p>"), null); assert.equal(challenged(403, "<p>Access denied: bot detection</p>"), "the site's firewall"); assert.equal(challenged(403, "<p>Forbidden</p>"), null);
+  assert.equal(challenged(200, "", { "x-vercel-mitigated": "challenge" }), "Vercel");
+  const walled = async (url, init = {}) => ({ ok: false, status: 403, url: String(url), headers: new Map([["content-type", "text/html"]]), text: async () => wall });
+  const o = await ownership("example.com", PAYER, { fetch: walled });
+  assert.equal(o.ok, false); assert.match(o.why, /^Vercel challenged our request to example\.com instead of serving the page, so nothing can be checked: allow the user agent "BrowniesSiteCheck" in the firewall, or pause the challenge mode, then buy again$/);
+  const calls = [];
+  const R = await checkSite("https://example.com", { fetch: async (url, init) => { calls.push(String(url)); return walled(url, init); } });
+  assert.equal(R.challenged, "Vercel"); assert.equal(calls.length, 1, "nothing past the wall is tried"); assert.match(R.notes[0], /Vercel answered the home page request with a challenge/);
+  const F = siteFindings(R);
+  assert.equal(F.length, 1); assert.equal(F[0].title, "Vercel challenged the check instead of serving the site"); assert.equal(F[0].severity, "medium"); assert.match(F[0].failure_case, /returns 403 and a challenge page/);
+  assert.match(checksText(R), /^- Home page: 403 from Vercel, a challenge page instead of the site\. Nothing past it was looked at/);
+  // the pacing: the second request waits PAUSE_MS; the headers look like a browser's
+  const site = fakeSite(); const t0 = Date.now();
+  const R2 = await checkSite("https://example.com", { fetch: async (url, init) => { if (String(url) === "https://example.com/") { assert.equal(init.headers["user-agent"], USER_AGENT); assert.match(init.headers.accept, /^text\/html/); } return site.fetch(url, init); } });
+  assert.equal(R2.challenged, null); assert.ok(Date.now() - t0 >= PAUSE_MS * 3, "at least three pauses for the four or more requests");
 });

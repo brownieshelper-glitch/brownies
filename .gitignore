@@ -39,6 +39,8 @@ helpers/helpers/sprinkle.mjs
 helpers/test/sprinkle.test.mjs
 helpers/helpers/toffee.mjs
 helpers/test/toffee.test.mjs
+helpers/helpers/praline.mjs
+helpers/test/praline.test.mjs
 helpers/test/video.test.mjs
 helpers/video/
 helpers/test/renderchild.test.mjs
@@ -63,3 +65,4 @@ eth-launch/bundle/
 
 .vercel
 web/deployments/*.test-*.json
+helpers/test/milestone.test.mjs

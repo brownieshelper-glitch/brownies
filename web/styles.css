@@ -352,6 +352,11 @@ pre.code .k { color: var(--accent); }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; padding-bottom: 72px; }
 .panel { background: var(--paper); border: var(--bw) solid var(--ink); border-radius: var(--r); padding: 24px; min-width: 0; }
 .panel.wide { grid-column: 1 / -1; }
+.clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 16px; }
+.clips figure { margin: 0; display: grid; gap: 8px; }
+.clips video { display: block; width: 100%; aspect-ratio: 9 / 16; border: var(--bw) solid var(--ink); border-radius: 18px; background: var(--bone); object-fit: cover; }
+.clips figcaption { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted-b); }
+.clips figcaption .link { color: var(--ink); font-weight: 600; }
 .panel h2 { font-size: 28px; }
 .panel .sub { color: var(--muted-b); font-size: 16px; line-height: 1.45; margin-top: 6px; max-width: 34em; }
 .kv { margin: 18px 0 0; display: grid; gap: 0; }

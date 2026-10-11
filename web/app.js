@@ -109,7 +109,25 @@
     if (!S.gateway) { $("btnRotate").disabled = true; $("btnSend").disabled = true; }
   }
 
-  async function refresh() { gate(); await Promise.all([readProtocol(), readUser(), readHelpers(), readSkills()]); gate(); }
+  async function refresh() { gate(); await Promise.all([readProtocol(), readUser(), readHelpers(), readSkills(), readClips()]); gate(); }
+
+  /* ---------- the milestone clips the brownies drew for this wallet (Praline) ---------- */
+  async function readClips() {
+    const a = account(), panel = $("clipsPanel"), box = $("clips");
+    if (!a || !S.gateway) { panel.hidden = true; return; }
+    let clips = [];
+    try { const r = await fetch(S.gateway.replace(/\/$/, "") + "/praline/of/" + a); if (r.ok) clips = (await r.json()).clips || []; } catch (_) { clips = []; }
+    box.replaceChildren();
+    for (const c of clips) {
+      const fig = document.createElement("figure");
+      const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none"; v.src = c.url; if (c.poster) v.poster = c.poster;
+      const cap = document.createElement("figcaption");
+      const t = document.createElement("span"); t.textContent = c.title + ", " + new Date(c.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+      const dl = document.createElement("a"); dl.className = "link"; dl.href = c.url; dl.download = ""; dl.textContent = "Save";
+      cap.append(t, dl); fig.append(v, cap); box.append(fig);
+    }
+    panel.hidden = clips.length === 0;
+  }
 
   /* ---------- the brownies on the payroll, for tips ---------- */
   let helpers = [];

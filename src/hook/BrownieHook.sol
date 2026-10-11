@@ -328,13 +328,16 @@ contract BrownieHook is IHooks, IUnlockCallback {
         bps = buy ? BASE_BUY_BPS : BASE_SELL_BPS;
         address mod = module;
         if (mod == address(0)) return (bps, 0);
-        try IBrownieModule(mod).feeFor{gas: MODULE_GAS}(IBrownieModule.SwapView(poolId, sender, buy, exactIn, specified)) returns (uint16 b, uint16 s) {
-            uint16 cap = buy ? MAX_BUY_BPS : MAX_SELL_BPS;
-            bps = b > cap ? cap : b;
-            share = s > MAX_MODULE_SHARE_BPS ? MAX_MODULE_SHARE_BPS : s;
-        } catch {
-            // the base fee applies; the swap goes on
-        }
+        // A bounded low-level call, decoded by hand: a revert, out-of-gas, an empty, short, long or malformed answer,
+        // a word that is not a uint16, all mean "the base fee" and the swap goes on. A typed try/catch would not do:
+        // the ABI decoding of a bad answer happens in this contract and would revert the trade.
+        (bool ok, bytes memory ret) = mod.staticcall{gas: MODULE_GAS}(abi.encodeCall(IBrownieModule.feeFor, (IBrownieModule.SwapView(poolId, sender, buy, exactIn, specified))));
+        if (!ok || ret.length != 64) return (bps, 0);
+        (uint256 b, uint256 s) = abi.decode(ret, (uint256, uint256));
+        if (b > type(uint16).max || s > type(uint16).max) return (bps, 0);
+        uint16 cap = buy ? MAX_BUY_BPS : MAX_SELL_BPS;
+        bps = b > cap ? cap : uint16(b);
+        share = s > MAX_MODULE_SHARE_BPS ? MAX_MODULE_SHARE_BPS : uint16(s);
     }
 
     // ---- the launch window ----

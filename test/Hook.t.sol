@@ -86,6 +86,40 @@ contract GasBurnerModule is IBrownieModule {
     function onPhase(uint16, address, bytes calldata) external pure {}
 }
 
+/// Modules that answer feeFor() with garbage instead of reverting: nothing, one word, two words that are not uint16s,
+/// three words. A typed call would fail to decode these inside the hook; the hook must treat them as "base fee".
+contract EmptyReturnModule is IBrownieModule {
+    function moduleId() external pure returns (bytes32) { return keccak256("test.empty"); }
+    function phases() external pure returns (uint16) { return Phases.AFTER_SWAP; }
+    function feeFor(SwapView calldata) external pure returns (uint16, uint16) { assembly { return(0, 0) } }
+    function onAfterSwap(SwapView calldata, int128, int128, uint256) external pure {}
+    function onPhase(uint16, address, bytes calldata) external pure {}
+}
+
+contract ShortReturnModule is IBrownieModule {
+    function moduleId() external pure returns (bytes32) { return keccak256("test.short"); }
+    function phases() external pure returns (uint16) { return 0; }
+    function feeFor(SwapView calldata) external pure returns (uint16, uint16) { assembly { mstore(0, 100) return(0, 32) } }
+    function onAfterSwap(SwapView calldata, int128, int128, uint256) external pure {}
+    function onPhase(uint16, address, bytes calldata) external pure {}
+}
+
+contract HugeWordModule is IBrownieModule {
+    function moduleId() external pure returns (bytes32) { return keccak256("test.huge"); }
+    function phases() external pure returns (uint16) { return 0; }
+    function feeFor(SwapView calldata) external pure returns (uint16, uint16) { assembly { mstore(0, 100) mstore(32, not(0)) return(0, 64) } }
+    function onAfterSwap(SwapView calldata, int128, int128, uint256) external pure {}
+    function onPhase(uint16, address, bytes calldata) external pure {}
+}
+
+contract LongReturnModule is IBrownieModule {
+    function moduleId() external pure returns (bytes32) { return keccak256("test.long"); }
+    function phases() external pure returns (uint16) { return 0; }
+    function feeFor(SwapView calldata) external pure returns (uint16, uint16) { assembly { mstore(0, 300) mstore(32, 0) mstore(64, 7) return(0, 96) } }
+    function onAfterSwap(SwapView calldata, int128, int128, uint256) external pure {}
+    function onPhase(uint16, address, bytes calldata) external pure {}
+}
+
 contract SharingModule is IBrownieModule {
     BrownieHook public hook;
     uint256 public afterSwaps;
@@ -479,6 +513,28 @@ contract HookTest is Test, Deployers {
         _install(address(new GasBurnerModule()));
         _swap(alice, true, -1 ether, 1 ether);
         assertEq(hook.harvestable(), 0.04 ether, "base fee again, the swap went through");
+    }
+
+    /// Programmable's review (2026-10-11): a module that returns successfully with empty or malformed data must not
+    /// block trades either. Every bad answer means the base fee, for buys and for sells.
+    function test_malformed_module_answer_means_base_fee() public {
+        _afterWindow();
+        address[4] memory bad = [address(new EmptyReturnModule()), address(new ShortReturnModule()), address(new HugeWordModule()), address(new LongReturnModule())];
+        uint256 expected = 0;
+        for (uint256 i = 0; i < bad.length; i++) {
+            _install(bad[i]);
+            _swap(alice, true, -1 ether, 1 ether);
+            expected += 0.02 ether;
+            assertEq(hook.harvestable(), expected, "buy at the base fee");
+            uint256 before = hook.harvestable();
+            _swap(alice, false, -int256(token.balanceOf(alice) / 4), 0);
+            assertGt(hook.harvestable(), before, "sell went through at the base fee");
+            expected = hook.harvestable();
+        }
+        vm.prank(OWNER);
+        hook.clearModule();
+        _swap(alice, true, -1 ether, 1 ether);
+        assertEq(hook.harvestable(), expected + 0.02 ether, "base fee with no module");
     }
 
     function test_module_change_waits_and_clear_is_instant() public {

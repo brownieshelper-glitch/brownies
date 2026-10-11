@@ -40,6 +40,10 @@ case "${1:-deploy}" in
     echo "== sandbox at $URL (reachable from the helpers' droplet only). Next: bash helpers/deploy-server.sh so the helpers read the new settings.";;
   status) $SSH "systemctl is-active sandbox; curl -s -H 'authorization: Bearer $(token)' http://127.0.0.1:8799/health"; echo;;
   test)
+    # the four checks (sandbox/check.mjs) run from the helpers' droplet, the only machine the sandbox port answers; the token comes from that droplet's own env
+    $SCP sandbox/check.mjs root@142.93.168.190:/srv/brownies/sandbox-check.mjs
+    ssh -i "$HOME/.ssh/brownies_key" -o BatchMode=yes root@142.93.168.190 'cd /srv/brownies/helpers && set -a && . /etc/brownies/helpers.env && set +a && node --no-warnings /srv/brownies/sandbox-check.mjs';;
+  test-curl)
     T=$(token); [ -n "$T" ] || { echo "no token in $S/brownies-sandbox.env; deploy first"; exit 1; }
     # a tarball with one file, made here, sent as base64: the job runs node on it
     TAR=$(cd "$(mktemp -d)" && printf 'console.log("sum", 2 + 2); console.log(JSON.stringify(process.versions.node));' > sum.js && tar czf - sum.js | base64 -w0)
@@ -49,5 +53,5 @@ case "${1:-deploy}" in
       echo '-- 2. a network attempt from the box (must fail)'; curl -s -m 120 -H \"authorization: Bearer \$T\" -H 'content-type: application/json' -d \"{\\\"image\\\":\\\"node\\\",\\\"tar\\\":\\\"\$TAR\\\",\\\"command\\\":\\\"node -e \\\\\\\"fetch('https://example.com').then(()=>console.log('REACHED')).catch(e=>console.log('blocked:', e.cause?.code || e.message))\\\\\\\"\\\",\\\"timeoutSeconds\\\":60}\" \$U/run | head -c 400; echo;
       echo '-- 3. a loop that must be killed at 10 seconds'; curl -s -m 120 -H \"authorization: Bearer \$T\" -H 'content-type: application/json' -d \"{\\\"image\\\":\\\"node\\\",\\\"tar\\\":\\\"\$TAR\\\",\\\"command\\\":\\\"node -e 'for(;;){}'\\\",\\\"timeoutSeconds\\\":10}\" \$U/run | head -c 300; echo;
       echo '-- 4. without the token'; curl -s -m 20 -o /dev/null -w '%{http_code}\n' \$U/health";;
-  *) echo "usage: bash sandbox/deploy.sh [deploy|test|status]"; exit 1;;
+  *) echo "usage: bash sandbox/deploy.sh [deploy|test|test-curl|status]"; exit 1;;
 esac

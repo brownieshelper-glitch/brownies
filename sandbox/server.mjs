@@ -17,6 +17,7 @@ if (!TOKEN) { console.error("SANDBOX_TOKEN is empty: refusing to start"); proces
 const JOBS = process.env.JOBS_DIR || "/var/lib/sandbox/jobs";
 const IMAGES = { node: "node:22-bookworm-slim", python: "python:3.12-slim", foundry: "ghcr.io/foundry-rs/foundry:latest" };
 const CPUS = process.env.CPUS || "1", MEMORY = process.env.MEMORY || "1500m";
+const RUNTIME = String(process.env.RUNTIME || ""); // "runsc" = gVisor, a second kernel under every container; empty = Docker's own
 const MAX_SECONDS = 600, MAX_INSTALL_SECONDS = 300, MAX_OUT = 200_000, MAX_CLONE_MB = 300, MAX_TAR_BYTES = 8 * 1024 * 1024, MAX_COLLECT = 5, MAX_COLLECT_BYTES = 1_000_000, QUEUE_MAX = 4;
 let running = 0, queued = 0, done = 0;
 const log = (s) => console.log(`${new Date().toISOString()} ${s}`);
@@ -39,7 +40,7 @@ function exec(cmd, args, { seconds = 60, cwd } = {}) {
 /// One container run over the job folder. network: "none" for the command, "bridge" for the install step only.
 async function box(id, dir, image, command, { network = "none", seconds = 60 } = {}) {
   const name = `sb-${id}-${network === "none" ? "run" : "install"}`;
-  const args = ["run", "--rm", "--name", name, "--network", network, "--cpus", CPUS, "--memory", MEMORY, "--memory-swap", MEMORY, "--pids-limit", "512", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+  const args = ["run", "--rm", "--name", name, ...(RUNTIME ? ["--runtime", RUNTIME] : []), "--network", network, "--cpus", CPUS, "--memory", MEMORY, "--memory-swap", MEMORY, "--pids-limit", "512", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
     "--read-only", "--tmpfs", "/tmp:rw,exec,size=512m", "-e", "HOME=/work/__home", "-e", "CI=1", "-e", "npm_config_update_notifier=false",
     "-v", `${dir}:/work`, "-w", "/work", "-u", "1000:1000", image, "sh", "-lc", command];
   const r = await exec("docker", args, { seconds });
@@ -131,4 +132,4 @@ const server = http.createServer(async (req, res) => {
     return json(404, { error: "GET /health or POST /run" });
   } catch (e) { log(`request failed: ${e.message}`); return json(500, { error: "the sandbox stumbled" }); }
 });
-server.listen(PORT, "0.0.0.0", () => log(`sandbox on :${PORT}, images ${Object.values(IMAGES).join(", ")}, ${CPUS} cpu, ${MEMORY}`));
+server.listen(PORT, "0.0.0.0", () => log(`sandbox on :${PORT}, runtime ${RUNTIME || "docker's own"}, images ${Object.values(IMAGES).join(", ")}, ${CPUS} cpu, ${MEMORY}`));

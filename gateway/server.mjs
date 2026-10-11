@@ -29,6 +29,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { Ledger } from "./ledger.mjs";
 import { Chain } from "./chain.mjs";
 import { TeamLog, clean as cleanEntry, isHelperName, KINDS } from "./teamlog.mjs";
+import { Visits } from "./visits.mjs";
 import { verifyKey, err, keyMessage, beneficiaryToWallet, walletToBeneficiary, parseWallet } from "./auth.mjs";
 
 // ---- config ----
@@ -84,6 +85,7 @@ if (!cfg.live) console.log("[gateway] SUGAR_ADDRESS not set: running without the
 const ledger = new Ledger(cfg.dbPath);
 const chain = cfg.live ? new Chain(cfg, ledger) : null;
 const team = new TeamLog(ledger.db);
+const visits = new Visits(ledger.db); // first-party visit counts from tagged links (the site's beacon), for the ads
 
 // ---- the pantry and Ambient: inference paid per request, no account anywhere ----
 let pantry = null, ambient = null;
@@ -414,6 +416,14 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === "/api/team/towers" && req.method === "GET") return json(res, 200, { size: 100, towers: team.towers(100) });
     if (url.pathname === "/api/team/summary" && req.method === "GET") return json(res, 200, team.summary());
+    // a visit from a tagged link: counted once per page view, tags only, twenty a minute per address
+    if (url.pathname === "/api/visit" && req.method === "POST") {
+      if (!allow("visit:" + clientIp(req), 20)) throw err(429, "slow_down", "Twenty visits a minute per address.");
+      let body;
+      try { body = JSON.parse(await readBody(req, 2 * 1024, res)); } catch { throw err(400, "bad_visit", "The body is not JSON."); }
+      return json(res, 200, { ok: visits.count(body || {}) });
+    }
+    if (url.pathname === "/api/visits" && req.method === "GET") { const days = Number(url.searchParams.get("days") || 14); return json(res, 200, { days, rows: visits.rows(days) }); }
     if (url.pathname === "/api/team/log" && req.method === "POST") {
       if (!cfg.teamLogKey) throw err(503, "closed", "This gateway takes no reports.");
       if (!sameSecret(bearer(req), cfg.teamLogKey)) throw err(401, "bad_key", "Wrong team key.");

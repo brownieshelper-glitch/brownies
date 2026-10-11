@@ -7,7 +7,8 @@
   const local = ["localhost", "127.0.0.1"].includes(location.hostname);
   const q = new URLSearchParams(location.search);
   // overrides exist only on a local machine, for rehearsals against a fork: ?rpc= ?gw= ?dep=
-  const over = (k) => (local ? q.get(k) : null);
+  // overrides work on a local machine; on the live site only ?dep=1.test-<name> (a published test record) is honoured
+  const over = (k) => (local ? q.get(k) : k === "dep" && /^1.test-[a-z0-9]+$/.test(q.get(k) || "") ? q.get(k) : null);
 
   const ABI = {
     erc20: [
@@ -80,6 +81,27 @@
       "error OutsideBand(uint256 out, uint256 expected)",
       "error NoTwap()",
     ],
+    virality: [
+      "function effective() view returns (uint16 buyBps, uint16 sellBps)",
+      "function score() view returns (uint8)",
+      "function scoredAt() view returns (uint64)",
+      "function signer() view returns (address)",
+      "function owner() view returns (address)",
+      "function paused() view returns (bool)",
+      "function maxStepBps() view returns (uint16)",
+      "function maxAge() view returns (uint32)",
+      "function MAX_BAND_BPS() view returns (uint16)",
+      "function baseBuyBps() view returns (uint16)",
+      "function baseSellBps() view returns (uint16)",
+      "function bands() view returns (tuple(uint8 scoreMin, uint16 buyBps, uint16 sellBps)[])",
+      "function setPaused(bool p)",
+      "function setSigner(address s)",
+      "function setBase(uint16 buyBps, uint16 sellBps)",
+      "function setBands(tuple(uint8 scoreMin, uint16 buyBps, uint16 sellBps)[] bands_)",
+      "function setMaxStep(uint16 bps)",
+      "function setMaxAge(uint32 seconds_)",
+      "event ScoreSet(uint8 score, uint16 buyBps, uint16 sellBps, string reason)",
+    ],
     registry: [
       "function count() view returns (uint256)",
       "function skill(uint256) view returns (tuple(address author, uint64 createdAt, uint64 closesAt, bool paid, bool vetoed, uint256 ask, uint256 yes, uint256 no, uint256 paidAmount, uint256 quorumWeight, string uri))",
@@ -138,6 +160,7 @@
         if (E.isAddress(d.teamVault)) S.vault = new E.Contract(d.teamVault, ABI.vault, provider);
         if (E.isAddress(d.skillRegistry)) S.registry = new E.Contract(d.skillRegistry, ABI.registry, provider);
       }
+      if (d && E.isAddress(d.viralityModule)) S.virality = new E.Contract(d.viralityModule, ABI.virality, provider);
       return S;
     })();
     return loaded;
@@ -289,4 +312,20 @@
   const beneficiary = (wallet) => E.zeroPadValue(wallet, 32);
 
   window.Brownies = { load, ABI, amount, coin, coinHeld, sugar, usd, eth, dollars, short, parse, explainError, toast, tx, gw, ago, day, keyMessage, keyFromSignature, beneficiary, local };
+})();
+
+/* A visit from a tagged link (an ad, a post) is counted by the gateway once, with the tags only: no cookie, no
+   person. Butterscotch reads the counts for cost per visit. The tags stay in sessionStorage for this visit. */
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    var source = q.get("utm_source"), campaign = q.get("utm_campaign");
+    if (!source || !campaign) return;
+    var cfg = window.BROWNIES_CONFIG || {};
+    var api = String(cfg.gateway || "").replace(/\/$/, "");
+    var visit = { source: source, medium: q.get("utm_medium") || "paid", campaign: campaign, content: q.get("utm_content") || "", path: location.pathname };
+    try { sessionStorage.setItem("brownies-visit", JSON.stringify(visit)); } catch (e) {}
+    if (!api) return;
+    fetch(api + "/api/visit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(visit), keepalive: true }).catch(function () {});
+  } catch (e) {}
 })();

@@ -47,6 +47,8 @@ helpers/helpers/caramel.mjs
 helpers/test/caramel.test.mjs
 helpers/helpers/ember.mjs
 helpers/test/ember.test.mjs
+helpers/helpers/butterscotch.mjs
+helpers/test/butterscotch.test.mjs
 
 # the kitchen cam's music bed and test recordings are made on the owner's PC, not kept in the repository
 ember/music.wav

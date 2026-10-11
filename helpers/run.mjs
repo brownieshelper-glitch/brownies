@@ -144,7 +144,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, x, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, deploymentJson: S.deploymentJson, rpcUrl: S.rpcUrl, emberUrl: S.emberUrl });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, x, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, deploymentJson: S.deploymentJson, rpcUrl: S.rpcUrl, emberUrl: S.emberUrl, ads: S.ads });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it

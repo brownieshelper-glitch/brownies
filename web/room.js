@@ -26,6 +26,14 @@
   if (!stageEl || !svg) return;
   const params = new URLSearchParams(location.search);
   const demo = params.get("demo") === "1";
+  // ?live=1: the kitchen cam (Ember): the stage alone, full screen, a LIVE badge and the site's name; nothing to click
+  const live = params.get("live") === "1";
+  if (live) {
+    document.body.classList.add("live");
+    const badge = document.createElement("div"); badge.className = "live-badge"; badge.innerHTML = '<i></i><span>LIVE from the kitchen</span>';
+    const site = document.createElement("div"); site.className = "live-site"; site.textContent = "feedthebrownies.com";
+    stageEl.append(badge, site);
+  }
   const reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const S = await B.load();
 
@@ -92,7 +100,7 @@
   const screenRight = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 96, "", "screen-big", viewDays, { "text-anchor": "end" });
   const screenRightSub = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 124, "", "screen-text", viewDays, { "text-anchor": "end" });
   const screenFoot = text(SCREEN.x + 22, SCREEN.y + SCREEN.h - 18, "", "screen-label", viewDays);
-  const screenHint = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 34, "CLICK: NEXT VIEW", "screen-label", screenG, { "text-anchor": "end" });
+  const screenHint = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 34, live ? "THE SCREEN" : "CLICK: NEXT VIEW", "screen-label", screenG, { "text-anchor": "end" });
   const screenFlash = mk("rect", { x: SCREEN.x, y: SCREEN.y, width: SCREEN.w, height: SCREEN.h, rx: 14, fill: "#FF5A1F", opacity: 0, "pointer-events": "none" }, screenG);
   let screenMode = 0;
   const VIEWS = [viewDays, viewWeek, viewTower];
@@ -108,7 +116,7 @@
   mk("circle", { cx: 1330, cy: 118, r: 5, fill: "#2A1710" }, clockG);
   mk("rect", { class: "plate", x: 1276, y: 174, width: 108, height: 24, rx: 6 }, clockG);
   const clockLabel = text(1330, 191, "LOCAL TIME", "plate-text", clockG, { "text-anchor": "middle" });
-  let clockZone = "local";
+  let clockZone = live ? "kitchen" : "local"; // the cam shows the kitchen's time
   function tickClock() {
     const d = new Date();
     let hh = d.getHours(), mm = d.getMinutes();
@@ -161,7 +169,7 @@
     const hit = mk("rect", { class: "hit", x: x - 8, y: 344, width: 66, height: 82 }, L.hits);
     hit.addEventListener("click", () => { dropCube(x + 25 + rand(-10, 10), rand(580, 700), 420); beep(740, 0.05, "triangle", 0.03); });
   }
-  text(225, 452, "SUGAR  (CLICK A JAR)", "plate-text", shelfG, { "text-anchor": "middle", fill: "#C9B8A8" });
+  text(225, 452, live ? "SUGAR" : "SUGAR  (CLICK A JAR)", "plate-text", shelfG, { "text-anchor": "middle", fill: "#C9B8A8" });
 
   // ---------- the furniture on the floor ----------
   // a station: a desk with a monitor, a name plate, and a spot in front where its brownie stands
@@ -797,6 +805,7 @@
   await Promise.all([summary(), loadActivity(true), extras()]);
   for (const a of actors) { if (!a.working) { a.mode = "wander"; const s = SPOTS[a.i % SPOTS.length]; a.x = s.x; a.y = s.y; } renderCard(a); }
   showView(0); renderKitchenCard(); renderTicker();
+  if (live) setInterval(() => { showView(screenMode + 1); screenFlash.setAttribute("opacity", 0.3); }, 60_000); // the cam turns the screen's page itself
   let last = 0;
   if (!reduce) requestAnimationFrame(function frame(now) { const dt = last ? Math.min((now - last) / 1000, 0.034) : 0.016; last = now; step(dt); requestAnimationFrame(frame); });
   else { for (const a of actors) pose(a, 0.016, 0, 0, depth(a.y)); }

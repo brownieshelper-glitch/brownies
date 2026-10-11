@@ -1,0 +1,13 @@
+/* The kitchen cam (room.html?live=1): the Room's stage alone, filling a 1280x720 window, with a LIVE badge and
+   the site's name. Everything else on the page is hidden; the stream's audio comes from the encoder, not the page. */
+body.live { overflow: hidden; background: var(--ink); }
+body.live .nav, body.live .netwarn, body.live .page-head, body.live .crew-cards, body.live .room-say, body.live .room-grid, body.live .foot, body.live .room-drawer, body.live .toasts { display: none !important; }
+body.live main.wrap { max-width: none; padding: 0; margin: 0; }
+body.live .room-stage-wrap { position: fixed; inset: 0; }
+body.live .room-stage { position: absolute; inset: 0; width: 100vw; height: 100vh; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; }
+body.live .room-stage svg { cursor: default; }
+body.live .room-ticker { height: 44px; font-size: 19px; border-top-width: 3px; }
+body.live .live-badge { position: absolute; top: 18px; left: 18px; display: flex; align-items: center; gap: 10px; padding: 8px 16px 8px 12px; border: 3px solid var(--ink); border-radius: 999px; background: var(--bone); color: var(--ink); font-family: var(--display); font-size: 20px; font-weight: 700; z-index: 5; pointer-events: none; }
+body.live .live-badge i { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); animation: live-pulse 1.6s ease-in-out infinite; }
+body.live .live-site { position: absolute; top: 22px; right: 22px; padding: 6px 14px; border: 3px solid var(--ink); border-radius: 999px; background: var(--accent); color: var(--ink); font-family: var(--mono); font-size: 16px; font-weight: 500; z-index: 5; pointer-events: none; }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

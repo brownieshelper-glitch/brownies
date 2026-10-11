@@ -45,6 +45,12 @@ helpers/helpers/nougat.mjs
 helpers/test/nougat.test.mjs
 helpers/helpers/caramel.mjs
 helpers/test/caramel.test.mjs
+helpers/helpers/ember.mjs
+helpers/test/ember.test.mjs
+
+# the kitchen cam's music bed and test recordings are made on the owner's PC, not kept in the repository
+ember/music.wav
+ember/test.mp4
 helpers/test/video.test.mjs
 helpers/video/
 helpers/test/renderchild.test.mjs

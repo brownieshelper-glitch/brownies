@@ -27,6 +27,7 @@ import { Alerts } from "./lib/alerts.mjs";
 import { loadFacts, HELPERS } from "./lib/facts.mjs";
 import { sendSummary } from "./lib/summary.mjs";
 import { Admin } from "./lib/admin.mjs";
+import { Sandbox } from "./lib/sandbox.mjs";
 import { Recruit } from "./lib/recruit.mjs";
 import { Bakery } from "./lib/bakery.mjs";
 import { JobsApi, totalsView, money as moneyFmt, OPEN as OPEN_JOB_STATES, STATE_LABEL as JOB_STATE } from "./lib/moneyjobs.mjs";
@@ -89,6 +90,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const linkedin = new LinkedIn({ clientId: S.linkedin.clientId, clientSecret: S.linkedin.clientSecret, version: S.linkedin.version, redirectUri: `${S.gatewayUrl}/linkedin/callback`, store, clock, log });
   const videosDir = priv.helpers?.sprinkle?.videosDir || env.VIDEOS_DIR || "/var/lib/brownies/videos";
   const clips = new Clips({ store, clock, baseUrl: S.gatewayUrl, dir: videosDir, log });
+  const sandbox = new Sandbox({ url: S.sandbox.url, token: S.sandbox.token, log }); // the box strangers' code runs in, for the code reviews (sandbox/server.mjs on the stream server)
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
@@ -146,7 +148,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, x, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, deploymentJson: S.deploymentJson, rpcUrl: S.rpcUrl, emberUrl: S.emberUrl, ads: S.ads });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, x, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, deploymentJson: S.deploymentJson, rpcUrl: S.rpcUrl, emberUrl: S.emberUrl, ads: S.ads, sandbox });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
@@ -269,6 +271,7 @@ async function main() {
   log(W.youtube?.configured ? "[helpers] YouTube is connected: finished videos go up unlisted, the owner publishes" : "[helpers] YouTube is not configured: videos stay in Telegram");
   log(!W.tiktok.configured ? "[helpers] TikTok is not configured" : W.tiktok.connected ? `[helpers] TikTok is connected (${W.tiktok.tokens()?.display_name || W.tiktok.tokens()?.username || "the Brownies account"}): vertical videos go to the owner's inbox as drafts` : "[helpers] TikTok app is set; the owner connects the account with /tiktok");
   log(!W.instagram.configured ? "[helpers] Instagram is not configured" : W.instagram.connected ? `[helpers] Instagram is connected (@${W.instagram.tokens()?.username || W.instagram.tokens()?.user_id}): cartoon clips go up as reels` : "[helpers] Instagram app is set; the owner connects the account with /instagram");
+  log(W.sandbox?.configured ? "[helpers] the sandbox is set: code reviews are for sale" : "[helpers] no sandbox (SANDBOX_URL, SANDBOX_TOKEN): code reviews are closed");
   log(!W.linkedin.configured ? "[helpers] LinkedIn is not configured" : W.linkedin.connected ? `[helpers] LinkedIn is connected (${W.linkedin.tokens()?.name || "the profile"}), ${W.linkedin.daysLeft()} days left` : "[helpers] LinkedIn app is set; the owner connects the profile with /linkedin");
   if (W.off.length) log(`[helpers] switched off by HELPERS_OFF: ${W.off.join(", ")} (no job runs for them)`);
   W.shop.open().then((o) => log(o.ok ? `[shop] open: payments land in ${S.shop.payTo}, the settler is ${W.shop.seller.address}` : `[shop] closed: ${o.reason}`)).catch((e) => log(`[shop] could not tell if it is open: ${e.message}`));

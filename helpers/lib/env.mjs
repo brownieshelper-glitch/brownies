@@ -17,6 +17,7 @@ export const NAMES = [
   "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF", "ADMIN_WALLETS", "ADMIN_ORIGINS",
   "SHOP_PAY_TO", "SHOP_SETTLER_PRIVATE_KEY", "BASE_RPC_URL", "SHOP_CHAIN_ID", "EMBER_URL",
   "META_ADS_TOKEN", "META_AD_ACCOUNT_ID", "TIKTOK_ADS_TOKEN", "TIKTOK_ADVERTISER_ID", "X_ADS_CONSUMER_KEY", "X_ADS_CONSUMER_SECRET", "X_ADS_ACCESS_TOKEN", "X_ADS_ACCESS_SECRET", "X_ADS_ACCOUNT_ID",
+  "SANDBOX_URL", "SANDBOX_TOKEN",
 ];
 
 /// The helpers switched off for now, from HELPERS_OFF="fudge,chip" (names, any case, spaces allowed). A helper
@@ -88,6 +89,7 @@ export function settings(env = process.env) {
   s.emberUrl = (env.EMBER_URL || "").replace(/\/$/, ""); // the kitchen cam server's status address (http://<ip>:8798), empty until it exists
   // the ad platforms (Butterscotch, lib/ads/connectors.mjs): empty until the accounts and the API access exist
   s.ads = { meta: { token: env.META_ADS_TOKEN || "", account: env.META_AD_ACCOUNT_ID || "" }, tiktok: { token: env.TIKTOK_ADS_TOKEN || "", advertiser: env.TIKTOK_ADVERTISER_ID || "" }, x: { consumerKey: env.X_ADS_CONSUMER_KEY || "", consumerSecret: env.X_ADS_CONSUMER_SECRET || "", accessToken: env.X_ADS_ACCESS_TOKEN || "", accessSecret: env.X_ADS_ACCESS_SECRET || "", account: env.X_ADS_ACCOUNT_ID || "" } };
+  s.sandbox = { url: (env.SANDBOX_URL || "").replace(/\/$/, ""), token: env.SANDBOX_TOKEN || "" }; // the box strangers' code runs in (sandbox/server.mjs), for the code reviews; empty until it is set up
   s.emberUrl = (env.EMBER_URL || "").replace(/\/$/, ""); // the kitchen cam server's status address (http://<ip>:8798), empty until it exists
   if (s.github.repo && !/^[\w.-]+\/[\w.-]+$/.test(s.github.repo)) throw new Error("GITHUB_REPO must be owner/name.");
   return s;

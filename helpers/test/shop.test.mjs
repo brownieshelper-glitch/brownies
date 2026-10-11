@@ -68,7 +68,7 @@ test("the words are cleaned and judged: length, control characters, the ban list
   try {
     const c = await call("GET", "/shop");
     assert.equal(c.status, 200); assert.equal(c.cors, "*");
-    assert.deepEqual(c.body.items.map((i) => [i.id, i.usd]), [["note", 1], ["meme", 0.5], ["clip", 12], ["idea", 50], ["brainstorm", 30]], "the clip's price from the config");
+    assert.deepEqual(c.body.items.map((i) => [i.id, i.usd]), [["note", 1], ["meme", 0.5], ["clip", 12], ["idea", 50], ["brainstorm", 30], ["code", 200]], "the clip's price from the config");
     assert.equal(c.body.items.find((i) => i.id === "idea").maxChars, 4000); assert.equal(c.body.items[0].maxChars, 600);
     assert.equal(c.body.open, true); assert.equal(c.body.pay.payTo, PAY_TO); assert.equal(c.body.pay.network, "eip155:8453"); assert.deepEqual(c.body.rules, RULES); assert.equal(c.body.docs, "https://site.test/shop.html");
     assert.match(c.body.items[0].how, /POST https:\/\/api\.test\/shop\/note/);
@@ -149,7 +149,7 @@ test("a picture or a clip is an order to poll for; the file is kept under an ung
     assert.equal(no.second.status, 400); assert.match(no.second.body.error, /we do not make that/); assert.equal(chain.tx.n, 2);
     // the view for the room
     const v = await shop.view();
-    assert.equal(v.open, true); assert.equal(v.payTo, PAY_TO); assert.equal(v.today.n, 2); assert.equal(v.today.usd, 12.5); assert.equal(v.today.costUsd, 0.05); assert.equal(v.orders.length, 2); assert.equal(v.orders[0].state, "failed"); assert.equal(v.items.length, 5);
+    assert.equal(v.open, true); assert.equal(v.payTo, PAY_TO); assert.equal(v.today.n, 2); assert.equal(v.today.usd, 12.5); assert.equal(v.today.costUsd, 0.05); assert.equal(v.orders.length, 2); assert.equal(v.orders[0].state, "failed"); assert.equal(v.items.length, 6);
   } finally { await close(); }
 });
 

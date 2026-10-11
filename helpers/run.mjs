@@ -276,6 +276,7 @@ async function main() {
     if (req.url.startsWith("/instagram/")) return W.instagramAuth.handle(req, res);
     if (req.url.startsWith("/linkedin/")) return W.linkedinAuth.handle(req, res);
     if (req.url.startsWith("/clips/")) return W.clips.handle(req, res);
+    if (req.url === "/shop" || req.url.startsWith("/shop/") || req.url.startsWith("/shop?")) return W.shop.handle(req, res);
     const now = Date.now();
     const body = {
       ok: true, mode: S.mode, uptimeSeconds: Math.round((now - started) / 1000), reports: gateway.reports, thoughts: brain.calls,

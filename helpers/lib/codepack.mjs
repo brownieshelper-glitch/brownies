@@ -67,6 +67,31 @@ export function toolchain(files, { packageJson = null } = {}) {
   return { image: "node", install: "", test: null, kind: "unknown", note: "no package.json, foundry.toml or pyproject.toml at the top: the tests were not run" };
 }
 
+/// The reproductions: one script per finding, written by a model, run one after the other in the box after the
+/// install; each prints BUG REPRODUCED or NOT REPRODUCED, anything else is a script that could not run.
+export const MAX_REPROS = 8;
+export const REPRO = {
+  node: { file: (id) => `__review/repro-${id}.mjs`, run: (id) => `node __review/repro-${id}.mjs`, how: "an ES module (.mjs) run with node from the repository's root; import the code with relative paths from that root (for example import { f } from '../src/f.js'); when the package is CommonJS use createRequire; no test framework, plain asserts" },
+  python: { file: (id) => `__review/repro_${id}.py`, run: (id) => `python __review/repro_${id}.py`, how: "a Python script run with python from the repository's root; import the code as the project does (sys.path.insert(0, '.') first); plain asserts, no pytest" },
+  foundry: { file: (id) => `test/__Repro${id}.t.sol`, run: (id) => `forge test --match-path 'test/__Repro${id}.t.sol' -vv`, how: "a Foundry test contract (forge-std's Test) in test/, one test function; console.log the marker lines; the test must PASS when the bug is there" },
+  hardhat: null, rust: null, go: null, unknown: null,
+};
+export const reproCommand = (chain, ids) => {
+  const R = REPRO[chain.kind];
+  if (!R || !ids.length) return "echo 'no reproductions' > __review/repro.txt";
+  return [": > __review/repro.txt", ...ids.map((id) => `printf '##### repro %s\\n' ${id} >> __review/repro.txt; (timeout 120 ${R.run(id)}) >> __review/repro.txt 2>&1; echo "exit:$?" >> __review/repro.txt`)].join("; ") + "; true";
+};
+/// __review/repro.txt read back: { [id]: { status: "confirmed" | "not reproduced" | "could not run", exit, output } }.
+export function readRepro(text) {
+  const out = {};
+  for (const m of String(text || "").matchAll(/##### repro (\d+)\n([\s\S]*?)exit:(\d+)\n?/g)) {
+    const id = Number(m[1]), output = m[2].trim(), exit = Number(m[3]);
+    const status = /BUG REPRODUCED/.test(output) ? "confirmed" : /NOT REPRODUCED/.test(output) ? "not reproduced" : "could not run";
+    out[id] = { status, exit, output: output.slice(0, 1500) };
+  }
+  return out;
+}
+
 /// What the sandbox brought back, read: the files, the line count, the test output, the code.
 export function readPack(files = {}) {
   const list = String(files["__review/files.txt"] || "").split("\n").map((s) => s.trim()).filter(Boolean);

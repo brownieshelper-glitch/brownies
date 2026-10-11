@@ -20,12 +20,14 @@ export class Sandbox {
 
   /// { ok, id, image, mb, install: { exit, timedOut, stdout, stderr } | null, exit, timedOut, seconds, stdout, stderr, files, totalSeconds }.
   /// Throws with the sandbox's own words when it refuses the job (a bad url, too big, busy).
-  async run({ image = "node", git = null, tar = null, install = "", command, timeoutSeconds = 300, installTimeoutSeconds = 180, collect = [] } = {}) {
+  /// files: { "path": "content" } laid over the code after the clone (a reproduction script), a few and small.
+  async run({ image = "node", git = null, tar = null, install = "", command, timeoutSeconds = 300, installTimeoutSeconds = 180, collect = [], files = null } = {}) {
     if (!this.configured) throw new Error("the sandbox is not set up (SANDBOX_URL, SANDBOX_TOKEN)");
     if (!command) throw new Error("a command is needed");
     const body = { image, command, timeoutSeconds, installTimeoutSeconds, collect };
     if (git) body.git = git; else if (tar) body.tar = Buffer.isBuffer(tar) ? tar.toString("base64") : String(tar);
     if (install) body.install = install;
+    if (files && Object.keys(files).length) body.files = files;
     const wait = (timeoutSeconds + (install ? installTimeoutSeconds : 0) + 240) * 1000; // the clone, the queue, the pulls
     const r = await this.fetch(`${this.url}/run`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(wait) });
     const j = await r.json().catch(() => null);

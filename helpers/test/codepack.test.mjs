@@ -2,7 +2,7 @@
 // one shell line the box can run, the toolchain is told from the file list, the pack is read back.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCodeRequest, PACK_COMMAND, testCommand, toolchain, readPack, testsLine, MAX_LINES } from "../lib/codepack.mjs";
+import { parseCodeRequest, PACK_COMMAND, testCommand, toolchain, readPack, testsLine, MAX_LINES, REPRO, MAX_REPROS, reproCommand, readRepro } from "../lib/codepack.mjs";
 
 test("a request: the url, the branch, the notes; tree urls; no url is null", () => {
   assert.deepEqual(parseCodeRequest("https://github.com/a/b"), { url: "https://github.com/a/b", ref: null, notes: "" });
@@ -42,4 +42,15 @@ test("the pack command and the test command are one shell line each; the toolcha
   assert.match(testsLine(readPack({}), { test: null, note: "no Rust toolchain" }), /^no Rust toolchain$/);
   assert.match(testsLine(readPack({}), { test: null }), /^No test command was found/);
   assert.deepEqual(readPack({}).files, []);
+});
+
+test("the reproductions: a script path and a run per toolchain, one shell line for all of them, the results read back by their markers", () => {
+  assert.equal(REPRO.node.file(3), "__review/repro-3.mjs"); assert.equal(REPRO.node.run(3), "node __review/repro-3.mjs");
+  assert.equal(REPRO.python.file(1), "__review/repro_1.py"); assert.equal(REPRO.foundry.file(2), "test/__Repro2.t.sol"); assert.match(REPRO.foundry.run(2), /^forge test --match-path 'test\/__Repro2\.t\.sol' -vv$/);
+  assert.equal(REPRO.rust, null); assert.equal(REPRO.unknown, null);
+  assert.equal(reproCommand({ kind: "node" }, [1, 2]), `: > __review/repro.txt; printf '##### repro %s\\n' 1 >> __review/repro.txt; (timeout 120 node __review/repro-1.mjs) >> __review/repro.txt 2>&1; echo "exit:$?" >> __review/repro.txt; printf '##### repro %s\\n' 2 >> __review/repro.txt; (timeout 120 node __review/repro-2.mjs) >> __review/repro.txt 2>&1; echo "exit:$?" >> __review/repro.txt; true`);
+  assert.match(reproCommand({ kind: "rust" }, [1]), /^echo 'no reproductions'/); assert.match(reproCommand({ kind: "node" }, []), /^echo 'no reproductions'/);
+  const r = readRepro("##### repro 1\nBUG REPRODUCED: balance -40\nexit:0\n##### repro 2\nsome noise\nNOT REPRODUCED: fine\nexit:2\n##### repro 3\nSyntaxError: Unexpected token\nexit:1\n##### repro 4\nexit:124\n");
+  assert.deepEqual(r, { 1: { status: "confirmed", exit: 0, output: "BUG REPRODUCED: balance -40" }, 2: { status: "not reproduced", exit: 2, output: "some noise\nNOT REPRODUCED: fine" }, 3: { status: "could not run", exit: 1, output: "SyntaxError: Unexpected token" }, 4: { status: "could not run", exit: 124, output: "" } });
+  assert.deepEqual(readRepro(""), {}); assert.equal(MAX_REPROS, 8);
 });

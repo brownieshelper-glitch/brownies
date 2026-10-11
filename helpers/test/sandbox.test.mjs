@@ -23,7 +23,9 @@ test("a job: the token, the body, the answer; a tarball as a Buffer becomes base
   assert.deepEqual(calls[1].body, { image: "node", command: "npm test", timeoutSeconds: 120, installTimeoutSeconds: 180, collect: ["out.json"], git: { url: "https://github.com/a/b", ref: "main" }, install: "npm ci --ignore-scripts" });
   assert.equal(calls[1].headers["content-type"], "application/json");
   await sb.run({ tar: Buffer.from("hello"), command: "ls" });
-  assert.equal(calls[2].body.tar, Buffer.from("hello").toString("base64")); assert.equal(calls[2].body.git, undefined); assert.equal(calls[2].body.install, undefined);
+  assert.equal(calls[2].body.tar, Buffer.from("hello").toString("base64")); assert.equal(calls[2].body.git, undefined); assert.equal(calls[2].body.install, undefined); assert.equal(calls[2].body.files, undefined);
+  await sb.run({ git: { url: "https://github.com/a/b" }, command: "node __review/repro-1.mjs", files: { "__review/repro-1.mjs": "console.log('BUG REPRODUCED')" } });
+  assert.deepEqual(calls[3].body.files, { "__review/repro-1.mjs": "console.log('BUG REPRODUCED')" }, "the extra files ride along");
   await assert.rejects(() => sb.run({ git: { url: "ftp://x" }, command: "boom" }), /^Error: the sandbox refused the job: the git url must be https and plain$/);
   await assert.rejects(() => sb.run({ tar: "AA==", command: "busy" }), /the sandbox is busy/);
   await assert.rejects(() => sb.run({ tar: "AA==" }), /a command is needed/);

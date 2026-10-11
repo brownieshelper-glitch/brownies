@@ -8,7 +8,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 8799);
@@ -92,6 +92,19 @@ async function runJob(body) {
   const started = Date.now();
   try {
     const mb = await fetchCode(dir, body);
+    // extra files laid over the code after the clone (a reproduction script, a test): a few, small, inside the folder
+    if (body.files && typeof body.files === "object") {
+      let total = 0;
+      for (const [p, c] of Object.entries(body.files).slice(0, 32)) {
+        if (!/^[\w./-]{1,200}$/.test(p) || p.includes("..")) continue;
+        const text = String(c ?? ""); total += text.length; if (total > 200_000) break;
+        const f = resolve(dir, p);
+        if (!f.startsWith(dir + "/")) continue;
+        mkdirSync(dirname(f), { recursive: true });
+        writeFileSync(f, text);
+      }
+      await exec("chown", ["-R", "1000:1000", dir], { seconds: 60 });
+    }
     let inst = null;
     if (install) inst = await box(id, dir, image, install, { network: "bridge", seconds: installSeconds });
     const run = await box(id, dir, image, command, { network: "none", seconds });

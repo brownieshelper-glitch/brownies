@@ -88,6 +88,14 @@ export class Crumb extends Helper {
     this.idleWait = 1000;
   }
 
+  /// What Crumb still needs, for the owner's roster.
+  setup() {
+    if (!this.tg?.configured) return { missing: ["Telegram is not connected: the bot's token goes in the helpers settings on the server."] };
+    if (!this.groupChatId) return { waiting: ["It answers private chats only. Add the bot to the Telegram group and write one message there, and it takes the group."] };
+    return {};
+  }
+  get services() { return ["telegram"]; }
+
   jobs() {
     return [
       { id: "crumb-flush", helper: "crumb", every: 5 * 60_000, initialDelay: 60_000, run: () => this.guard("flush", () => this.flush()) },

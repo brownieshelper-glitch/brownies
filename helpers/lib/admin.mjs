@@ -17,6 +17,7 @@ import { applyAction as jobAction, totalsView as jobTotals, STATE_LABEL as JOB_S
 import { verifyMessage, getAddress, isAddress } from "ethers";
 import { cap } from "./facts.mjs";
 import { costsView } from "./costs.mjs";
+import { rosterView } from "./roster.mjs";
 
 const CODE_TTL = 10 * 60_000, SESSION_TTL = 24 * 3_600_000, NONCE_TTL = 10 * 60_000;
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
@@ -118,6 +119,11 @@ export class Admin {
       openrouter, refill: this.refill(),
     });
   }
+  /// The roster (lib/roster.mjs): every brownie, what it does, hidden or public, and where it stands.
+  roster() {
+    const { helpers, config, store, clock, brain, alerts } = this.W;
+    return rosterView({ helpers, config, store, clock, brain, alerts, isPaused: (n) => this.isPaused(n), offByEnv: (n) => this.W.off.includes(n), log: this.log });
+  }
   async state() {
     const { S, store, clock, scheduler, helpers, brain, config } = this.W;
     const now = clock.now();
@@ -136,7 +142,10 @@ export class Admin {
         baked: h.spec?.baked ? { holder: h.spec.baked.wallet, telegram: Boolean(h.spec.baked.chatId), wallet: (() => { try { return brain.address(name); } catch { return null; } })() } : undefined,
       };
     });
+    let team = null;
+    try { team = await this.roster(); } catch (e) { this.log(`[admin] the roster failed: ${e.message}`); }
     return {
+      team,
       mode: S.mode, now: nowIso(now), timezone: config.timezone || "UTC", uptimeSeconds: Math.round((Date.now() - (this.W.startedAt || Date.now())) / 1000),
       helpers: list,
       approvals: store.pendingApprovals().map((a) => ({ id: a.id, helper: a.helper, title: a.title, url: a.url, at: nowIso(a.at) })),

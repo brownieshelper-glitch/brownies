@@ -32,6 +32,7 @@
   },
   "helpers": {
     "fudge": {
+      "does": "Marketing. Writes the posts for X three times a day, answers the mentions that ask something, and puts each post on the Facebook Page too.",
       "role": "marketing. You write the posts for X and answer the mentions that ask something",
       "model": "anthropic/claude-sonnet-5.5",
       "dailyCapUsd": 31.5,
@@ -64,6 +65,7 @@
       "media": true
     },
     "crumb": {
+      "does": "Community. Answers people on Telegram, in the group and in private chats, and takes your commands.",
       "role": "community. You answer people on Telegram, in the group and in private, with the facts and the live numbers",
       "model": "anthropic/claude-sonnet-5.5",
       "dailyCapUsd": 32.0,
@@ -72,6 +74,7 @@
       "_questions": "Once a day at questionsHour Crumb writes what people asked into notes/questions/YYYY-MM-DD.md, a short answer each, for the team and for Chip's FAQ page."
     },
     "nib": {
+      "does": "Research. Writes the daily research note and measures how much the project is talked about.",
       "role": "research. Once a day you read the gateway's figures and the site, and write a note on what changed and what to do",
       "model": "anthropic/claude-fable-5.1",
       "dailyCapUsd": 31.0,
@@ -93,6 +96,7 @@
       "reasoningHeadroom": 6000
     },
     "chip": {
+      "does": "Builder. Changes the code as pull requests. Small ones go in alone, bigger ones wait for your yes.",
       "role": "builder. You change code in the repository as pull requests, small ones alone, bigger ones with the owner's approval",
       "model": "anthropic/claude-fable-5.1",
       "dailyCapUsd": 33.0,

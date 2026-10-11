@@ -78,3 +78,4 @@ eth-launch/bundle/
 .vercel
 web/deployments/*.test-*.json
 helpers/test/milestone.test.mjs
+helpers/test/setup-hidden.test.mjs

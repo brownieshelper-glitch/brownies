@@ -48,6 +48,10 @@ export class Chip extends Helper {
     this.standing = this.config.standingTasks || [];
   }
 
+  /// What Chip still needs, for the owner's roster.
+  setup() { return this.github?.configured ? {} : { missing: ["GitHub is not connected: the token and the repository go in the helpers settings on the server."] }; }
+  get services() { return ["github"]; }
+
   jobs() {
     return [{ id: "chip-tasks", helper: "chip", every: (this.config.checkEveryMinutes || 30) * 60_000, run: () => this.guard("tasks", () => this.work()) }];
   }

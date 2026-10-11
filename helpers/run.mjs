@@ -41,6 +41,7 @@ import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { listText as suggestionsList } from "./lib/suggestions.mjs";
 import { billText } from "./lib/costs.mjs";
+import { rosterText } from "./lib/roster.mjs";
 import { Shop } from "./lib/shop.mjs";
 import { Seller } from "./lib/x402seller.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
@@ -72,6 +73,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const privateFile = S.privateFile || new URL("./private.json", import.meta.url);
   const priv = existsSync(privateFile) ? JSON.parse(readFileSync(privateFile, "utf8")) : { helpers: {} };
   for (const [name, c] of Object.entries(priv.helpers || {})) config.helpers[name] = c;
+  config.planned = [...(config.planned || []), ...(priv.planned || [])]; // the brownies that are named and not built yet (the roster shows them)
   const clock = new RealClock();
   const store = new Store(S.dbPath, { tz: config.timezone || "UTC" });
   const gateway = new Gateway({ url: S.gatewayUrl, teamKey: S.teamLogKey, log });
@@ -247,6 +249,8 @@ export async function build({ env = process.env, configFile = null } = {}) {
   W.instagramAuth = new Connect({ name: "instagram", client: instagram, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `Instagram is connected (${me.name}${me.account_type ? ", " + me.account_type.toLowerCase() + " account" : ""}). From now on every cartoon episode and trend clip that goes to TikTok goes up as a reel too, and memes as pictures. /instagram test posts the latest clip now.`).catch(() => {}); } });
   W.linkedinAuth = new Connect({ name: "linkedin", client: linkedin, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `LinkedIn is connected (${me.name}). Truffle writes one post a day about the business for your Approve; /truffle post writes one now, /truffle profile drafts your headline and About, /truffle learn and /truffle study teach it the voice you like.`).catch(() => {}); } });
   scheduler.isOff = (name) => W.admin.isPaused(name);
+  // the roster, once at the start: who works, who waits for a setup or for the owner (the control room shows it live)
+  setTimeout(() => W.admin.roster().then((v) => { for (const line of rosterText(v).split("\n")) log(`[team] ${line}`); }).catch((e) => log(`[team] the roster could not be read: ${e.message}`)), 20_000).unref?.();
   return W;
 }
 

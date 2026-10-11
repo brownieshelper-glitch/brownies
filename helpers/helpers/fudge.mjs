@@ -66,6 +66,15 @@ export class Fudge extends Helper {
     this.maxRepliesPerAuthor = this.config.maxRepliesPerAuthorPerDay ?? 2; // X: one answer per message, and no reply loops with one person
   }
 
+  /// What Fudge still needs, for the owner's roster.
+  setup() {
+    const missing = [], notes = [];
+    if (!this.x?.configured) missing.push("X is not connected: the X app's keys and the account's tokens go in the helpers settings on the server.");
+    if (this.page?.canPage?.()) notes.push("Every post also goes on the Facebook Page.");
+    return { missing, notes };
+  }
+  get services() { return ["x", "instagram"]; }
+
   jobs() {
     return [
       { id: "fudge-post", helper: "fudge", daily: { hours: this.config.postHours || [9, 13, 18], minute: this.config.postMinute || 0 }, run: (slot) => this.guard("post", () => this.post(slot)) },
@@ -168,15 +177,16 @@ export class Fudge extends Helper {
     return { id: posted?.id || null, url, text, place, facebook: fb?.url || null };
   }
 
-  /// The same words on the Facebook Page, when the owner allowed it. Never stops the post: a refusal is a log line.
+  /// The same words on the Facebook Page, when the owner allowed it. Never stops the post: a refusal is a log line and an alert to the owner (at most one an hour), kept as a trouble until a post goes through again.
   async toPage(text, what = "post", xId = null) {
     if (!this.page?.canPage?.()) return null;
     try {
       const fb = await this.page.pagePost({ message: text });
       if (xId) this.store.setMeta(`fudge:fb:${xId}`, fb.id); // so a delete on X takes the Page copy down too
       this.log(`[fudge] the ${what} is on the Facebook Page too: ${fb.url}`);
+      this.alerts?.resolved?.("fudge", "facebook");
       return fb;
-    } catch (e) { this.log(`[fudge] Facebook did not take the ${what}: ${cut(e.message, 120)}`); return null; }
+    } catch (e) { this.log(`[fudge] Facebook did not take the ${what}: ${cut(e.message, 120)}`); await this.alerts?.failure("fudge", "facebook", cut(e.message, 200)); return null; }
   }
 
   /// The owner takes a post down: on X, on the Facebook Page (the copy kept under fudge:fb:<id>), and off the site

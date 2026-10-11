@@ -41,6 +41,8 @@ helpers/helpers/toffee.mjs
 helpers/test/toffee.test.mjs
 helpers/helpers/praline.mjs
 helpers/test/praline.test.mjs
+helpers/helpers/nougat.mjs
+helpers/test/nougat.test.mjs
 helpers/test/video.test.mjs
 helpers/video/
 helpers/test/renderchild.test.mjs

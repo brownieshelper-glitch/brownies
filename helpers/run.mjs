@@ -144,7 +144,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster, baseUrl: S.gatewayUrl, deploymentJson: S.deploymentJson, rpcUrl: S.rpcUrl });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, x, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, deploymentJson: S.deploymentJson, rpcUrl: S.rpcUrl });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
@@ -241,6 +241,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
   crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
   if (all.praline) all.praline.bakery = W.bakery; // a baked brownie is a milestone for its holder
+  crumb.onHolderCommand = (cmd, rest, ctx) => ((cmd === "bounty" || cmd === "bounties") && all.nougat ? all.nougat.holderCommand(cmd, rest, ctx) : W.bakery.holderCommand(cmd, rest, ctx)); // /link and /mybrownie (the Bakery), /bounty and /bounties (Nougat) from holders' private chats
   // TikTok: /tiktok in the owner's chat gives a one-time link; the browser comes back to /tiktok/callback with the code
   W.tiktokAuth = new TikTokAuth({ tiktok, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `TikTok is connected (${me.name}). From now on the vertical copy of every finished video lands in your TikTok inbox as a draft to post from the app. /tiktok test sends the latest one now.`).catch(() => {}); } });
   W.instagramAuth = new Connect({ name: "instagram", client: instagram, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `Instagram is connected (${me.name}${me.account_type ? ", " + me.account_type.toLowerCase() + " account" : ""}). From now on every cartoon episode and trend clip that goes to TikTok goes up as a reel too, and memes as pictures. /instagram test posts the latest clip now.`).catch(() => {}); } });
@@ -277,6 +278,8 @@ async function main() {
     if (req.url.startsWith("/instagram/")) return W.instagramAuth.handle(req, res);
     if (req.url.startsWith("/linkedin/")) return W.linkedinAuth.handle(req, res);
     if (req.url.startsWith("/clips/")) return W.clips.handle(req, res);
+    if (req.url === "/shop" || req.url.startsWith("/shop/") || req.url.startsWith("/shop?")) return W.shop.handle(req, res);
+    if (req.url === "/bounties" || req.url.startsWith("/bounties?")) { if (W.helpers.nougat) return W.helpers.nougat.handle(req, res); res.writeHead(404); return res.end(); }
     if (req.url === "/shop" || req.url.startsWith("/shop/") || req.url.startsWith("/shop?")) return W.shop.handle(req, res);
     if (req.url.startsWith("/praline/")) { if (W.helpers.praline) return W.helpers.praline.handle(req, res); res.writeHead(404); return res.end(); }
     const now = Date.now();

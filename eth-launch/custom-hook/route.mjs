@@ -135,8 +135,8 @@ export function expectedResultHash(outputs, graphDeploymentHash) {
 }
 
 /// Everything the Router call needs, from the targets and the runtime hashes (ours or the factory's dry run).
-export function buildRoute({ ns, nonce, topologyHash, targets, runtimeHashes, router = ROUTER_24H }) {
-  const commitment = graphCommitment({ ns, nonce, topologyHash, targets, router });
+export function buildRoute({ ns, nonce, topologyHash, targets, runtimeHashes, router = ROUTER_24H, totalValue = 0n }) {
+  const commitment = graphCommitment({ ns, nonce, topologyHash, targets, router, totalValue });
   const outputs = targets.map((t) => ({ targetIndex: t.index, targetIdHash: t.targetIdHash, account: t.address, runtimeCodeHash: runtimeHashes[t.index] }));
   const expectedGraphDeploymentHash = deploymentHash({ commitment, targets, runtimeHashes });
   const route = {
@@ -195,9 +195,10 @@ export async function patchForkAuthority(provider, router = ROUTER_24H) {
 
 /// The factory runs our graph once, from the Router's address, on a snapshot that is thrown away: the runtime hashes
 /// and the deployment hash it reports are the truth the real call must match.
-export async function dryRunGraph(provider, { ns, nonce, topologyHash, targets, router = ROUTER_24H }) {
-  const commitment = graphCommitment({ ns, nonce, topologyHash, targets, router });
-  const auth = { routeNamespace: ns, routeNonce: nonce, topologyHash, graphCommitment: commitment, authorizedLauncher: router, totalValue: 0n };
+export async function dryRunGraph(provider, { ns, nonce, topologyHash, targets, router = ROUTER_24H, totalValue = 0n }) {
+  totalValue = BigInt(totalValue);
+  const commitment = graphCommitment({ ns, nonce, topologyHash, targets, router, totalValue });
+  const auth = { routeNamespace: ns, routeNonce: nonce, topologyHash, graphCommitment: commitment, authorizedLauncher: router, totalValue };
   const factory = new ethers.Contract(GRAPH_FACTORY, FACTORY_ABI, provider);
   const [viewCommitment] = await factory.computeGraphCommitment(auth, targets.map((t) => ({ targetIdHash: t.targetIdHash, applicantSalt: t.applicantSalt, deploymentValue: t.deploymentValue, initializerValue: t.initializerValue, initCode: t.initCode, initializerCalldata: t.initializerCalldata })));
   if (viewCommitment !== commitment) throw new Error(`graph commitment: ours ${commitment} vs the factory's ${viewCommitment}`);
@@ -205,9 +206,9 @@ export async function dryRunGraph(provider, { ns, nonce, topologyHash, targets, 
   let result;
   try {
     await provider.send("anvil_impersonateAccount", [router]);
-    await provider.send("anvil_setBalance", [router, ethers.toQuantity(ethers.parseEther("1"))]);
+    await provider.send("anvil_setBalance", [router, ethers.toQuantity(ethers.parseEther("1") + totalValue)]);
     const data = factoryIface.encodeFunctionData("deployGraph", [auth, targets.map((t) => ({ targetIdHash: t.targetIdHash, applicantSalt: t.applicantSalt, deploymentValue: t.deploymentValue, initializerValue: t.initializerValue, initCode: t.initCode, initializerCalldata: t.initializerCalldata }))]);
-    const hash = await provider.send("eth_sendTransaction", [{ from: router, to: GRAPH_FACTORY, data, gas: ethers.toQuantity(30_000_000) }]);
+    const hash = await provider.send("eth_sendTransaction", [{ from: router, to: GRAPH_FACTORY, data, value: ethers.toQuantity(totalValue), gas: ethers.toQuantity(30_000_000) }]);
     let rc = null;
     for (let i = 0; i < 100 && !rc; i++) { rc = await provider.getTransactionReceipt(hash); if (!rc) await new Promise((r) => setTimeout(r, 300)); }
     if (!rc) throw new Error("dry run: no receipt");

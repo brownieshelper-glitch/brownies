@@ -65,6 +65,7 @@ contract BrownieHook is IHooks, IUnlockCallback {
         uint16 capBps; // launch window: max supply share per wallet
         uint32 capSeconds; // launch window length
         address capRouter; // the only router during the window (its msgSender() names the wallet)
+        address capRouter2; // a second trusted router for the window (Programmable's; same msgSender()), or zero
         uint32 moduleDelay; // seconds between proposing and applying a module
         uint32 moduleGas; // gas budget of a module call inside a swap
     }
@@ -90,6 +91,7 @@ contract BrownieHook is IHooks, IUnlockCallback {
     uint256 public immutable CAP_TOKENS;
     uint32 public immutable CAP_SECONDS;
     address public immutable CAP_ROUTER;
+    address public immutable CAP_ROUTER_2;
     uint32 public immutable MODULE_DELAY;
     uint32 public immutable MODULE_GAS;
 
@@ -190,6 +192,7 @@ contract BrownieHook is IHooks, IUnlockCallback {
         CAP_TOKENS = SUPPLY * c.capBps / BPS;
         CAP_SECONDS = c.capSeconds;
         CAP_ROUTER = c.capRouter;
+        CAP_ROUTER_2 = c.capRouter2;
         MODULE_DELAY = c.moduleDelay;
         MODULE_GAS = c.moduleGas;
         owner = c.owner;
@@ -225,7 +228,7 @@ contract BrownieHook is IHooks, IUnlockCallback {
     }
 
     // ================================================================= swaps
-    function beforeSwap(address sender, PoolKey calldata key, SwapParams calldata p, bytes calldata)
+    function beforeSwap(address sender, PoolKey calldata key, SwapParams calldata p, bytes calldata hookData)
         external
         onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
@@ -240,7 +243,7 @@ contract BrownieHook is IHooks, IUnlockCallback {
         _tstore(TS_SHARE, share);
 
         // an exact-output buy names its coins now: check the launch cap before the pool runs
-        if (buy && !exactIn && block.timestamp < capEndsAt()) _checkCap(sender, specified);
+        if (buy && !exactIn && block.timestamp < capEndsAt()) _checkCap(sender, specified, hookData);
 
         if (buy == exactIn) {
             // the ETH leg is the named one: the fee (project + platform) is taken here, on the named amount
@@ -257,7 +260,7 @@ contract BrownieHook is IHooks, IUnlockCallback {
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    function afterSwap(address sender, PoolKey calldata key, SwapParams calldata p, BalanceDelta delta, bytes calldata)
+    function afterSwap(address sender, PoolKey calldata key, SwapParams calldata p, BalanceDelta delta, bytes calldata hookData)
         external
         onlyPoolManager
         returns (bytes4, int128)
@@ -291,7 +294,7 @@ contract BrownieHook is IHooks, IUnlockCallback {
         }
 
         address wallet;
-        if (buy && block.timestamp < capEndsAt()) wallet = _countCap(sender, tokenAmount);
+        if (buy && block.timestamp < capEndsAt()) wallet = _countCap(sender, tokenAmount, hookData);
 
         uint256 platformFee;
         if (fee != 0) {
@@ -335,20 +338,29 @@ contract BrownieHook is IHooks, IUnlockCallback {
     }
 
     // ---- the launch window ----
-    function _buyer(address router) internal view returns (address wallet) {
-        if (router != CAP_ROUTER) revert CapRouterOnly();
-        wallet = IMsgSender(router).msgSender();
+    /// Who is buying, during the window. Only three senders are trusted to name the wallet: the two routers, which
+    /// authenticate their caller (msgSender()), and the launcher, which names the launch wallet of its own initial
+    /// buy in the hook data. Any other sender, and any unnamed wallet, is refused.
+    function _buyer(address router, bytes calldata hookData) internal view returns (address wallet) {
+        if (router == LAUNCHER) {
+            if (hookData.length != 32) revert CapBuyer();
+            wallet = abi.decode(hookData, (address));
+        } else if (router == CAP_ROUTER || (CAP_ROUTER_2 != address(0) && router == CAP_ROUTER_2)) {
+            wallet = IMsgSender(router).msgSender();
+        } else {
+            revert CapRouterOnly();
+        }
         if (wallet == address(0)) revert CapBuyer();
     }
 
-    function _checkCap(address router, uint256 tokens) internal view {
-        address wallet = _buyer(router);
+    function _checkCap(address router, uint256 tokens, bytes calldata hookData) internal view {
+        address wallet = _buyer(router, hookData);
         uint256 had = purchased[wallet];
         if (tokens > CAP_TOKENS - had) revert CapExceeded(wallet, had + tokens, CAP_TOKENS);
     }
 
-    function _countCap(address router, uint256 tokens) internal returns (address wallet) {
-        wallet = _buyer(router);
+    function _countCap(address router, uint256 tokens, bytes calldata hookData) internal returns (address wallet) {
+        wallet = _buyer(router, hookData);
         uint256 had = purchased[wallet];
         if (tokens > CAP_TOKENS - had) revert CapExceeded(wallet, had + tokens, CAP_TOKENS);
         purchased[wallet] = had + tokens;

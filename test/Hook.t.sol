@@ -114,6 +114,7 @@ contract HookTest is Test, Deployers {
     int24 constant START_TICK = 200220; // the coin is currency1 (coins per ETH): about 5,000 USD for the supply
 
     TestRouter router;
+    TestRouter router2; // Programmable's trading router stands in: a second trusted router for the window
     BrownieLauncher launcher;
     BrownieHook hook;
     BrownieToken token;
@@ -122,6 +123,7 @@ contract HookTest is Test, Deployers {
     function setUp() public {
         deployFreshManagerAndRouters();
         router = new TestRouter(manager);
+        router2 = new TestRouter(manager);
         fixedModule = new FixedFeeModule(200, 200);
         _launch(address(fixedModule));
         vm.deal(alice, 100 ether);
@@ -148,6 +150,7 @@ contract HookTest is Test, Deployers {
         c.capBps = 200;
         c.capSeconds = 180;
         c.capRouter = address(router);
+        c.capRouter2 = address(router2);
         c.moduleDelay = 1 days;
         c.moduleGas = 150_000;
     }
@@ -156,8 +159,20 @@ contract HookTest is Test, Deployers {
     /// token (mints to the launcher), the hook (names the token and the launcher, address mined for the flags),
     /// then the launcher's initializer. Here the test contract plays the factory.
     function _launch(address firstModule) internal {
-        launcher = new BrownieLauncher{salt: keccak256("launcher")}(address(manager), address(this), START_TICK);
-        token = new BrownieToken{salt: keccak256("token")}("Brownies", "BROWNIE", address(launcher), "Four AI helpers that work for the coin.", "https://feedthebrownies.com", "https://feedthebrownies.com/assets/logo-1024.png", bytes(""));
+        _launchGraph(firstModule, "g1", address(0), 0, 0);
+    }
+
+    /// With `initialBuyTokens` > 0 the launcher buys that many coins for `buyer` with `value` ETH inside the launch.
+    function _launchGraph(address firstModule, string memory seed, address buyer, uint256 initialBuyTokens, uint256 value) internal {
+        _deployGraph(firstModule, seed, buyer, initialBuyTokens);
+        launcher.initializeGraph{value: value}(address(token), address(hook));
+        key = launcher.poolKey();
+    }
+
+    /// The three contracts without the initializer call (so a test can expect the initializer to revert).
+    function _deployGraph(address firstModule, string memory seed, address buyer, uint256 initialBuyTokens) internal {
+        launcher = new BrownieLauncher{salt: keccak256(abi.encodePacked(seed, "launcher"))}(address(manager), address(this), START_TICK, buyer, initialBuyTokens);
+        token = new BrownieToken{salt: keccak256(abi.encodePacked(seed, "token"))}("Brownies", "BROWNIE", address(launcher), "Four AI helpers that work for the coin.", "https://feedthebrownies.com", "https://feedthebrownies.com/assets/logo-1024.png", bytes(""));
         BrownieHook.Config memory c = _config(firstModule, address(token), address(launcher));
         bytes32 initHash = keccak256(abi.encodePacked(type(BrownieHook).creationCode, abi.encode(c)));
         bytes32 hookSalt;
@@ -168,8 +183,6 @@ contract HookTest is Test, Deployers {
         }
         hook = new BrownieHook{salt: hookSalt}(c);
         assertTrue(launcher.hasHookFlags(address(hook)), "mined");
-        launcher.initializeGraph(address(token), address(hook));
-        key = launcher.poolKey();
     }
 
     function _approve(address who) internal {
@@ -232,7 +245,7 @@ contract HookTest is Test, Deployers {
     function test_launch_once_and_only_initializer() public {
         vm.expectRevert(BrownieLauncher.Once.selector);
         launcher.initializeGraph(address(token), address(hook));
-        BrownieLauncher other = new BrownieLauncher(address(manager), address(0xDEAD), START_TICK);
+        BrownieLauncher other = new BrownieLauncher(address(manager), address(0xDEAD), START_TICK, address(0), 0);
         vm.expectRevert(BrownieLauncher.OnlyInitializer.selector);
         other.initializeGraph(address(token), address(hook));
     }
@@ -339,6 +352,80 @@ contract HookTest is Test, Deployers {
         assertGt(token.balanceOf(alice), 20_000_000 ether, "no cap after the window");
         _swapPlain(bob, true, -0.5 ether, 0.5 ether);
         assertGt(token.balanceOf(bob), 0, "any router after the window");
+    }
+
+    /// Programmable's trading router is trusted during the window like the Universal Router; the cap is one count
+    /// per wallet across both; an unknown sender is still refused.
+    function test_cap_second_router() public {
+        SwapParams memory p = SwapParams({zeroForOne: true, amountSpecified: int256(12_000_000 ether), sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+        vm.prank(alice);
+        router2.swap{value: 1 ether}(key, p);
+        assertEq(token.balanceOf(alice), 12_000_000 ether, "bought through the second router");
+        assertEq(hook.purchased(alice), 12_000_000 ether, "counted");
+        // the rest of the cap through the first router, one count per wallet
+        _swap(alice, true, int256(8_000_000 ether), 1 ether);
+        vm.expectRevert();
+        _swap(alice, true, int256(1 ether), 1 ether);
+        vm.prank(alice);
+        vm.expectRevert();
+        router2.swap{value: 1 ether}(key, p);
+        // a sender that is neither router nor the launcher
+        vm.expectRevert();
+        _swapPlain(bob, true, int256(1 ether), 1 ether);
+        // the same hook data trick from a plain router is refused too: the launcher alone may name a wallet
+        SwapParams memory q = SwapParams({zeroForOne: true, amountSpecified: int256(1 ether), sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+        vm.prank(bob);
+        vm.expectRevert();
+        swapRouter.swap{value: 1 ether}(key, q, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), abi.encode(bob));
+    }
+
+    // ------------------------------------------------------------------ the initial buy inside the launch
+    function test_initial_buy_inside_launch() public {
+        uint256 ethBefore = address(this).balance;
+        uint256 aliceEthBefore = alice.balance;
+        _launchGraph(address(fixedModule), "g2", alice, 20_000_000 ether, 1 ether);
+        assertEq(token.balanceOf(alice), 20_000_000 ether, "the launch wallet holds exactly the initial buy");
+        assertEq(hook.purchased(alice), 20_000_000 ether, "counted against the cap");
+        assertEq(address(launcher).balance, 0, "the launcher keeps no ETH");
+        uint256 paid = ethBefore - address(this).balance; // what the initializer sent, less the refund it did not get back
+        uint256 refunded = alice.balance - aliceEthBefore;
+        assertEq(paid, 1 ether, "the initializer paid the whole value");
+        assertGt(refunded, 0.9 ether, "most of it came back to the buyer");
+        assertLt(refunded, 1 ether, "less what the buy cost");
+        assertGt(hook.harvestable(), 0, "project fee booked on the initial buy");
+        assertGt(hook.platformOwed(), 0, "platform fee booked on the initial buy");
+        // the buyer is full for the window; another wallet is not
+        _approve(alice);
+        vm.expectRevert();
+        _swap(alice, true, int256(1 ether), 1 ether);
+        _approve(bob);
+        _swap(bob, true, int256(1_000_000 ether), 1 ether);
+    }
+
+    function test_initial_buy_needs_matching_value() public {
+        _deployGraph(address(fixedModule), "g3", alice, 20_000_000 ether);
+        vm.expectRevert(BrownieLauncher.BuyValue.selector);
+        launcher.initializeGraph{value: 0}(address(token), address(hook));
+        _deployGraph(address(fixedModule), "g4", address(0), 0);
+        vm.expectRevert(BrownieLauncher.BuyValue.selector);
+        launcher.initializeGraph{value: 1 ether}(address(token), address(hook));
+    }
+
+    function test_initial_buy_over_the_cap_fails_the_launch() public {
+        _deployGraph(address(fixedModule), "g5", alice, 20_000_001 ether);
+        vm.expectRevert();
+        launcher.initializeGraph{value: 1 ether}(address(token), address(hook));
+    }
+
+    function test_initial_buy_too_little_eth_fails_the_launch() public {
+        _deployGraph(address(fixedModule), "g6", alice, 20_000_000 ether);
+        vm.expectRevert();
+        launcher.initializeGraph{value: 0.001 ether}(address(token), address(hook));
+    }
+
+    function test_initial_buy_needs_a_buyer() public {
+        vm.expectRevert(BrownieLauncher.NoBuyer.selector);
+        new BrownieLauncher(address(manager), address(this), START_TICK, address(0), 1 ether);
     }
 
     // ------------------------------------------------------------------ the fee leaves

@@ -161,6 +161,8 @@ export function domainSeparator(name, tokenAddress) {
 }
 
 // ---- the hook's constructor config (the same numbers as the direct path, hookpath.mjs) ----------------------------------
+export const PROGRAMMABLE_TRADING_ROUTER = "0xd92A36B0000531EF3063dEd4De20A0783308446C"; // their Ethereum trading router: msgSender() like the Universal Router
+
 export function hookConfig({ cfg, harvester, owner }) {
   const h = cfg.hook || {};
   const capOn = Boolean(cfg.walletCap?.enabled);
@@ -171,7 +173,8 @@ export function hookConfig({ cfg, harvester, owner }) {
     baseBuyBps: String(cfg.creatorBuyFeeBps), baseSellBps: String(cfg.creatorSellFeeBps),
     maxBuyBps: String(h.maxBuyBps ?? 300), maxSellBps: String(h.maxSellBps ?? 300), maxModuleShareBps: String(h.maxModuleShareBps ?? 5000),
     capBps: String(capOn ? Number(cfg.walletCap.bps) : 10000), capSeconds: String(capOn ? Number(cfg.walletCap.minutes) * 60 : 1),
-    capRouter: A.UNIVERSAL_ROUTER, moduleDelay: String(h.moduleDelaySeconds ?? 86_400), moduleGas: String(h.moduleGas ?? 150_000),
+    capRouter: A.UNIVERSAL_ROUTER, capRouter2: ethers.getAddress(h.capRouter2 || PROGRAMMABLE_TRADING_ROUTER),
+    moduleDelay: String(h.moduleDelaySeconds ?? 86_400), moduleGas: String(h.moduleGas ?? 150_000),
   };
 }
 
@@ -179,7 +182,11 @@ export function hookConfig({ cfg, harvester, owner }) {
 export function buildStampedPack({
   cfg, workdir, launchWallet, harvester, owner, nonce, initialTick, revision, origin = "https://github.com/brownieshelper-glitch/brownies",
   imagePath = path.join(PROJECT, "web", "assets", "logo-1024.png"), permitWindow = null, tokenAddress = null, extraChecks = [], log = console.log,
+  initialBuyTokens = 0n, devBuyWei = 0n,
 }) {
+  initialBuyTokens = BigInt(initialBuyTokens); devBuyWei = BigInt(devBuyWei);
+  if ((initialBuyTokens === 0n) !== (devBuyWei === 0n)) throw new Error("the initial buy needs both the coins (initialBuyTokens) and the ETH (devBuyWei), or neither");
+  if (initialBuyTokens >= TOKEN_SUPPLY) throw new Error("initialBuyTokens must be below the supply");
   if (!/^0x[0-9a-f]{64}$/.test(nonce) || /^0x0{64}$/.test(nonce)) throw new Error("nonce must be a nonzero lowercase bytes32");
   if (!/^[0-9a-f]{40}$/.test(revision)) throw new Error("revision must be a lowercase 40-hex git commit");
   if (!cfg.website || !/^https:\/\//.test(cfg.website)) throw new Error("the coin config needs a public https website (website)");
@@ -212,13 +219,13 @@ export function buildStampedPack({
   const config = hookConfig({ cfg, harvester, owner });
   const capTokens = (TOKEN_SUPPLY * BigInt(config.capBps)) / 10000n;
   const immutables = {
-    launcher: runtimeImmutables(output, launcher, { poolManager: A.POOL_MANAGER, INITIALIZER: GRAPH_FACTORY, INITIAL_TICK: String(tick) }, "launcher"),
+    launcher: runtimeImmutables(output, launcher, { poolManager: A.POOL_MANAGER, INITIALIZER: GRAPH_FACTORY, INITIAL_TICK: String(tick), BUYER: ethers.getAddress(launchWallet), INITIAL_BUY_TOKENS: initialBuyTokens.toString() }, "launcher"),
     token: runtimeImmutables(output, token, { decimals: "18", INITIAL_CHAIN_ID: "1", INITIAL_DOMAIN_SEPARATOR: tokenAddress ? domainSeparator(cfg.name, tokenAddress) : ethers.ZeroHash }, "token"),
     hook: runtimeImmutables(output, hook, {
       poolManager: A.POOL_MANAGER, TOKEN: { target: TARGET_IDS.token }, QUOTE: NATIVE, QUOTE_ID: "0", QUOTE_IS_0: true, HARVESTER: config.harvester,
       PLATFORM_RECIPIENT: config.platformRecipient, PLATFORM_BPS: config.platformBps, LAUNCHER: { target: TARGET_IDS.launcher },
       BASE_BUY_BPS: config.baseBuyBps, BASE_SELL_BPS: config.baseSellBps, MAX_BUY_BPS: config.maxBuyBps, MAX_SELL_BPS: config.maxSellBps, MAX_MODULE_SHARE_BPS: config.maxModuleShareBps,
-      CAP_TOKENS: capTokens.toString(), CAP_SECONDS: config.capSeconds, CAP_ROUTER: config.capRouter, MODULE_DELAY: config.moduleDelay, MODULE_GAS: config.moduleGas,
+      CAP_TOKENS: capTokens.toString(), CAP_SECONDS: config.capSeconds, CAP_ROUTER: config.capRouter, CAP_ROUTER_2: config.capRouter2, MODULE_DELAY: config.moduleDelay, MODULE_GAS: config.moduleGas,
     }, "hook"),
   };
 
@@ -241,7 +248,9 @@ export function buildStampedPack({
     schemaVersion: "brownies.custom-hook-build-evidence.v1", compiler: version, settings: input.settings,
     standardJsonSha256: sha256(inputBytes), sources: Object.fromEntries([...sources].map(([p, c]) => [p, sha256(Buffer.from(c, "utf8"))])), artifacts,
     targets: { launcher: "src/hook/BrownieLauncher.sol:BrownieLauncher", token: "src/hook/BrownieToken.sol:BrownieToken", hook: "src/hook/BrownieHook.sol:BrownieHook" },
-    graphFactory: GRAPH_FACTORY, router: ROUTER_24H, initialTick: tick, hookConfig: config, note: "built by eth-launch/custom-hook/build.mjs from the exact sources listed in sources.txt",
+    graphFactory: GRAPH_FACTORY, router: ROUTER_24H, initialTick: tick, hookConfig: config,
+    initialBuy: { buyer: ethers.getAddress(launchWallet), tokens: initialBuyTokens.toString(), maxEthWei: devBuyWei.toString(), note: "executed by the launcher inside the launch transaction with the ETH sent on the Router call; the unused part is refunded to the buyer in the same transaction" },
+    note: "built by eth-launch/custom-hook/build.mjs from the exact sources listed in sources.txt",
   };
   fs.writeFileSync(path.join(workdir, "evidence", "build.json"), JSON.stringify(evidence, null, 2) + "\n");
 
@@ -261,9 +270,9 @@ export function buildStampedPack({
     targets: [
       {
         targetId: TARGET_IDS.launcher, compilationUnitId: "brownie-hook-graph", artifact: "artifacts/launcher.json", applicantSalt: "0x" + "01".repeat(32),
-        constructorArguments: [A.POOL_MANAGER, GRAPH_FACTORY, String(tick)],
+        constructorArguments: [A.POOL_MANAGER, GRAPH_FACTORY, String(tick), ethers.getAddress(launchWallet), initialBuyTokens.toString()],
         initializer: { function: "initializeGraph", arguments: [{ target: TARGET_IDS.token }, { target: TARGET_IDS.hook }] },
-        deploymentValueWei: "0", initializerValueWei: "0", componentKind: "other", declaredHookPermissions: null, runtimeImmutables: immutables.launcher,
+        deploymentValueWei: "0", initializerValueWei: devBuyWei.toString(), componentKind: "other", declaredHookPermissions: null, runtimeImmutables: immutables.launcher,
       },
       {
         targetId: TARGET_IDS.token, compilationUnitId: "brownie-hook-graph", artifact: "artifacts/token.json", applicantSalt: "0x" + "02".repeat(32),
@@ -293,7 +302,7 @@ export function buildStampedPack({
         liquidityTargetId: TARGET_IDS.launcher,
         assessment: { schemaVersion: "programmable.direct-native-liquidity-model-assessment.v1", status: "required", requestClaimsExecution: false, requiredVectorIds: ["liquidity.seeded.pool-active-liquidity", "liquidity.seeded.position-custody-and-withdrawal", "liquidity.seeded.buy-and-sell"] },
       },
-      fundingMode: "none",
+      fundingMode: devBuyWei > 0n ? "wallet-transaction-value" : "none",
       accountingMode: "additive-platform-share",
       assessmentBase: "executed-gross-declared-quote",
       feeCurrency: "declared-quote-currency",
@@ -307,7 +316,7 @@ export function buildStampedPack({
   };
   fs.writeFileSync(path.join(workdir, "programmable-launch.config.json"), JSON.stringify(packConfig, null, 2) + "\n");
   log(`pack config      ${path.join(workdir, "programmable-launch.config.json")}  (profile 3.6.0, 3 targets, 24h router ${ROUTER_24H})`);
-  return { packConfig, evidence, config, sources: [...sources.keys()], workdir, window, capTokens };
+  return { packConfig, evidence, config, sources: [...sources.keys()], workdir, window, capTokens, initialBuyTokens, devBuyWei };
 }
 
 /// Second pass: the token's EIP-712 domain separator (a solmate immutable) needs the token's own address, which only
@@ -334,6 +343,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     cfg, workdir: path.resolve(need("--out")), launchWallet: need("--launch-wallet"), harvester: need("--harvester"), owner: flag("--owner", need("--launch-wallet")),
     nonce: need("--nonce"), initialTick: need("--tick"), revision: need("--revision"), origin: flag("--origin") || undefined,
     imagePath: flag("--image") ? path.resolve(flag("--image")) : undefined, tokenAddress: flag("--token-address"),
+    initialBuyTokens: BigInt(flag("--initial-buy-tokens", "0")), devBuyWei: BigInt(flag("--dev-buy-wei", "0")),
   });
   console.log(`sources          ${r.sources.length} files listed in sources.txt`);
 }

@@ -24,7 +24,7 @@ if [ "${2:-}" = "--commit" ]; then
   git add -f $(cat "$LIST")
   git add $TOOLING
   git status --short | head -60
-  git commit -m "The evolving hook (launcher, token, hook, modules) and the Programmable custom-hook pack tooling; the exact dependency sources the pack compiles" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+  git commit -m "${COMMIT_MSG:-The evolving hook (launcher, token, hook, modules) and the Programmable custom-hook pack tooling; the exact dependency sources the pack compiles}" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   echo "committed $(git rev-parse HEAD)  (not pushed)"
 else
   echo "== dry run: nothing staged. With --commit these are added too: $TOOLING"

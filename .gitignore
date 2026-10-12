@@ -85,3 +85,4 @@ helpers/helpers/crust.mjs
 helpers/test/crust.test.mjs
 helpers/test/sprinkle-recover.test.mjs
 helpers/test/sprinkle-sound.test.mjs
+helpers/test/sprinkle-own.test.mjs

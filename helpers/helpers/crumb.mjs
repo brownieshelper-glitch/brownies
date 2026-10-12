@@ -79,6 +79,7 @@ export class Crumb extends Helper {
     this.onNote = deps.onNote || null;           // (approvalId, text)
     this.siteUrl = String(deps.siteUrl || "https://feedthebrownies.com").replace(/\/$/, "");
     this.onOwnerCommand = deps.onOwnerCommand || null; // (command, text) -> true (done), a reply string, or nothing (not a command: answered as a message)
+    this.onOwnerMedia = deps.onOwnerMedia || null; // (message) -> true (taken), a reply string, or nothing: a video the owner sends in his private chat (the video maker posts it)
     this.onHolderCommand = deps.onHolderCommand || null; // (command, text, { chatId, from }) -> a reply string; /link and /mybrownie from any private chat (the Bakery)
     this.statsAt = new Map(); // chat -> time of the last /stats answer (one a minute per chat, no model call)
     this.live = { at: 0, text: "" };
@@ -140,6 +141,13 @@ export class Crumb extends Helper {
     if (u.callback_query) return this.callback(u.callback_query);
     if (u.my_chat_member) return this.membership(u.my_chat_member);
     const m = u.message;
+    // a video the owner sends in his own chat, the text of the post as its caption: handed to whoever takes his videos.
+    // From nobody else and from no other chat.
+    if (m && typeof m.text !== "string" && (m.video || m.document || m.animation) && this.onOwnerMedia && this.ownerChatId && String(m.chat?.id) === this.ownerChatId) {
+      const reply = await this.onOwnerMedia(m);
+      if (typeof reply === "string" && reply) await this.tg.sendMessage(this.ownerChatId, reply, { replyTo: m.message_id });
+      return reply ? "media" : null;
+    }
     if (!m || typeof m.text !== "string" || !m.text.trim()) return null;
     const chatId = String(m.chat.id);
     if (/group/.test(m.chat.type || "")) this.rememberGroup(m.chat);

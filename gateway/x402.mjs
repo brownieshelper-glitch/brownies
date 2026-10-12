@@ -53,9 +53,9 @@ export class X402Payer {
   constructor({ privateKey = "", wallet = null, chainId = 8453, asset = USDC[chainId] || USDC[8453], maxMicro = 2_000_000, fetch = globalThis.fetch, now = () => Date.now(), log = () => {}, allowTo = [] } = {}) {
     this.wallet = wallet || new Wallet(privateKey);
     this.chainId = chainId; this.asset = asset; this.maxMicro = maxMicro;
-    // where the money may go: the addresses the owner set (X402_PAY_TO), or else the first address ever paid, pinned
-    this.allowTo = (allowTo || []).map((a) => String(a).toLowerCase());
-    this.pinnedTo = null;
+    // where the money may go: the addresses that were named (X402_PAY_TO, or the known payee the gateway passes).
+    // With no address named nothing is paid: the first address a server happens to ask for is not a reason to trust it.
+    this.allowTo = (allowTo || []).map((a) => String(a).toLowerCase()).filter((a) => /^0x[0-9a-f]{40}$/.test(a));
     this.fetchRaw = fetch; this.now = now; this.log = log;
     this.paid = { count: 0, micro: 0, last: null }; // what this process has paid so far
   }
@@ -71,8 +71,7 @@ export class X402Payer {
     const micro = Number(req.amount);
     if (!Number.isInteger(micro) || micro < 0) throw new Error(`x402: bad amount ${req.amount}`);
     const to = String(req.payTo).toLowerCase();
-    if (this.allowTo.length ? !this.allowTo.includes(to) : (this.pinnedTo && this.pinnedTo !== to)) throw new Error(`x402: the payment would go to ${req.payTo}, not an address the owner allowed; set X402_PAY_TO to allow it`);
-    if (!this.allowTo.length && !this.pinnedTo) { this.pinnedTo = to; this.log(`[x402] the pantry will pay ${req.payTo} and no other address until the owner sets X402_PAY_TO`); }
+    if (!this.allowTo.includes(to)) throw new Error(`x402: the payment would go to ${req.payTo}, not an address the owner allowed${this.allowTo.length ? "" : " (none is named)"}; set X402_PAY_TO to allow it`);
     const cap = maxMicro != null && Number.isFinite(Number(maxMicro)) ? Math.min(this.maxMicro, Math.max(0, Math.ceil(Number(maxMicro)))) : this.maxMicro;
     if (micro > cap) throw new Error(`x402: the price ${(micro / 1e6).toFixed(6)} USDC is over the cap of ${(cap / 1e6).toFixed(cap === this.maxMicro ? 2 : 6)} USDC ${cap === this.maxMicro ? "per request" : "for this request"}`);
     const sec = Math.floor(this.now() / 1000);
@@ -96,7 +95,11 @@ export class X402Payer {
     const { header: sig, payload, micro } = await this.sign(required, { maxMicro });
     const headers = new Headers(init.headers || {});
     headers.set("payment-signature", sig);
-    const second = await this.fetchRaw(url, { ...init, headers });
+    let second;
+    // from here the signature has left this machine: whoever holds it may move the money for as long as it is valid,
+    // whether or not an answer comes back. An error after this point carries what was signed.
+    try { second = await this.fetchRaw(url, { ...init, headers }); }
+    catch (e) { e.signedMicro = micro; e.authorization = payload.payload.authorization; throw e; }
     if (second.status === 402) {
       let why = ""; try { why = b64.decode(second.headers.get("payment-required")).error || ""; } catch { /* no detail */ }
       throw new Error(`x402: payment refused${why ? `: ${why}` : ""}`);
@@ -104,9 +107,11 @@ export class X402Payer {
     let settlement = null;
     const pr = second.headers.get("payment-response");
     if (pr) { try { settlement = b64.decode(pr); } catch { settlement = null; } }
-    const paid = { micro, settlement, to: payload.accepted.payTo, authorization: payload.payload.authorization };
+    // settled: the resource said the transfer was made. A retry that came back an error with no such word paid nothing
+    // that we know of, and the caller must not be charged for it.
+    const paid = { micro, settlement, settled: Boolean(settlement && (settlement.success === true || settlement.transaction)), to: payload.accepted.payTo, authorization: payload.payload.authorization };
     if (second.ok) { this.paid.count++; this.paid.micro += micro; this.paid.last = { at: this.now(), micro, url: String(url), tx: settlement?.transaction || null }; }
-    this.log(`[x402] paid ${(micro / 1e6).toFixed(6)} USDC to ${paid.to} for ${url}${settlement?.transaction ? ` (tx ${settlement.transaction})` : ""}`);
+    this.log(`[x402] ${second.ok || paid.settled ? "paid" : "signed, answer " + second.status + " and no receipt for"} ${(micro / 1e6).toFixed(6)} USDC to ${paid.to} for ${url}${settlement?.transaction ? ` (tx ${settlement.transaction})` : ""}`);
     return { response: second, paid };
   }
 }

@@ -8,7 +8,7 @@ import { Wallet } from "ethers";
 import { Ledger } from "../ledger.mjs";
 import { verifyKey, keyMessage, keyFromSignature, walletToBeneficiary, beneficiaryToWallet } from "../auth.mjs";
 
-const CHAIN = 4663;
+const CHAIN = 4663; // any chain id will do here: the test for a wrong chain uses 1 as the other one
 const freshLedger = () => new Ledger(join(mkdtempSync(join(tmpdir(), "brownies-")), "l.sqlite"));
 
 test("ledger: an activation credits once, by id", () => {

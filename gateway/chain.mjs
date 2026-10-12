@@ -64,6 +64,7 @@ export class Chain {
     this.keeperFloorWei = parseEther(String(cfg.keeperFloorEth ?? 0.01));
     this.releaseMinMicro = BigInt(Math.round(Number(cfg.releaseMinSugar ?? 1) * 1e6));
     this.signer = cfg.keeperPrivateKey ? new Wallet(cfg.keeperPrivateKey, this.provider) : null;
+    this.maxGwei = Number(cfg.keeperMaxGwei) > 0 ? Number(cfg.keeperMaxGwei) : 40; // the keeper waits out a fee spike: above this it sends nothing
     this.lastWarn = new Map(); // topic -> time, so a standing problem is logged once an hour, not every tick
     this.claimMemo = null; this.claimStuck = 0; this.claimBackoffUntil = 0; // a claim that moved nothing is not repeated every tick
     this.stopped = false;
@@ -178,6 +179,12 @@ export class Chain {
       this.warnOnce("sim:" + label, `[keeper] ${label} would revert: ${short(e)}`);
       return { skipped: true, reason: short(e) };
     }
+    // a claim that moves a little WETH is not worth sending into a fee spike: the next tick finds it still waiting
+    try {
+      const fee = this.provider.getFeeData ? await this.provider.getFeeData() : null;
+      const gwei = fee ? Number(fee.maxFeePerGas ?? fee.gasPrice ?? 0n) / 1e9 : 0;
+      if (gwei > this.maxGwei) { this.warnOnce("fee:" + fn, `[keeper] ${label} waits: the fee is ${gwei.toFixed(0)} gwei, over the ceiling of ${this.maxGwei}`); return { skipped: true, reason: `the fee is ${gwei.toFixed(0)} gwei` }; }
+    } catch { /* no reading of the fee: the send goes on as before */ }
     const tx = await c[fn](overrides);
     const r = await tx.wait();
     this.log.log(`[keeper] ${label} in ${r.hash}`);

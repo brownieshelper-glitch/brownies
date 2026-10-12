@@ -17,7 +17,8 @@ if (!key) {
 }
 const wallet = new Wallet(key);
 console.log(`buyer ${wallet.address}, buying "${item}" from ${base}`);
-const payer = new X402Payer({ wallet, chainId: 8453, maxMicro: 20_000_000, log: (l) => console.log("   ", l) });
+// the payer pays the shop's own payout wallet and no other (SHOP_PAY_TO names another shop's)
+const payer = new X402Payer({ wallet, chainId: 8453, maxMicro: 20_000_000, allowTo: [process.env.SHOP_PAY_TO || "0x66E16b3E40647274133920e6bE72E277811Cd574"], log: (l) => console.log("   ", l) });
 const t0 = Date.now();
 try {
   const { response, paid } = await payer.fetch(`${base}/shop/${item}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt }) });

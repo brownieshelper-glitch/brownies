@@ -10,6 +10,13 @@ import { dirname } from "node:path";
 
 export const dayKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
+/// A hold or a charge is a whole number of micro-dollars from 0 up. Anything else is refused here, whoever sent it:
+/// a negative hold lowers what is held and so reads as more balance, and NaN poisons the column for good.
+const amount = (micro) => {
+  if (!Number.isSafeInteger(micro) || micro < 0) { const e = new Error(`not an amount of micro-dollars: ${micro}`); e.badAmount = true; throw e; }
+  return micro;
+};
+
 export class Ledger {
   constructor(path) {
     mkdirSync(dirname(path), { recursive: true });
@@ -59,14 +66,24 @@ export class Ledger {
         calls INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(granter, grantee, day)
       );
+      CREATE TABLE IF NOT EXISTS holds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        beneficiary TEXT NOT NULL,
+        micro INTEGER NOT NULL,
+        via TEXT,
+        day TEXT,
+        at INTEGER NOT NULL,
+        floor_micro INTEGER NOT NULL DEFAULT 0,
+        upstream_id TEXT,
+        model TEXT
+      );
     `);
     // a book opened before grants existed gets the column that says who spent through a grant
     if (!this.db.prepare("PRAGMA table_info(spend)").all().some((c) => c.name === "via")) this.db.exec("ALTER TABLE spend ADD COLUMN via TEXT");
     // holds: what requests in flight have reserved, so two requests can never both spend the same dollar
     if (!this.db.prepare("PRAGMA table_info(accounts)").all().some((c) => c.name === "held_micro")) this.db.exec("ALTER TABLE accounts ADD COLUMN held_micro INTEGER NOT NULL DEFAULT 0");
     if (!this.db.prepare("PRAGMA table_info(grant_spend)").all().some((c) => c.name === "held_micro")) this.db.exec("ALTER TABLE grant_spend ADD COLUMN held_micro INTEGER NOT NULL DEFAULT 0");
-    // a restart forgets the requests that were in flight: nothing is held at the start
-    this.db.exec("UPDATE accounts SET held_micro = 0 WHERE held_micro <> 0; UPDATE grant_spend SET held_micro = 0 WHERE held_micro <> 0");
+    // what a process that stopped left in flight is dealt with below (_recover), once the statements exist
     this.q = {
       getMeta: this.db.prepare("SELECT v FROM meta WHERE k = ?"),
       setMeta: this.db.prepare("INSERT INTO meta(k, v) VALUES(?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v"),
@@ -89,13 +106,50 @@ export class Ledger {
       // grants
       setGrant: this.db.prepare("INSERT INTO grants(granter, grantee, daily_micro, created, revoked) VALUES(?, ?, ?, ?, NULL) ON CONFLICT(granter, grantee) DO UPDATE SET daily_micro = excluded.daily_micro, revoked = NULL, created = CASE WHEN grants.revoked IS NULL THEN grants.created ELSE excluded.created END"),
       revokeGrant: this.db.prepare("UPDATE grants SET revoked = ? WHERE granter = ? AND grantee = ? AND revoked IS NULL"),
+      revokeAllGrants: this.db.prepare("UPDATE grants SET revoked = ? WHERE granter = ? AND revoked IS NULL"),
       grant: this.db.prepare("SELECT granter, grantee, daily_micro, created FROM grants WHERE granter = ? AND grantee = ? AND revoked IS NULL"),
       grantsBy: this.db.prepare("SELECT granter, grantee, daily_micro, created FROM grants WHERE granter = ? AND revoked IS NULL ORDER BY created, grantee"),
       grantsTo: this.db.prepare("SELECT granter, grantee, daily_micro, created FROM grants WHERE grantee = ? AND revoked IS NULL ORDER BY created, granter"),
       grantSpent: this.db.prepare("SELECT micro, calls, held_micro FROM grant_spend WHERE granter = ? AND grantee = ? AND day = ?"),
       addGrantSpend: this.db.prepare("INSERT INTO grant_spend(granter, grantee, day, micro, calls) VALUES(?, ?, ?, ?, 1) ON CONFLICT(granter, grantee, day) DO UPDATE SET micro = micro + excluded.micro, calls = calls + 1"),
       grantCounts: this.db.prepare("SELECT COUNT(*) AS n FROM grants WHERE revoked IS NULL"),
+      // the calls in flight, one row each, so a process that stops leaves a record of them
+      addHold: this.db.prepare("INSERT INTO holds(beneficiary, micro, via, day, at) VALUES(?, ?, ?, ?, ?)"),
+      dropHold: this.db.prepare("DELETE FROM holds WHERE id = ?"),
+      noteHold: this.db.prepare("UPDATE holds SET floor_micro = MAX(floor_micro, ?), upstream_id = COALESCE(?, upstream_id), model = COALESCE(?, model) WHERE id = ?"),
+      allHolds: this.db.prepare("SELECT id, beneficiary, micro, via, day, at, floor_micro, upstream_id, model FROM holds ORDER BY id"),
     };
+    this.recovered = this._recover();
+  }
+
+  /// What a process that stopped left in flight. A call the upstream had taken is booked at what was known of it then
+  /// (the floor the proxy noted: the prompt it read, or what the pantry paid), never more than its hold; a call that
+  /// had not got that far cost nothing. Then nothing is held. Returns the list, so the server can ask the upstream what
+  /// each really cost. Before 2026-10-12 a restart forgot them all: paid upstream, charged to nobody.
+  _recover() {
+    const rows = this.q.allHolds.all();
+    const out = [];
+    this._tx(() => {
+      for (const r of rows) {
+        const b = r.beneficiary, hold = Number(r.micro), at = Number(r.at);
+        const floor = Math.max(0, Math.min(Number(r.floor_micro) || 0, hold));
+        if (floor > 0) {
+          this.q.ensureAccount.run(b);
+          this.q.spend.run(floor, b);
+          this.q.logSpend.run(b, at, r.model ?? null, floor, r.upstream_id ?? null, null, null, r.via ?? null);
+          if (r.via) this.q.addGrantSpend.run(b, r.via, r.day || dayKey(at), floor);
+        }
+        out.push({ beneficiary: b, via: r.via || null, day: r.day || null, at, holdMicro: hold, bookedMicro: floor, upstreamId: r.upstream_id || null, model: r.model || null });
+      }
+      this.db.exec("DELETE FROM holds; UPDATE accounts SET held_micro = 0 WHERE held_micro <> 0; UPDATE grant_spend SET held_micro = 0 WHERE held_micro <> 0");
+    });
+    return out;
+  }
+
+  /// What the gateway carried itself so far: the part of a call's cost that was over its hold (see settle).
+  get shortfallMicro() {
+    const r = this.q.getMeta.get("shortfallMicro");
+    return r ? Number(r.v) || 0 : 0;
   }
 
   /// node:sqlite has no transaction helper: BEGIN, run, COMMIT, and ROLLBACK on any throw.
@@ -144,14 +198,16 @@ export class Ledger {
 
   /// Reserves the most a request could cost before the call is made, in one step with the check, so two requests in
   /// flight can never both spend the same dollar. Returns the hold to settle; throws when the balance has no room.
-  reserve(beneficiary, micro) {
+  reserve(beneficiary, micro, now = Date.now()) {
     const b = beneficiary.toLowerCase();
+    amount(micro);
     return this._tx(() => {
       this.q.ensureAccount.run(b);
       const bal = this.balance(b);
       if (bal.availableMicro < micro) { const e = new Error(`balance ${bal.availableMicro} under ${micro}`); e.insufficient = true; e.availableMicro = bal.availableMicro; throw e; }
       this.q.hold.run(micro, b);
-      return { beneficiary: b, micro, via: null, day: null };
+      const id = Number(this.q.addHold.run(b, micro, null, null, now).lastInsertRowid);
+      return { id, beneficiary: b, micro, via: null, day: null };
     });
   }
 
@@ -159,6 +215,7 @@ export class Ledger {
   /// granter has free. The hold sits on the granter's account and on the grant's day.
   reserveVia(granter, granteeWallet, micro, now = Date.now()) {
     const b = granter.toLowerCase(), via = granteeWallet.toLowerCase(), day = dayKey(now);
+    amount(micro);
     return this._tx(() => {
       const room = this.grantRoom(b, via, now);
       if (!room) { const e = new Error("no grant"); e.noGrant = true; throw e; }
@@ -166,26 +223,49 @@ export class Ledger {
       this.q.ensureAccount.run(b);
       this.q.hold.run(micro, b);
       this.q.grantHold.run(b, via, day, micro);
-      return { beneficiary: b, micro, via, day };
+      const id = Number(this.q.addHold.run(b, micro, via, day, now).lastInsertRowid);
+      return { id, beneficiary: b, micro, via, day };
     });
   }
 
-  /// Lets a hold go and books what the call really cost (0 when nothing is owed).
+  /// What is known of a call in flight, written next to its hold so that a process that stops does not lose it: the
+  /// least the call has cost so far (the floor only rises, and never passes the hold), the upstream's id, the model.
+  note(hold, { floorMicro = null, upstreamId = null, model = null } = {}) {
+    if (!hold || hold.id == null) return;
+    const f = Number(floorMicro);
+    const floor = Number.isFinite(f) && f > 0 ? Math.min(Math.ceil(f), hold.micro) : 0;
+    this.q.noteHold.run(floor, upstreamId == null ? null : String(upstreamId).slice(0, 200), model == null ? null : String(model).slice(0, 200), hold.id);
+  }
+
+  /// Lets a hold go and books what the call really cost (0 when nothing is owed), never more than the hold: the hold
+  /// is what the balance and the grant's day were checked against, so a cost over it is the gateway's to carry, and it
+  /// is counted (shortfallMicro) so that an estimate that runs low is seen. A hold settled twice is settled once.
+  /// Returns { micro, overMicro }: what was booked, and what was not.
   settle(hold, micro, info = {}, now = Date.now()) {
     const b = hold.beneficiary;
-    this._tx(() => {
+    const cost = Number.isFinite(Number(micro)) && Number(micro) > 0 ? Math.ceil(Number(micro)) : 0; // a cost is never negative and never NaN
+    const over = Math.max(0, cost - hold.micro);
+    micro = cost - over;
+    return this._tx(() => {
+      // settled before, or booked when the ledger opened: letting it go again would free another call's hold
+      if (hold.id != null && Number(this.q.dropHold.run(hold.id).changes) === 0) return { micro: 0, overMicro: 0, stale: true };
+      if (over > 0) this.q.setMeta.run("shortfallMicro", String(this.shortfallMicro + over));
       this.q.release.run(hold.micro, b);
       if (hold.via) this.q.grantRelease.run(hold.micro, b, hold.via, hold.day);
       if (micro > 0) {
         this.q.spend.run(micro, b);
         this.q.logSpend.run(b, info.at ?? now, info.model ?? null, micro, info.upstreamId ?? null, info.promptTokens ?? null, info.completionTokens ?? null, hold.via);
-        if (hold.via) this.q.addGrantSpend.run(b, hold.via, dayKey(now), micro);
+        // booked to the day the room was checked and held: a call that began before midnight and ended after it must
+        // not land on a day whose room never saw it (two full days of a cap could be spent across one midnight)
+        if (hold.via) this.q.addGrantSpend.run(b, hold.via, hold.day || dayKey(now), micro);
       }
+      return { micro, overMicro: over };
     });
   }
 
   charge(beneficiary, micro, info = {}) {
     const b = beneficiary.toLowerCase();
+    amount(micro);
     this._tx(() => {
       this.q.ensureAccount.run(b);
       this.q.spend.run(micro, b);
@@ -193,12 +273,17 @@ export class Ledger {
     });
   }
 
-  bumpEpoch(beneficiary) {
+  /// Raises the wallet's epoch: every key signed for an older one is refused from now on. The grants the wallet gave
+  /// end in the same step: a grant made with a key that leaked must not outlive that key. The new epoch.
+  bumpEpoch(beneficiary, now = Date.now()) {
     const b = beneficiary.toLowerCase();
-    this.q.ensureAccount.run(b);
-    const cur = this.balance(b).epoch;
-    this.q.setEpoch.run(cur + 1, b);
-    return cur + 1;
+    return this._tx(() => {
+      this.q.ensureAccount.run(b);
+      const cur = this.balance(b).epoch;
+      this.q.setEpoch.run(cur + 1, b);
+      this.q.revokeAllGrants.run(now, b);
+      return cur + 1;
+    });
   }
 
   stats() {
@@ -257,6 +342,7 @@ export class Ledger {
   /// A charge paid by the granter for something the grantee did. Counted against the grant's day as well.
   chargeVia(granter, granteeWallet, micro, info = {}, now = Date.now()) {
     const b = granter.toLowerCase(), via = granteeWallet.toLowerCase();
+    amount(micro);
     this._tx(() => {
       this.q.ensureAccount.run(b);
       this.q.spend.run(micro, b);

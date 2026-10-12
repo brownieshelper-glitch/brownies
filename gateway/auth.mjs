@@ -1,5 +1,5 @@
 // Keys. A wallet key is the wallet's signature of a fixed message: no account, no secret to mint, nothing to store.
-//   message  "Brownies API key, chain 4663, epoch N"
+//   message  "Brownies API key, chain 1, epoch N" (the chain is the CHAIN_ID of the gateway: Ethereum)
 //   key      sk-brownie-<epoch>-<base64url(signature)>
 // The gateway recovers the signer, checks the epoch against the account's current epoch (rotating bumps it and every
 // older key dies on the next request), and bills the wallet's beneficiary id: bytes32(uint256(uint160(wallet))).

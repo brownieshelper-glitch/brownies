@@ -32,7 +32,7 @@ async function open() {
     let json = null; try { json = JSON.parse(text); } catch { json = null; }
     return { status: r.status, body: json, text, required: r.headers.get("payment-required"), type: r.headers.get("content-type") };
   };
-  const buyer = new X402Payer({ wallet: Wallet.createRandom(), chainId: 8453, now: () => W.clock.now(), maxMicro: 60_000_000 });
+  const buyer = new X402Payer({ wallet: Wallet.createRandom(), chainId: 8453, now: () => W.clock.now(), maxMicro: 60_000_000, allowTo: [PAY_TO] });
   const buy = async (item, prompt) => {
     const first = await call("POST", `/shop/${item}`, { prompt });
     if (first.status !== 402) return { first };

@@ -161,6 +161,13 @@ export class Brain {
     return { yes: /^\W*yes\b/i.test(t), text: t, costMicro: r.costMicro };
   }
 
+  /// What a job may still spend at OpenRouter: the account's credits, or the key's own limit when that is the smaller
+  /// (a key with a limit of 100 dollars stops at 100 with credits still on the account). Null with no reading.
+  static roomUsd(a) {
+    if (!a || !Number.isFinite(Number(a.leftUsd))) return null;
+    return a.limitLeftUsd == null ? Number(a.leftUsd) : Math.max(0, Math.min(Number(a.leftUsd), Number(a.limitLeftUsd)));
+  }
+
   /// The OpenRouter account behind the key: what was bought, what was used, what is left, and the key's usage
   /// today by OpenRouter's clock (UTC). Re-read at most every five minutes. Null without a key or when it did not answer.
   async openrouterBalance({ fresh = false } = {}) {
@@ -185,6 +192,8 @@ export class Brain {
       body: JSON.stringify(body),
     });
     const j = await r.json().catch(() => null);
+    // a key at its own spending limit answers 403 too: that is a budget to raise, not a key to replace
+    if (r.status === 403 && /limit/i.test(String(j?.error?.message || ""))) { this._orBalance = null; await this.alerts?.budget(helper, "the OpenRouter key reached its own spending limit (raise it at openrouter.ai, Settings, API Keys)"); throw new BudgetError(helper, "the OpenRouter key reached its own spending limit"); }
     if (r.status === 401 || r.status === 403) { await this.alerts?.credentials("openrouter", `OpenRouter answered ${r.status}`); throw new Error(`OpenRouter refused the key (${r.status})`); }
     if (r.status === 402) { await this.alerts?.budget(helper, "the OpenRouter balance is empty"); throw new BudgetError(helper, "the OpenRouter balance is empty"); }
     if (!r.ok) throw new Error(`OpenRouter answered ${r.status}: ${j?.error?.message || "no detail"}`.slice(0, 200));

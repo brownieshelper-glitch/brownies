@@ -21,7 +21,7 @@
 //   POST /api/team/hide                 { id } or { url }: a report taken off every public view, with the team key
 //   GET  /health
 //
-// A key is the wallet's signature of "Brownies API key, chain 4663, epoch N" (auth.mjs). One SUGAR atom is one
+// A key is the wallet's signature of "Brownies API key, chain 1, epoch N" (the chain is the CHAIN_ID of the gateway: Ethereum) (auth.mjs). One SUGAR atom is one
 // micro-dollar of balance. The gateway never holds a private key for any user and never moves tokens.
 import { createServer } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -38,13 +38,15 @@ import { verifyKey, err, keyMessage, beneficiaryToWallet, walletToBeneficiary, p
 for (const f of [process.env.BROWNIES_GATEWAY_ENV, new URL("./.env", import.meta.url)]) {
   if (!f || !existsSync(f)) continue;
   for (const line of readFileSync(f, "utf8").split("\n")) {
-    const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/);
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
     if (m && m[2] !== "" && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^"(.*)"$/, "$1");
   }
 }
 import { Wallet as PantryWallet, JsonRpcProvider as PantryProvider } from "ethers";
 import { X402Payer } from "./x402.mjs";
-import { Ambient, foldSse } from "./ambient.mjs";
+import { Ambient, foldSse, AMBIENT_PAY_TO } from "./ambient.mjs";
+import { once } from "node:events";
+import { worstCaseMicro, billedMicro, promptMicro, pinModel, deltaText } from "./billing.mjs";
 import { RelayBridge } from "./bridge.mjs";
 import { Pantry } from "./pantry.mjs";
 
@@ -66,6 +68,7 @@ const cfg = {
   dbPath: process.env.DB_PATH || "./data/gateway.sqlite",
   keeperPrivateKey: process.env.KEEPER_PRIVATE_KEY || "",
   claimEverySeconds: Number(process.env.CLAIM_EVERY_SECONDS || 300),
+  keeperMaxGwei: Number(process.env.KEEPER_MAX_GWEI || 40), // the keeper sends nothing while the fee is above this
   priceMultiplier: Number(process.env.PRICE_MULTIPLIER || 1),
   minBalanceMicro: 10_000, // a request needs at least one cent of balance
   // the pantry: the wallet that pays Ambient per request over x402 with USDC on Base; empty = Ambient's models are not offered
@@ -90,10 +93,10 @@ const visits = new Visits(ledger.db); // first-party visit counts from tagged li
 // ---- the pantry and Ambient: inference paid per request, no account anywhere ----
 let pantry = null, ambient = null;
 if (/^0x[0-9a-fA-F]{64}$/.test(cfg.pantryKey)) {
-  const payer = new X402Payer({ privateKey: cfg.pantryKey, chainId: 8453, maxMicro: Math.round(cfg.x402MaxUsd * 1e6), allowTo: String(process.env.X402_PAY_TO || "").split(/[\s,]+/).filter(Boolean), log: console.log });
+  const payer = new X402Payer({ privateKey: cfg.pantryKey, chainId: 8453, maxMicro: Math.round(cfg.x402MaxUsd * 1e6), allowTo: String(process.env.X402_PAY_TO || AMBIENT_PAY_TO).split(/[\s,]+/).filter(Boolean), log: console.log });
   ambient = new Ambient({ payer, log: console.log });
   // the bridge moves the fees' USDC from Ethereum to Base; only when this gateway's chain is Ethereum
-  const bridge = cfg.chainId === 1 ? new RelayBridge({ wallet: new PantryWallet(cfg.pantryKey, new PantryProvider(cfg.rpcUrl, 1, { staticNetwork: true })), log: console.log }) : null;
+  const bridge = cfg.chainId === 1 ? new RelayBridge({ wallet: new PantryWallet(cfg.pantryKey, new PantryProvider(cfg.rpcUrl, 1, { staticNetwork: true })), allow: String(process.env.RELAY_ALLOW || "").split(/[\s,]+/).filter(Boolean), log: console.log }) : null;
   pantry = new Pantry({ privateKey: cfg.pantryKey, ethRpcUrl: cfg.rpcUrl, baseRpcUrl: cfg.baseRpcUrl, bridge, payer, bridgeMinUsdc: cfg.pantryBridgeMinUsdc, everySeconds: cfg.pantryEverySeconds, log: console.log });
   console.log(`[gateway] pantry ${pantry.address}: Ambient's models offered, paid per request on Base${bridge ? ", USDC bridged from Ethereum by Relay" : ""}`);
 }
@@ -184,18 +187,19 @@ async function models() {
   return modelsCache;
 }
 
-/// Most a request could cost, in micro-dollars, from the model's stated prices: prompt estimate + max_tokens.
-function worstCaseMicro(model, body) {
-  const p = model?.pricing || {};
-  const promptPrice = Number(p.prompt || 0); // dollars per token
-  const completionPrice = Number(p.completion || 0);
-  const text = JSON.stringify(body.messages || "");
-  const promptTokens = Math.ceil(text.length / 3.5);
-  const maxOut = Number(body.max_tokens || body.max_completion_tokens || 1024);
-  return Math.ceil((promptTokens * promptPrice + maxOut * completionPrice) * 1e6 * cfg.priceMultiplier);
+// ---- the proxy ----
+// The arithmetic of a hold and of a charge is in billing.mjs. What is here ties it to the ledger and to the wire.
+let inFlight = 0; // chat calls between their hold and their settlement: a restart waits for them (the end of this file)
+
+/// Writes to the client and waits when its buffer is full, so a slow reader slows the upstream instead of filling
+/// this process's memory. False when the client is gone.
+async function writeOut(res, chunk) {
+  if (res.destroyed || res.writableEnded) return false;
+  if (res.write(chunk)) return true;
+  await Promise.race([once(res, "drain"), once(res, "close")]).catch(() => {});
+  return !res.destroyed;
 }
 
-// ---- the proxy ----
 async function chatCompletions(req, res) {
   const who = authed(req);
   const pay = payer(req, who);
@@ -205,20 +209,29 @@ async function chatCompletions(req, res) {
   const { byId } = await models();
   const model = byId.get(body.model);
   if (!model) throw err(400, "unknown_model", `Unknown model ${body.model}. See GET /v1/models.`);
+  // both output bounds are checked: a body may carry the two, and the larger one is what the upstream may write
+  for (const k of ["max_tokens", "max_completion_tokens"]) {
+    if (body[k] == null) continue;
+    const n = Number(body[k]);
+    if (!Number.isFinite(n) || n < 1 || n > 1_000_000) throw err(400, "bad_request", "max_tokens must be a whole number from 1 upwards.");
+  }
   if (!body.max_tokens && !body.max_completion_tokens) body.max_tokens = 1024;
-  const maxOut = Number(body.max_tokens || body.max_completion_tokens);
-  if (!Number.isFinite(maxOut) || maxOut < 1 || maxOut > 1_000_000) throw err(400, "bad_request", "max_tokens must be a whole number from 1 upwards.");
 
   if (ambient && ambient.isOurs(body.model)) return ambientChat({ res, who, pay, body });
   if (!cfg.openrouterKey) throw err(503, "upstream_unconfigured", "The gateway has no upstream key yet.");
 
+  pinModel(body, model); // the call that is priced is the call that is made: one model, no paid extras, no provider dearer than the price held
   // the most this call could cost is held before the call, in one step with the check: two requests in flight can
   // never both spend the same dollar, and a grant's day cannot be passed by sending many requests at once
-  const worst = worstCaseMicro(model, body);
+  const worst = worstCaseMicro(model, body, cfg.priceMultiplier);
+  if (worst === null) throw err(400, "unpriced_model", `${body.model} has no fixed price in the catalogue (a router that picks the model has none), so its cost cannot be held. Name a model.`);
   const hold = takeHold(pay, who, worst);
-  let settled = false;
-  const settle = (micro, info = {}) => { if (settled) return; settled = true; ledger.settle(hold, micro, { model: body.model, ...info }); };
-  let sentAny = false;
+  inFlight++;
+  let settled = false, booked = 0;
+  const settle = (micro, info = {}) => { if (settled) return booked; settled = true; inFlight--; booked = settleHold(hold, micro, { model: body.model, ...info }); return booked; };
+  // what is known of the call so far: whether the upstream took it, what it said it used, how much text went out
+  let accepted = false, usage = null, upstreamId = null, delivered = 0;
+  const charge = () => settle(billedMicro(model, usage, { multiplier: cfg.priceMultiplier, body, deliveredChars: delivered }), { upstreamId, promptTokens: usage?.prompt_tokens, completionTokens: usage?.completion_tokens });
   try {
     body.usage = { include: true }; // OpenRouter returns usage.cost (dollars) in the final chunk or the body
     const upstream = await fetch(`${cfg.openrouterUrl}/chat/completions`, {
@@ -233,44 +246,88 @@ async function chatCompletions(req, res) {
       res.end(t);
       return;
     }
-    const charge = (usage, upstreamId) => {
-      const micro = billedMicro(model, usage);
-      settle(micro, { upstreamId, promptTokens: usage?.prompt_tokens, completionTokens: usage?.completion_tokens });
-      return micro;
-    };
+    accepted = true;
+    // written next to the hold: if this process stops now, the next one books the prompt the upstream read
+    ledger.note(hold, { floorMicro: promptMicro(model, body, cfg.priceMultiplier), model: body.model });
 
     if (body.stream) {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", "access-control-allow-origin": "*" });
       const reader = upstream.body.getReader();
       const dec = new TextDecoder();
-      let buf = "", usage = null, upstreamId = null;
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = dec.decode(value, { stream: true });
-        res.write(chunk); sentAny = true;
-        buf += chunk;
-        let nl;
-        while ((nl = buf.indexOf("\n")) >= 0) {
-          const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
-          if (!line.startsWith("data:")) continue;
-          const data = line.slice(5).trim();
-          if (data === "[DONE]") continue;
-          try { const j = JSON.parse(data); if (j.usage) usage = j.usage; if (j.id) upstreamId = j.id; } catch {}
+      let buf = "";
+      const take = (raw) => {
+        const line = raw.trim();
+        if (!line.startsWith("data:")) return;
+        const data = line.slice(5).trim();
+        if (data === "[DONE]") return;
+        try { const j = JSON.parse(data); if (j.usage) usage = j.usage; if (j.id && j.id !== upstreamId) { upstreamId = j.id; ledger.note(hold, { upstreamId }); } delivered += deltaText(j).length; } catch { /* not a JSON line */ }
+      };
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = dec.decode(value, { stream: true });
+          buf += chunk;
+          let nl;
+          while ((nl = buf.indexOf("\n")) >= 0) { take(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
+          if (!(await writeOut(res, chunk))) { await reader.cancel().catch(() => {}); break; } // the client left: the upstream is told to stop writing
         }
-      }
-      res.end();
-      charge(usage, upstreamId);
+        buf += dec.decode();
+        if (buf.trim()) take(buf); // a last line with no newline after it is still a line (the usage often is that line)
+      } finally { if (!res.writableEnded) res.end(); }
+      charge();
       return;
     }
     const j = await upstream.json();
-    const micro = charge(j.usage, j.id);
+    usage = j.usage || null; upstreamId = j.id || null; delivered = deltaText(j).length;
+    const micro = charge();
     j.brownies = { charged_usd: dollars(micro), balance_usd: dollars(pay.grant ? (ledger.grantRoom(pay.beneficiary, who.wallet)?.roomMicro ?? 0) : ledger.balance(who.beneficiary).availableMicro) };
     if (pay.grant) j.brownies.paid_by = pay.grant.from;
     json(res, 200, j);
   } finally {
-    // a call that broke after the answer started is billed its prompt: the upstream read it. One that never started costs nothing.
-    if (!settled) settle(sentAny ? promptMicro(model, body) : 0, { upstreamId: null });
+    // a call the upstream took is billed what is known of it, whatever broke after: its usage when that came, else
+    // the prompt it read and the text that went out. A call that never reached the upstream costs nothing.
+    if (!settled) { if (accepted) charge(); else settle(0, { upstreamId: null }); }
+  }
+}
+
+/// Settles a hold and says so when the call cost more than was held: the caller is charged the hold, the rest is the
+/// gateway's, and the log names it so that an estimate that runs low is seen. Returns what was booked.
+function settleHold(hold, micro, info) {
+  const out = ledger.settle(hold, micro, info);
+  if (out.overMicro > 0) console.warn(`[gateway] ${info.model}: the call cost ${dollars(out.micro + out.overMicro)} USD and ${dollars(hold.micro)} was held; ${dollars(out.overMicro)} is not charged (carried so far: ${dollars(ledger.shortfallMicro)} USD)`);
+  return out.micro;
+}
+
+/// The calls a stopped process left in flight were booked, when the ledger opened, at what was known of them. Here
+/// OpenRouter is asked what each one really cost (its record of a generation, by id), and the rest is booked: on the
+/// same payer, on the day of the hold, never past the hold. A call with no id, or one OpenRouter has no record of,
+/// stays at what was booked.
+async function reconcile() {
+  const list = ledger.recovered || [];
+  if (!list.length) return;
+  console.log(`[gateway] ${list.length} call(s) were in flight when the last process stopped: ${list.filter((r) => r.bookedMicro > 0).length} booked at what was known of them, the others had not reached the upstream`);
+  if (!cfg.openrouterKey) return;
+  for (const rec of list) {
+    if (!rec.upstreamId || /^0x/.test(rec.upstreamId)) continue; // no id, or a payment's transaction (Ambient: paid in full already)
+    try {
+      let cost = null;
+      for (const wait of [0, 3000, 10000]) { // the record of a generation can lag the call by a few seconds
+        if (wait) await new Promise((r) => setTimeout(r, wait));
+        const r = await fetch(`${cfg.openrouterUrl}/generation?id=${encodeURIComponent(rec.upstreamId)}`, { headers: { authorization: `Bearer ${cfg.openrouterKey}` }, signal: AbortSignal.timeout(15000) });
+        if (!r.ok) continue;
+        const j = await r.json().catch(() => null);
+        const c = Number(j?.data?.total_cost ?? j?.data?.usage);
+        if (Number.isFinite(c) && c >= 0) { cost = c; break; }
+      }
+      if (cost === null) { console.warn(`[gateway] no record of ${rec.upstreamId} at the upstream: it stays at ${dollars(rec.bookedMicro)} USD`); continue; }
+      const extra = Math.min(rec.holdMicro, Math.ceil(cost * 1e6 * cfg.priceMultiplier)) - rec.bookedMicro;
+      if (extra > 0) {
+        const info = { model: rec.model, upstreamId: rec.upstreamId, at: rec.at };
+        if (rec.via) ledger.chargeVia(rec.beneficiary, rec.via, extra, info, rec.at); else ledger.charge(rec.beneficiary, extra, info);
+      }
+      console.log(`[gateway] ${rec.upstreamId} cost ${cost} USD: ${extra > 0 ? `${dollars(extra)} USD more booked` : "nothing more to book"}`);
+    } catch (e) { console.warn(`[gateway] could not ask what ${rec.upstreamId} cost: ${e.message}`); }
   }
 }
 
@@ -281,70 +338,75 @@ function takeHold(pay, who, worst) {
   } catch (e) {
     if (e.noGrant) throw err(403, "no_grant", `${pay.grant?.from} has not granted ${who.wallet} any spending.`);
     if (e.insufficient) throw err(402, "insufficient_balance", `This request could cost up to ${dollars(worst)} USD and ${pay.grant ? "the grant's room today" : "the balance"} is ${dollars(e.availableMicro)} USD. Lower max_tokens${pay.grant ? "" : " or activate more SUGAR"}.`);
+    if (e.badAmount) throw err(502, "upstream", "The price of this request could not be worked out.");
     throw e;
   }
 }
 
-/// What a finished call costs: the upstream's stated cost, or the tokens at the catalogue's prices when it stated none.
-function billedMicro(model, usage) {
-  if (!usage) return 0;
-  if (usage.cost != null && Number(usage.cost) > 0) return Math.ceil(Number(usage.cost) * 1e6 * cfg.priceMultiplier);
-  const p = model?.pricing || {};
-  const micro = (Number(usage.prompt_tokens) || 0) * Number(p.prompt || 0) + (Number(usage.completion_tokens) || 0) * Number(p.completion || 0);
-  return Math.ceil(micro * 1e6 * cfg.priceMultiplier);
-}
-/// The prompt's share of the worst case: what a call that broke mid-answer is billed.
-function promptMicro(model, body) {
-  const p = model?.pricing || {};
-  const promptTokens = Math.ceil(JSON.stringify(body.messages || "").length / 3.5);
-  return Math.ceil(promptTokens * Number(p.prompt || 0) * 1e6 * cfg.priceMultiplier);
-}
-
 /// Ambient over x402: the quote is the price (input plus the output bound), the pantry pays it when JumpGate asks,
-/// the caller is charged exactly what was paid (times the multiplier). Streams pass through; a plain request gets
-/// the stream folded into one answer.
+/// the caller is charged exactly what the pantry is known to have paid (times the multiplier). Streams pass through;
+/// a plain request gets the stream folded into one answer.
 async function ambientChat({ res, who, pay, body }) {
   const up = ambient.body(body);
   let quote;
   try { quote = await ambient.quote(up); } catch (e) { throw err(502, "upstream", e.message); }
-  const worst = Math.ceil(quote.maxMicro * cfg.priceMultiplier);
-  const hold = takeHold(pay, who, worst);
-  let settled = false;
-  const settle = (micro, info = {}) => { if (settled) return; settled = true; ledger.settle(hold, micro, { model: body.model, ...info }); };
+  // the pantry may pay up to 5% over the quote's bound (rounding on JumpGate's side). The hold covers that too, so
+  // what is paid can never be more than what was held.
+  const cap = Math.ceil(quote.maxMicro * 1.05);
+  const times = (micro) => Math.ceil(micro * cfg.priceMultiplier);
+  const hold = takeHold(pay, who, times(cap));
+  inFlight++;
+  let settled = false, booked = 0;
+  const settle = (micro, info = {}) => { if (settled) return booked; settled = true; inFlight--; booked = settleHold(hold, micro, { model: body.model, ...info }); return booked; };
   let out;
-  try { out = await ambient.chat(body, { quote, maxMicro: Math.ceil(quote.maxMicro * 1.05) }); } catch (e) { settle(0); throw err(502, "upstream", `Ambient: ${e.message}`); }
-  const { response: upstream, paid } = out;
-  if (!upstream.ok) {
-    // the pantry paid nothing for a refusal (a second 402 is an error above); a paid request that failed is still paid
-    settle(paid ? Math.ceil(paid.micro * cfg.priceMultiplier) : 0, { upstreamId: null });
-    const t = await upstream.text();
-    res.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") || "text/plain", "access-control-allow-origin": "*" });
-    res.end(t);
-    return;
+  try { out = await ambient.chat(body, { quote, maxMicro: cap }); }
+  catch (e) {
+    // an error after the signature left: the money may move though no answer came, so the caller is charged what was
+    // signed. An error before that (the quote, the cap, the payee) cost nothing.
+    settle(e.signedMicro ? times(e.signedMicro) : 0, { upstreamId: null });
+    throw err(502, "upstream", `Ambient: ${e.message}`);
   }
-  const micro = Math.ceil((paid ? paid.micro : quote.micro) * cfg.priceMultiplier);
+  const { response: upstream, paid } = out;
+  // owed: what the pantry is known to have paid. An answer that came is paid when a payment was signed for it; an
+  // error is paid only when it carries a receipt; an answer nobody was asked to pay for costs nothing.
+  const owed = paid && (upstream.ok || paid.settled) ? times(paid.micro) : 0;
   const info = { upstreamId: paid?.settlement?.transaction || null, promptTokens: quote.inputTokens, completionTokens: null };
-  const charge = () => settle(micro, info);
-  if (body.stream) {
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", "access-control-allow-origin": "*" });
-    try {
+  ledger.note(hold, { floorMicro: owed, upstreamId: info.upstreamId, model: body.model }); // paid is paid, even if this process stops before the answer is through
+  try {
+    if (!upstream.ok) {
+      const t = await upstream.text().catch(() => "");
+      res.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") || "text/plain", "access-control-allow-origin": "*" });
+      res.end(t);
+      return;
+    }
+    if (body.stream) {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", "access-control-allow-origin": "*" });
       const reader = upstream.body.getReader();
       const dec = new TextDecoder();
-      while (true) { const { value, done } = await reader.read(); if (done) break; res.write(dec.decode(value, { stream: true })); }
-    } finally { res.end(); charge(); } // paid is paid, whatever the client did with the stream
-    return;
-  }
-  const j = foldSse(await upstream.text(), { model: body.model });
-  charge();
-  j.brownies = { charged_usd: dollars(micro), paid_usdc: paid ? dollars(paid.micro) : null, upstream: "ambient", balance_usd: dollars(pay.grant ? (ledger.grantRoom(pay.beneficiary, who.wallet)?.roomMicro ?? 0) : ledger.balance(who.beneficiary).availableMicro) };
-  if (pay.grant) j.brownies.paid_by = pay.grant.from;
-  json(res, 200, j);
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!(await writeOut(res, dec.decode(value, { stream: true })))) { await reader.cancel().catch(() => {}); break; }
+        }
+      } finally { if (!res.writableEnded) res.end(); }
+      return;
+    }
+    const j = foldSse(await upstream.text(), { model: body.model });
+    settle(owed, info);
+    j.brownies = { charged_usd: dollars(owed), paid_usdc: paid ? dollars(paid.micro) : null, upstream: "ambient", balance_usd: dollars(pay.grant ? (ledger.grantRoom(pay.beneficiary, who.wallet)?.roomMicro ?? 0) : ledger.balance(who.beneficiary).availableMicro) };
+    if (pay.grant) j.brownies.paid_by = pay.grant.from;
+    json(res, 200, j);
+  } finally { settle(owed, info); } // paid is paid, whatever became of the answer or of the client; the hold is always let go
 }
 
 // ---- routes ----
+const statsCache = { at: 0, onchain: null }; // the chain's totals, read at most once every thirty seconds whoever asks
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url, "http://x");
   try {
+    // inside the try: a request target that is not a path must be a 400, never an error nobody catches
+    let url;
+    try { url = new URL(req.url, "http://x"); } catch { throw err(400, "bad_request", "The request target is not a path."); }
     if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, x-brownies-pay-from", "access-control-allow-methods": "GET, POST, OPTIONS" }); return res.end(); }
     if (url.pathname === "/health") return json(res, 200, { ok: true, live: cfg.live, chainId: cfg.chainId, sugar: cfg.sugarAddress || null, lastBlock: ledger.lastBlock, upstream: Boolean(cfg.openrouterKey), pantry: pantry ? pantry.view() : null });
     if ((url.pathname.startsWith("/v1/") || url.pathname === "/api/protocol/index-tx") && !cfg.live) throw err(503, "not_launched", "The coin is not launched yet.");
@@ -357,8 +419,9 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/key/rotate" && req.method === "POST") {
       const who = authed(req);
+      const ended = ledger.grantsBy(who.beneficiary).map((g) => g.grantee); // the grants this wallet gave end with the old key
       const epoch = ledger.bumpEpoch(who.beneficiary);
-      return json(res, 200, { object: "key", wallet: who.wallet, epoch, message: keyMessage(cfg.chainId, epoch), note: "Sign the new message to get the new key. Every older key is refused from now on." });
+      return json(res, 200, { object: "key", wallet: who.wallet, epoch, message: keyMessage(cfg.chainId, epoch), grants_ended: ended, note: `Sign the new message to get the new key. Every older key is refused from now on.${ended.length ? ` The ${ended.length} grant${ended.length === 1 ? "" : "s"} this wallet gave ended with the old key; give them again with the new one.` : ""}` });
     }
     if (url.pathname === "/v1/grants" && req.method === "GET") {
       const who = authed(req);
@@ -367,6 +430,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/v1/grants" && req.method === "POST") {
       const who = authed(req);
       const body = parseObject(await readBody(req, 4096, res));
+      authed(req); // checked again now that the body is in: a key rotated while the body was on its way must not write
       const grantee = parseWallet(body.grantee, "grantee");
       if (!grantee) throw err(400, "bad_wallet", "grantee must be an address.");
       if (grantee === who.wallet) throw err(400, "bad_grantee", "A wallet needs no grant to itself.");
@@ -378,15 +442,21 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/v1/grants/revoke" && req.method === "POST") {
       const who = authed(req);
       const body = parseObject(await readBody(req, 4096, res));
+      authed(req); // checked again now that the body is in: a key rotated while the body was on its way must not write
       const grantee = parseWallet(body.grantee, "grantee");
       if (!grantee) throw err(400, "bad_wallet", "grantee must be an address.");
       return json(res, 200, { object: "grant", grantee, revoked: ledger.revokeGrant(who.beneficiary, grantee) });
     }
     if (url.pathname === "/v1/chat/completions" && req.method === "POST") return await chatCompletions(req, res);
     if (url.pathname === "/api/protocol/stats" && req.method === "GET") {
-      let onchain = null;
-      if (chain) { try { onchain = await chain.onchainTotals(); } catch (e) { onchain = { error: e.shortMessage || e.message }; } }
-      return json(res, 200, { ledger: ledger.stats(), onchain });
+      // anyone may ask. The chain is read at most once every thirty seconds whoever asks (a dozen calls on the RPC the
+      // indexer and the keeper share), and one address asks thirty times a minute at most.
+      if (!allow("stats:" + clientIp(req), 30)) throw err(429, "slow_down", "Thirty a minute per address.");
+      if (chain && Date.now() - statsCache.at > 30_000) {
+        statsCache.at = Date.now();
+        try { statsCache.onchain = await chain.onchainTotals(); } catch (e) { statsCache.onchain = { error: e.shortMessage || e.message }; }
+      }
+      return json(res, 200, { ledger: ledger.stats(), onchain: chain ? statsCache.onchain : null });
     }
     if (url.pathname.startsWith("/api/protocol/account/") && req.method === "GET") {
       const wallet = url.pathname.split("/").pop();
@@ -457,6 +527,25 @@ server.listen(cfg.port, () => {
   console.log(`[gateway] listening on :${cfg.port}, chain ${cfg.chainId}, SUGAR ${cfg.sugarAddress || "not set"}, upstream ${cfg.openrouterKey ? "set" : "NOT SET"}`);
   if (chain) chain.start({ claimEverySeconds: cfg.claimEverySeconds });
   if (pantry) pantry.start();
+  reconcile().catch((e) => console.warn(`[gateway] reconcile: ${e.message}`));
+});
+
+// A restart lets the calls in flight end first, for up to twenty-five seconds. The ledger forgets its holds when it
+// opens: a call cut by a restart would have been paid upstream and charged to nobody.
+let closing = false;
+for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => {
+  if (closing) return;
+  closing = true;
+  console.log(`[gateway] ${sig}: no new calls, ${inFlight} in flight`);
+  server.close();
+  server.closeIdleConnections?.();
+  const t0 = Date.now();
+  const wait = setInterval(() => {
+    if (inFlight > 0 && Date.now() - t0 < 25_000) return;
+    clearInterval(wait);
+    console.log(`[gateway] stopping${inFlight > 0 ? ` with ${inFlight} call(s) still in flight` : ""}`);
+    process.exit(0);
+  }, 200);
 });
 
 export { server, ledger, chain, team, pantry, ambient, beneficiaryToWallet };

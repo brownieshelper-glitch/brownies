@@ -53,7 +53,7 @@ try {
   const open = await seller.open();
   ok(open.ok, `the shop is open (settler ${seller.address})`);
   const required = seller.requirement({ micro: 1_000_000, url: "https://api.feedthebrownies.com/shop/note", description: "A research note", maxTimeoutSeconds: 600 });
-  const payer = new X402Payer({ wallet: buyer, chainId: 8453, maxMicro: 10_000_000 });
+  const payer = new X402Payer({ wallet: buyer, chainId: 8453, maxMicro: 10_000_000, allowTo: [PAY_TO] });
   const { payload } = await payer.sign(required);
   const v = await seller.verify(payload, required);
   ok(v.ok, `the payment verifies against the real USDC contract (payer ${v.payer})${v.ok ? "" : ": " + v.error}`);

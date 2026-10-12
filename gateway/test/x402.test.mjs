@@ -39,7 +39,7 @@ test("the payer signs what the facilitator verifies, pays the exact amount once 
   const w = Wallet.createRandom();
   const { fetch, seen } = fakeResource();
   const logs = [];
-  const p = new X402Payer({ wallet: w, chainId: 8453, fetch, log: (l) => logs.push(l) });
+  const p = new X402Payer({ wallet: w, chainId: 8453, fetch, allowTo: [PAY_TO], log: (l) => logs.push(l) });
   const { response, paid } = await p.fetch("https://jumpgate.test/paid/chat/v2", { method: "POST", headers: { "content-type": "application/json", "x402-input-tokens": "11" }, body: "{}" });
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "data: {\"ok\":true}\n\n");
@@ -62,7 +62,7 @@ test("the payer signs what the facilitator verifies, pays the exact amount once 
 test("over the cap, on the wrong chain, refused, or free: no payment is made", async () => {
   const w = Wallet.createRandom();
   const dear = fakeResource({ amount: "2500000" });
-  const p = new X402Payer({ wallet: w, fetch: dear.fetch, maxMicro: 2_000_000 });
+  const p = new X402Payer({ wallet: w, fetch: dear.fetch, maxMicro: 2_000_000, allowTo: [PAY_TO] });
   await assert.rejects(() => p.fetch("https://jumpgate.test/x"), /over the cap of 2\.00 USDC/);
   assert.equal(dear.seen.length, 1, "nothing was retried");
   assert.equal(p.paid.count, 0);
@@ -70,7 +70,7 @@ test("over the cap, on the wrong chain, refused, or free: no payment is made", a
   const sol = async () => new Response("", { status: 402, headers: { "payment-required": b64.encode(onlySolana) } });
   await assert.rejects(() => new X402Payer({ wallet: w, fetch: sol }).fetch("https://x"), /nothing payable on eip155:8453.*offered: exact\/solana/);
   const refusing = fakeResource({ refuse: true });
-  await assert.rejects(() => new X402Payer({ wallet: w, fetch: refusing.fetch }).fetch("https://x"), /payment refused: insufficient funds/);
+  await assert.rejects(() => new X402Payer({ wallet: w, fetch: refusing.fetch, allowTo: [PAY_TO] }).fetch("https://x"), /payment refused: insufficient funds/);
   const free = fakeResource({ free: true });
   const r = await new X402Payer({ wallet: w, fetch: free.fetch }).fetch("https://x");
   assert.equal(r.paid, null); assert.equal(await r.response.text(), "free lunch");
@@ -80,7 +80,7 @@ test("over the cap, on the wrong chain, refused, or free: no payment is made", a
   assert.equal(pickRequirement({ accepts: [{ ...required().accepts[1], extra: { assetTransferMethod: "permit2" } }] }, { chainId: 8453, asset: USDC[8453] }), null, "only EIP-3009 is signed here");
 });
 
-test("the pantry pays only the address the owner allowed (X402_PAY_TO), or else the first address it met and no other", async () => {
+test("the pantry pays only an address that was named (X402_PAY_TO); with no address named nothing is paid", async () => {
   const w = Wallet.createRandom();
   const other = { ...required(), accepts: [{ ...required().accepts[1], payTo: "0x000000000000000000000000000000000000dEaD" }] };
   const otherFetch = async () => new Response("", { status: 402, headers: { "payment-required": b64.encode(other) } });
@@ -89,15 +89,32 @@ test("the pantry pays only the address the owner allowed (X402_PAY_TO), or else 
   const q = new X402Payer({ wallet: w, fetch: otherFetch, allowTo: [PAY_TO] });
   await assert.rejects(() => q.fetch("https://x"), /would go to 0x0000.*dEaD, not an address the owner allowed; set X402_PAY_TO/);
   assert.equal(q.paid.count, 0);
-  // no list: the first address paid is pinned for the life of the process
-  const logs = [];
-  const r = new X402Payer({ wallet: w, fetch: fakeResource().fetch, log: (l) => logs.push(l) });
-  await r.fetch("https://x");
-  assert.equal(r.pinnedTo, PAY_TO.toLowerCase());
-  assert.match(logs[0], /\[x402\] the pantry will pay 0x6992.* and no other address until the owner sets X402_PAY_TO/);
-  r.fetchRaw = otherFetch;
-  await assert.rejects(() => r.fetch("https://x"), /not an address the owner allowed/);
-  assert.equal(r.paid.count, 1);
+  // no list: the first address a server asks for is not a reason to trust it, so nothing is signed
+  const seen = fakeResource();
+  const r = new X402Payer({ wallet: w, fetch: seen.fetch });
+  await assert.rejects(() => r.fetch("https://x"), /not an address the owner allowed \(none is named\); set X402_PAY_TO/);
+  assert.equal(seen.seen.length, 1, "the 402 was read and nothing was sent back");
+  assert.equal(r.paid.count, 0);
+  // an entry that is not an address is not an allowance
+  assert.deepEqual(new X402Payer({ wallet: w, allowTo: ["", "0x123", PAY_TO] }).allowTo, [PAY_TO.toLowerCase()]);
   // the case of the address does not matter
   assert.equal((await new X402Payer({ wallet: w, fetch: fakeResource().fetch, allowTo: [PAY_TO.toLowerCase()] }).fetch("https://x")).paid.micro, 896);
+});
+
+test("after the signature is sent, an error says what was signed; a retry that came back an error with no receipt is not a payment", async () => {
+  const w = Wallet.createRandom();
+  // the connection drops after the signed request left
+  let n = 0;
+  const dropping = async (url, init = {}) => { n++; if (new Headers(init.headers || {}).get("payment-signature")) throw new Error("socket hang up"); return fakeResource().fetch(url, init); };
+  const p = new X402Payer({ wallet: w, fetch: dropping, allowTo: [PAY_TO] });
+  await assert.rejects(() => p.fetch("https://x"), (e) => e.message === "socket hang up" && e.signedMicro === 896 && /^0x[0-9a-f]{64}$/.test(e.authorization.nonce));
+  assert.equal(p.paid.count, 0);
+  // the resource takes the signature and answers 500 with no receipt
+  const failing = async (url, init = {}) => (new Headers(init.headers || {}).get("payment-signature") ? new Response("upstream down", { status: 500 }) : fakeResource().fetch(url, init));
+  const q = new X402Payer({ wallet: w, fetch: failing, allowTo: [PAY_TO] });
+  const out = await q.fetch("https://x");
+  assert.equal(out.response.status, 500); assert.equal(out.paid.settled, false, "no receipt: nothing is known to have been paid"); assert.equal(q.paid.count, 0);
+  // the usual case carries its receipt
+  const ok = await new X402Payer({ wallet: w, fetch: fakeResource().fetch, allowTo: [PAY_TO] }).fetch("https://x");
+  assert.equal(ok.paid.settled, true);
 });

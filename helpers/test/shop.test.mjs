@@ -47,7 +47,7 @@ async function open({ gas = 10n ** 15n, maker = "yes" } = {}) {
     let json = null; try { json = JSON.parse(text); } catch { json = null; }
     return { status: r.status, body: json, text, required: r.headers.get("payment-required"), receipt: r.headers.get("payment-response"), cors: r.headers.get("access-control-allow-origin"), type: r.headers.get("content-type") };
   };
-  const buyer = new X402Payer({ wallet: Wallet.createRandom(), chainId: 8453, now: () => W.clock.now(), maxMicro: 20_000_000 });
+  const buyer = new X402Payer({ wallet: Wallet.createRandom(), chainId: 8453, now: () => W.clock.now(), maxMicro: 20_000_000, allowTo: [PAY_TO] });
   /// buys an item the way an agent would: the 402, the signature, the second request
   const buy = async (item, prompt, { payer = buyer } = {}) => {
     const first = await call("POST", `/shop/${item}`, { prompt });

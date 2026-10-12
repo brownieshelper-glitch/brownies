@@ -62,7 +62,7 @@ export class TeamLog {
     this.q = {
       add: db.prepare("INSERT INTO team_log(at, helper, kind, title, body, url, place, cost_micro) VALUES(?, ?, ?, ?, ?, ?, ?, ?)"),
       perHelper: db.prepare("SELECT helper, COUNT(*) AS total, COALESCE(SUM(at >= ?), 0) AS today, COALESCE(SUM(CASE WHEN at >= ? THEN cost_micro ELSE 0 END), 0) AS cost_today, MAX(at) AS last_at FROM team_log WHERE kind != 'status' AND hidden = 0 GROUP BY helper"),
-      status: db.prepare("SELECT helper, title, at FROM team_log WHERE id IN (SELECT MAX(id) FROM team_log WHERE kind = 'status' GROUP BY helper)"),
+      status: db.prepare("SELECT helper, title, at FROM team_log WHERE id IN (SELECT MAX(id) FROM team_log WHERE kind = 'status' AND hidden = 0 GROUP BY helper)"), // the latest status that was not taken down
       week: db.prepare("SELECT kind, COUNT(*) AS n FROM team_log WHERE kind != 'status' AND hidden = 0 AND at >= ? GROUP BY kind"),
       total: db.prepare("SELECT COUNT(*) AS n FROM team_log WHERE kind != 'status' AND hidden = 0"),
       hide: db.prepare("UPDATE team_log SET hidden = 1 WHERE hidden = 0 AND (id = ? OR (? != '' AND url = ?))"),

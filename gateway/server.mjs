@@ -312,7 +312,7 @@ async function reconcile() {
     if (!rec.upstreamId || /^0x/.test(rec.upstreamId)) continue; // no id, or a payment's transaction (Ambient: paid in full already)
     try {
       let cost = null;
-      for (const wait of [0, 3000, 10000]) { // the record of a generation can lag the call by a few seconds
+      for (const wait of [0, 5000, 15000, 40000]) { // the record of a generation exists about 13 seconds after the call (measured 2026-10-12), later for one that was cut
         if (wait) await new Promise((r) => setTimeout(r, wait));
         const r = await fetch(`${cfg.openrouterUrl}/generation?id=${encodeURIComponent(rec.upstreamId)}`, { headers: { authorization: `Bearer ${cfg.openrouterKey}` }, signal: AbortSignal.timeout(15000) });
         if (!r.ok) continue;

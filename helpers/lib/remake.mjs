@@ -7,7 +7,7 @@
 import { escapeHtml } from "./review.mjs";
 
 /// The owner's rules for a site that does not look made by a machine, in the words the models get.
-export const DESIGN_RULES = `A site that a stranger could glance at and call machine-made has failed. Never: purple, violet or indigo as the main colour; gradients, and gradient-filled headline words; rows of big meaningless numbers; emoji in headings; "Why choose us", "Transform your X", "Start it. Build it. Launch it." cadences; glass panels and blur; a clutter of small pill badges under the hero; everything centred in one column; the system font or raw Inter as the whole type system; a soft drop shadow on every card. Always: the current brand kept (its colours as given, its fonts, its mark, its mascots when it has them); a display face for the big words and a legible face for reading, with an explicit scale; four to six named colours, one accent, text that reads on its background; a hero that states the thesis in one sentence; motion only where it tells something; a layout that works at 375 and at 1440 with no sideways scroll and tap targets of 44 pixels; short sentences, one idea each, plain keyboard characters only in the copy (no em dashes, no curly quotes, no arrows, no ticks); the facts and numbers of the current page kept exactly, nothing invented, no "coming soon" or "not live yet" lines.`;
+export const DESIGN_RULES = `A site that a stranger could glance at and call machine-made has failed. Never: purple, violet or indigo as the main colour; gradients that blend one colour into another, and gradient-filled headline words (a pattern of hard lines, stripes or dots is drawing, not a gradient, and is fine); rows of big meaningless numbers; emoji in headings; "Why choose us", "Transform your X", "Start it. Build it. Launch it." cadences; glass panels and blur; a clutter of small pill badges under the hero; everything centred in one column; the system font or raw Inter as the whole type system; a soft drop shadow on every card. Always: the current brand kept (its colours as given, its fonts, its mark, its mascots when it has them); a display face for the big words and a legible face for reading, with an explicit scale; four to six named colours, one accent, text that reads on its background; a hero that states the thesis in one sentence; motion only where it tells something; a layout that works at 375 and at 1440 with no sideways scroll and tap targets of 44 pixels; short sentences, one idea each, plain keyboard characters only in the copy (no em dashes, no curly quotes, no arrows, no ticks); the facts and numbers of the current page kept exactly, nothing invented, no "coming soon" or "not live yet" lines.`;
 
 /// What a studio does and a template does not: the craft the directions, the builders and the judges are held to.
 export const CRAFT = `What a studio would do, and a template would not. The page as it is today is the bar: the new one must be clearly better at a glance, never a tidier, flatter copy; what gives today's page its character (its characters and their size, its shapes, its borders, its signature details) is kept or pushed further, never sanded off. ONE signature move, executed fully, that a visitor remembers: a scene drawn with the brand's own characters at a size that fills the space, a poster-sized headline on a tight measure, a ledger of ruled lines and monospaced figures, a counter or a shelf the content sits on, a full-bleed block of the dark colour that turns the page in two. Three levels of hierarchy, never five. A type scale with real jumps: display 64 to 96 px at 1440 with line-height 1.0 to 1.1 and letter-spacing -0.02em, section titles 36 to 48, body 17 to 19 at line-height 1.55, small text 13 to 14; on a phone the display at 40 to 48. A 12-column grid on a 1200 px measure with asymmetric splits (7/5, 8/4), never three equal cards with icons. Space that breathes: 96 to 160 px between sections on desktop, 64 to 96 on a phone, and one dense moment for contrast. Section treatments that alternate (the light colour, ruled, full-bleed dark, a drawn illustration, a wide table) so the scroll has a rhythm. Illustration drawn as inline SVG in the brand's colours wherever a picture helps (a counter, a kitchen, the flow of a tax, a shelf, a route), large and deliberate, with the same line weight and corner radius as the brand's own drawings; never a stock photo, never an icon set, never emoji. Numbers in the mono face with tabular figures. Interactions that answer: links with an underline that moves, buttons that press (transform: scale(0.97) on :active over 150ms), focus-visible rings in the accent, a phone menu that works without JavaScript (details and summary), prefers-reduced-motion respected. Copy in short sentences, each with a verb, the thesis as the headline. What always reads as a template and loses: a hero split 50/50 with small pictures on the right, three or four equal cards in a row with icons, a feature list with ticks, everything centred, a pricing-table look, thin progress bars standing in for a chart, a gradient, a glass panel, a wall of equal paragraphs, big empty bands of background with nothing designed in them.`;
@@ -115,8 +115,42 @@ export function cleanHtml(text) {
   let s = String(text || "").replace(/^\s*```(?:html)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
   const at = s.search(/<!doctype html>/i);
   if (at > 0) s = s.slice(at);
+  const end = s.toLowerCase().lastIndexOf("</html>"); // a note after the end of the page is not the page
+  if (end > 0) s = s.slice(0, end + 7);
   s = s.normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/\s*[–—]\s*/g, ", ").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/…/g, "...").replace(/ /g, " ").replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
   return s;
+}
+
+/// True when the CSS holds a gradient that blends one colour into another: the look the rules ban. A pattern drawn
+/// with hard stops (ruled lines, stripes, dots: every change of colour happens at one position, within a pixel) is
+/// drawing, not a gradient, and passes.
+export function blends(css) {
+  const s = String(css || "");
+  const re = /(?:repeating-)?(?:linear|radial|conic)-gradient\(/gi;
+  const POS = "(-?[\\d.]+(?:px|%|em|rem|vw|vh|deg|turn)?|calc\\([^)]*\\))";
+  const STOP = new RegExp(`^(.*?)(?:\\s+${POS})?(?:\\s+${POS})?$`, "i");
+  const norm = (p) => (p == null ? null : /^-?0(?:\.0+)?(?:px|%|em|rem|vw|vh|deg|turn)?$/i.test(p) ? "0" : p.toLowerCase().replace(/\s+/g, ""));
+  const near = (a, b) => { if (a === b) return true; const x = /^(-?[\d.]+)px$/.exec(a || ""), y = /^(-?[\d.]+)px$/.exec(b || ""); return Boolean(x && y && Math.abs(Number(x[1]) - Number(y[1])) <= 1); };
+  let m;
+  while ((m = re.exec(s))) {
+    const args = []; let depth = 1, cur = "", i = re.lastIndex;
+    for (; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === "(") depth++;
+      else if (ch === ")" && --depth === 0) break;
+      if (ch === "," && depth === 1) { args.push(cur.trim()); cur = ""; } else cur += ch;
+    }
+    args.push(cur.trim());
+    if (/^(?:to\s|from\s|circle|ellipse|closest|farthest|at\s|-?[\d.]+(?:deg|turn|rad|grad)\b)/i.test(args[0] || "")) args.shift();
+    const stops = args.map((a) => { const x = STOP.exec(a) || [null, a]; return { colour: String(x[1] || "").toLowerCase().replace(/\s+/g, ""), from: norm(x[2]), to: norm(x[3] ?? x[2]) }; });
+    for (let k = 0; k + 1 < stops.length; k++) {
+      const a = stops[k], b = stops[k + 1];
+      if (a.colour === b.colour) continue;
+      if (a.to != null && b.from != null && (near(a.to, b.from) || b.from === "0")) continue; // a hard stop (a position of 0 after another means "where the last one ended")
+      return true;
+    }
+  }
+  return false;
 }
 
 /// What is wrong with a built page: [] when it may be shown. brief (siteBrief of today's page) names the scripts a
@@ -136,7 +170,7 @@ export function checkBuilt(html, brief = {}) {
   if (/data-mascot=/.test(h) && !/mascot\.js/.test(h)) out.push("mascot elements without mascot.js");
   if (/<img(?![^>]*\balt=)[^>]*>/i.test(h)) out.push("an image without alt");
   if (/[^\x09\x0A\x0D\x20-\x7E]/.test(h)) out.push("characters that are not plain ASCII");
-  if (/(linear|radial|conic)-gradient\(/i.test(h)) out.push("a gradient");
+  if (blends(h)) out.push("a gradient that blends colours (hard-stop lines, stripes and dots are fine)");
   if (/backdrop-filter/i.test(h)) out.push("a blur panel");
   if (/<h[1-6][^>]*>[^<]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h)) out.push("an emoji in a heading");
   if (h.length < 4000) out.push("too short to be a whole page");
@@ -181,7 +215,7 @@ export function briefText({ winner, directions, briefs, candidates, finals = [],
   }
   if (polish.length) {
     lines.push("## The polish", "");
-    for (const p of polish) lines.push(`Round ${p.round}: ${p.kept === "after" ? "the revised page was kept" : p.kept === "before" ? "the earlier page was kept" : "no revision came back"}${p.why ? ` (${p.why})` : ""}.`, "", ...p.fixes.map((f) => `- ${f}`), "");
+    for (const p of polish) lines.push(`Round ${p.round}: ${p.kept === "after" ? "the revised page was kept" : p.kept === "before" ? "the earlier page was kept" : "no revision came back"}${p.why ? ` (${p.why})` : ""}.${p.url && p.kept === "before" ? ` The revised page that was not kept: ${p.url}` : ""}`, "", ...p.fixes.map((f) => `- ${f}`), "");
   }
   if (warning) lines.push("## What the judges warned about", "", warning, "");
   lines.push("## The first screen", "", d.firstScreen || d.hero || "", "", "## The sections", "", ...(d.sections || []).map((s) => `- ${s}`), "", "## Type and colour", "", `${d.type || ""} ${d.colour || ""}`.trim(), "", "## What it fixes from the review", "", ...((d.fixes || []).length ? d.fixes.map((f) => `- ${f}`) : ["- nothing named"]), "", "## What stays as it is", "", ...((d.keeps || []).map((k) => `- ${k}`)), "", "## The risk the designer named", "", d.risk || "", "");

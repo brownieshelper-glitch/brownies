@@ -2,7 +2,7 @@
 // page cleaned and checked; the copy for looking at; the brief and the gallery.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { siteBrief, cssTokens, pickWinner, cleanHtml, checkBuilt, previewCopy, briefText, galleryHtml, DESIGN_RULES, CRAFT, BRIEF_SYSTEM, SCORE_SYSTEM, BUILD_SYSTEM, VISUAL_SYSTEM, CRITIQUE_SYSTEM, REVISE_SYSTEM, VOTE_SYSTEM, LETTERS, MIN_WORDS } from "../lib/remake.mjs";
+import { siteBrief, cssTokens, pickWinner, cleanHtml, checkBuilt, blends, previewCopy, briefText, galleryHtml, DESIGN_RULES, CRAFT, BRIEF_SYSTEM, SCORE_SYSTEM, BUILD_SYSTEM, VISUAL_SYSTEM, CRITIQUE_SYSTEM, REVISE_SYSTEM, VOTE_SYSTEM, LETTERS, MIN_WORDS } from "../lib/remake.mjs";
 
 const HOME = `<!doctype html><html lang="en"><head><title>Brownies. Four helpers.</title><meta name="description" content="Four AI helpers work for a coin."><link rel="icon" href="assets/favicon.svg"><meta property="og:image" content="https://feedthebrownies.com/assets/og.png"><link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&amp;family=Rubik:wght@400&amp;display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css"><script src="mascot.js"></script></head><body><header><nav><a href="team.html">Kitchen</a><a href="docs.html">Docs</a><a class="btn sm" href="app.html">Open app</a></nav></header><main><section class="hero"><h1>Every trade feeds the brownies<span class="dot">.</span></h1><p class="lead">Four AI helpers work for the BROWNIE coin. A 2% tax on every trade pays for them.</p><a class="btn" href="app.html">Stake BROWNIE</a><a class="btn ghost" href="#team">Meet the brownies</a><div class="lineup" data-mascot="lineup"></div></section><script>Mascot.fill();</script><div class="ticker"><div class="ticker-track"><span>Every trade feeds the brownies</span><span>Four brownies, one kitchen</span></div></div><section id="team"><h2>Each brownie has one job.</h2><p>Fudge writes. Crumb answers. Nib reads. Chip builds. ${"x".repeat(40)}</p><img src="assets/mark.svg" alt="the mark"></section></main><footer><a href="privacy.html">Privacy</a><a href="mailto:a@b.c">Contact</a><p>Made in the kitchen. ${"y".repeat(40)}</p></footer><script src="common.js"></script><script src="https://cdn.test/ethers.min.js"></script></body></html>`;
 
@@ -43,12 +43,38 @@ test("the judges' scores summed, by name, letter or number; a built page cleaned
   assert.ok(page.startsWith("<!doctype html>")); assert.ok(!page.includes("```")); assert.match(page, /<title>Brownies, four helpers<\/title>/); assert.match(page, /cafe "quoted"/);
   assert.deepEqual(checkBuilt(page, { h1: "Every trade feeds the brownies." }), []);
   const bad = checkBuilt("<html><head></head><body><h1>a</h1><h1>b</h1><img src=\"x\"><script src=\"https://cdn.evil/x.js\"></script><div data-mascot=\"fudge\"></div><div style=\"background: linear-gradient(red, blue); backdrop-filter: blur(4px)\"></div><h2>Hi \u{1F600}</h2></body>", { h1: "Every trade feeds the brownies." });
-  assert.deepEqual(bad, ["it does not start with <!doctype html>", "no title", "no viewport meta", "not exactly one h1", "no style element", "a script the page does not have today: https://cdn.evil/x.js", "mascot elements without mascot.js", "an image without alt", "characters that are not plain ASCII", "a gradient", "a blur panel", "an emoji in a heading", "too short to be a whole page", "it does not end with </html>", "the thesis of the headline is gone"]);
+  assert.deepEqual(bad, ["it does not start with <!doctype html>", "no title", "no viewport meta", "not exactly one h1", "no style element", "a script the page does not have today: https://cdn.evil/x.js", "mascot elements without mascot.js", "an image without alt", "characters that are not plain ASCII", "a gradient that blends colours (hard-stop lines, stripes and dots are fine)", "a blur panel", "an emoji in a heading", "too short to be a whole page", "it does not end with </html>", "the thesis of the headline is gone"]);
   const withScripts = page.replace("<style>body{margin:0}</style>", "<style>a{}</style><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Rubik\">").replace("</body>", "<div data-mascot=\"lineup\"></div><script src=\"mascot.js\"></script><script src=\"common.js\"></script><script src=\"https://cdn.test/ethers.min.js\"></script><script src=\"extra.js\"></script></body>");
   assert.deepEqual(checkBuilt(withScripts, { origin: "https://feedthebrownies.com", scripts: ["https://feedthebrownies.com/mascot.js", "https://feedthebrownies.com/common.js", "https://cdn.test/ethers.min.js"] }), ["a script the page does not have today: extra.js"], "the fonts and today's scripts are allowed, a new script file is not");
   const copy = previewCopy(`<a href="app.html">App</a><a href="#team">Team</a><a href="/docs.html">Docs</a><a href="https://x.com/a">X</a><a href="mailto:a@b.c">Mail</a><img src='assets/mark.svg' alt="m"><script src="mascot.js"></script><form action="/go"></form><div style="background:url(assets/bg.png)"></div><style>.a{background:url("data:image/png;base64,AA")}</style>`, "https://feedthebrownies.com");
   assert.equal(copy, `<a href="https://feedthebrownies.com/app.html">App</a><a href="#team">Team</a><a href="https://feedthebrownies.com/docs.html">Docs</a><a href="https://x.com/a">X</a><a href="mailto:a@b.c">Mail</a><img src='https://feedthebrownies.com/assets/mark.svg' alt="m"><script src="https://feedthebrownies.com/mascot.js"></script><form action="https://feedthebrownies.com/go"></form><div style="background:url(https://feedthebrownies.com/assets/bg.png)"></div><style>.a{background:url("data:image/png;base64,AA")}</style>`);
   assert.equal(previewCopy("<a href=\"a.html\">a</a>", ""), "<a href=\"a.html\">a</a>");
+});
+
+test("a gradient that blends colours is the banned look; hard-stop lines, stripes and dots are drawing", () => {
+  for (const css of [
+    "background: linear-gradient(red, blue)",
+    "background: linear-gradient(90deg, #FF5A1F 0%, #2A1710 100%)",
+    "background-image: radial-gradient(circle at 30% 20%, rgba(255,90,31,.4), transparent 60%)",
+    "background: linear-gradient(to right, var(--accent), var(--ink))",
+    "background: conic-gradient(from 0deg, #fff, #000)",
+    "background: repeating-linear-gradient(#D8CAB3 0 1px, transparent 6px 28px)", // six pixels of fade is a blend
+  ]) assert.equal(blends(css), true, css);
+  for (const css of [
+    "color: red",
+    "background: repeating-linear-gradient(transparent 0 27px, #D8CAB3 27px 28px)", // ruled paper
+    "background: repeating-linear-gradient(45deg, #FF5A1F 0 12px, #2A1710 12px 24px)", // stripes
+    "background-image: radial-gradient(#2A1710 1.5px, transparent 1.5px); background-size: 16px 16px", // dots
+    "background-image: radial-gradient(circle, #2A1710 1.5px, transparent 2px)", // dots, half a pixel of softening
+    "background: linear-gradient(#F6EFE2 50%, #2A1710 50%)", // a page in two halves
+    "background: linear-gradient(to right, var(--ink) 0 calc(100% - 1px), var(--line) calc(100% - 1px) 100%)",
+    "background: linear-gradient(90deg, #2A1710 3px, transparent 0)", // the 0 idiom: where the last one ended
+    "background: linear-gradient(rgba(42, 23, 16, .08) 1px, transparent 1px), linear-gradient(90deg, rgba(42,23,16,.08) 1px, transparent 1px)", // a grid
+    "background: linear-gradient(#FF5A1F, #ff5a1f)", // one colour
+  ]) assert.equal(blends(css), false, css);
+  const page = "<!doctype html><html><head><title>t</title><meta name=\"viewport\" content=\"width=device-width\"><style>body{background:repeating-linear-gradient(transparent 0 27px, #D8CAB3 27px 28px)}</style></head><body><h1>Shop</h1>" + "<p>filler</p>".repeat(400) + "</body></html>";
+  assert.deepEqual(checkBuilt(page, {}), [], "ruled paper passes");
+  assert.deepEqual(checkBuilt(page.replace("repeating-linear-gradient(transparent 0 27px, #D8CAB3 27px 28px)", "linear-gradient(#fff, #eee)"), {}), ["a gradient that blends colours (hard-stop lines, stripes and dots are fine)"]);
 });
 
 test("the brief: whether the new page beat today's, the directions, the build-off, the finals, the polish, the files; the gallery", () => {

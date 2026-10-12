@@ -5,8 +5,13 @@
 set -euo pipefail
 LIVE_URL=${LIVE_URL:-https://feedthebrownies.com/room.html?live=1}
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq xvfb ffmpeg fonts-liberation fonts-noto-color-emoji xdg-utils curl python3 unzip >/dev/null
+# the packages are installed once. A later run finds them and leaves the package manager alone: on 2026-10-13 an
+# update stopped here on "Could not get lock", the server's own nightly package run being on.
+if ! { command -v Xvfb && command -v ffmpeg && command -v python3 && command -v curl; } >/dev/null 2>&1; then
+  for _ in $(seq 1 36); do fuser /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break; sleep 5; done
+  apt-get update -qq
+  apt-get install -y -qq xvfb ffmpeg fonts-liberation fonts-noto-color-emoji xdg-utils curl python3 unzip >/dev/null
+fi
 if ! command -v google-chrome >/dev/null; then
   curl -fsSL -o /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
   apt-get install -y -qq /tmp/chrome.deb >/dev/null && rm -f /tmp/chrome.deb

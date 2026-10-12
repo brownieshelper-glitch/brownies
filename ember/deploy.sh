@@ -17,8 +17,8 @@ HOSTIP=$(grep -E '^EMBER_HOST=' "$ENV_LOCAL" | head -1 | cut -d= -f2- | tr -d '[
 SSH="ssh -i $HOME/.ssh/brownies_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 root@$HOSTIP"
 SCP="scp -q -i $HOME/.ssh/brownies_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 case "${1:-deploy}" in
-  start) $SSH "systemctl start ember-browser ember-stream && sleep 12 && systemctl is-active ember-browser ember-stream && journalctl -u ember-stream --no-pager -n 3 -o cat"; echo "== started";;
-  stop) $SSH "systemctl stop ember-stream ember-browser; systemctl is-active ember-stream || true"; echo "== stopped";;
+  start) $SSH "rm -f /srv/ember/paused; systemctl start ember-browser ember-stream && sleep 12 && systemctl is-active ember-browser ember-stream && journalctl -u ember-stream --no-pager -n 3 -o cat"; echo "== started";;
+  stop) $SSH "touch /srv/ember/paused; systemctl stop ember-stream ember-browser; systemctl is-active ember-stream || true"; echo "== stopped";;
   status) $SSH "cat /srv/ember/public/status.json 2>/dev/null; echo; journalctl -u ember-stream --no-pager -n 8 -o cat"; ;;
   test)
     $SSH "systemctl is-active --quiet ember-browser || systemctl start ember-browser; sleep 10; sudo -u ember EMBER_ENV=/etc/ember/ember.env /srv/ember/stream.sh test && ls -la /srv/ember/test.mp4"

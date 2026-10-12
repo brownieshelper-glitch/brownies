@@ -3,6 +3,8 @@
 # it to Twitch (and to YouTube and to X when their keys are set), 720p at 30 frames a second, 2.5 Mbit/s. Runs under systemd
 # (ember-stream.service) and is restarted when it stops. Settings come from /etc/ember/ember.env; nothing is
 # printed from it. "stream.sh test" writes 20 seconds to /srv/ember/test.mp4 instead of streaming anywhere.
+# Every place has its own queue (ffmpeg's fifo): one that drops or refuses does not stop the others, and it is
+# tried again every RETRY seconds for as long as the stream runs. health.sh is the backstop for the rest.
 set -euo pipefail
 ENV_FILE=${EMBER_ENV:-/etc/ember/ember.env}
 [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
@@ -16,10 +18,11 @@ YOUTUBE_INGEST=${YOUTUBE_INGEST:-rtmp://a.rtmp.youtube.com/live2}
 # X gives each source its own address and key (Live Studio, the source page): both go in the env file, X_RTMP_URL and
 # X_STREAM_KEY. There is no usual address to fall back on.
 X_RTMP_URL=${X_RTMP_URL:-}
+RETRY=${EMBER_RETRY_SECONDS:-15}
 
 VIDEO=(-thread_queue_size 512 -f x11grab -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_ID")
 if [ -f "$MUSIC" ]; then AUDIO=(-thread_queue_size 512 -stream_loop -1 -i "$MUSIC"); else AUDIO=(-f lavfi -i anullsrc=channel_layout=mono:sample_rate=24000); fi
-ENC=(-map 0:v -map 1:a -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g $((FPS * 2)) -keyint_min $((FPS * 2)) -b:v "$VBITRATE" -maxrate "$VBITRATE" -bufsize 5000k -c:a aac -ar 44100 -b:a 128k -af "volume=0.9")
+ENC=(-map 0:v -map 1:a -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g $((FPS * 2)) -keyint_min $((FPS * 2)) -b:v "$VBITRATE" -maxrate "$VBITRATE" -bufsize 5000k -c:a aac -ar 44100 -ac 2 -b:a 128k -af "volume=0.9")
 
 if [ "${1:-}" = "test" ]; then
   mkdir -p /srv/ember
@@ -33,4 +36,4 @@ OUTS=()
 if [ ${#OUTS[@]} -eq 0 ]; then echo "no stream key set (TWITCH_STREAM_KEY, YOUTUBE_STREAM_KEY, or X_RTMP_URL with X_STREAM_KEY, in $ENV_FILE)"; sleep 60; exit 1; fi
 TEE=$(IFS='|'; echo "${OUTS[*]}")
 echo "streaming $SIZE at $FPS fps to ${#OUTS[@]} place(s)"
-exec ffmpeg -hide_banner -loglevel warning -nostats "${VIDEO[@]}" "${AUDIO[@]}" "${ENC[@]}" -flvflags no_duration_filesize -f tee "$TEE"
+exec ffmpeg -hide_banner -loglevel warning -nostats "${VIDEO[@]}" "${AUDIO[@]}" "${ENC[@]}" -flvflags no_duration_filesize -f tee -use_fifo 1 -fifo_options "attempt_recovery=1:recovery_wait_time=${RETRY}:drop_pkts_on_overflow=1:recover_any_error=1:restart_with_keyframe=1" "$TEE"

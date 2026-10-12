@@ -60,7 +60,7 @@ test("an idea is bought for 50 USDC as an order to poll for, judged as an idea, 
     assert.ok(idea.length > 600, "longer than a note's limit");
     const r = await buy("idea", idea);
     assert.equal(r.first.status, 402); assert.equal(b64.decode(r.first.required).accepts[0].amount, "50000000"); assert.equal(r.first.body.price, "50 USDC on Base");
-    assert.equal(r.second.status, 202); assert.equal(r.second.body.item, "idea"); assert.equal(r.second.body.state, "paid"); assert.equal(r.second.body.minutes, 10); assert.match(r.second.body.statusUrl, /^https:\/\/api\.test\/shop\/orders\/1\?key=[0-9a-f]{16}$/);
+    assert.equal(r.second.status, 202); assert.equal(r.second.body.item, "idea"); assert.equal(r.second.body.state, "paid"); assert.equal(r.second.body.minutes, 15); assert.match(r.second.body.statusUrl, /^https:\/\/api\.test\/shop\/orders\/1\?key=[0-9a-f]{16}$/);
     assert.deepEqual(judged[0][0], "idea"); assert.ok(judged[0][1].includes("kits.\n\nWe charge 29 euros"), "the lines reach the judge");
     assert.equal(W.store.order(1).prompt.split("\n").length, 4);
     const c = await call("GET", "/shop");

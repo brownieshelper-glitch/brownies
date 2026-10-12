@@ -27,6 +27,8 @@ export class Store {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.tz = tz;
     this.db = new DatabaseSync(path);
+    // another process may hold the file for a moment (a job run by hand next to the service): wait for it, never fail a write
+    if (path !== ":memory:") this.db.exec("PRAGMA busy_timeout = 8000;");
     this.db.exec(`
       ${path === ":memory:" ? "" : "PRAGMA journal_mode = WAL;"}
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);

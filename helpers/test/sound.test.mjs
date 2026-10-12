@@ -12,6 +12,12 @@ test("a clip made for a sound is a performance, not a sketch: its own orders and
   assert.match(SOUND_RULES, /captions: an empty list, or one line under 40 characters/);
   // the same evening the first /sprinkle copy stopped at the writing: a dance word read as coin talk, twice
   assert.match(SOUND_RULES, /Words the scene must not use, because here they read as talk about coins even when a dance is meant: pump, pumping, launch, chain,/);
+  // clip 21 (2026-10-12) had the look right and no dance: hundreds of brownies standing on steps, the same picture
+  // at second 1 and at second 9, because the scene was written in jolts and freezes under a fixed camera
+  assert.match(SOUND_RULES, /The movement IS the video\. It starts within the first second and never stops until the last frame/);
+  assert.match(SOUND_RULES, /For the crowd never write freeze, still, hold, pause, lock or stop; only one single figure may stand still/);
+  assert.match(SOUND_RULES, /two or three rows, about twenty brownies, large in the frame\. Not hundreds, not a stadium\./);
+  assert.match(SOUND_RULES, /The camera moves too, all the way through: a steady push-in, or a slow handheld drift\. Never a fixed frame\./);
   // our own performance: nobody's outfit, no institution, the movement in our own words
   const brief = soundBrief(cleanSound("Storm II by GENER8ION"));
   assert.match(brief, /The brownies wear nothing they do not always wear: no uniforms, no blazers, no outfit taken from the videos of the trend\./);

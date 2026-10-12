@@ -21,7 +21,7 @@ case "${1:-deploy}" in
   deploy)
     echo "== server reachable: $($SSH 'echo yes' 2>/dev/null || echo no)"
     $SSH "mkdir -p /srv/sandbox"
-    $SCP sandbox/server.mjs sandbox/setup.sh "root@$HOSTIP:/srv/sandbox/"
+    $SCP sandbox/server.mjs sandbox/setup.sh sandbox/browser.Dockerfile "root@$HOSTIP:/srv/sandbox/"
     $SSH "bash /srv/sandbox/setup.sh"
     # the token, from the server's file into the local secrets file, never through the screen
     $SSH "grep -E '^SANDBOX_TOKEN=' /etc/sandbox/sandbox.env" | { read -r line; printf 'SANDBOX_HOST=%s\nSANDBOX_URL=%s\n%s\n' "$HOSTIP" "$URL" "$line" > "$S/brownies-sandbox.env"; }

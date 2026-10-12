@@ -23,6 +23,9 @@ const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
 export const REASONING_HEADROOM = 800; // tokens of thinking a Claude 5 model may spend before the answer (measured: about 250 on a research note)
 export const DEFAULT_REASONING = { effort: "low" }; // measured: zero thinking tokens on our jobs, the whole budget goes to the answer
 
+/// One part of a user message: { text } or { image: base64, mime }, in OpenRouter's shape.
+const toPart = (p) => (p && p.image ? { type: "image_url", image_url: { url: `data:${p.mime || "image/jpeg"};base64,${p.image}` } } : { type: "text", text: String(p?.text ?? "") });
+
 export class Brain {
   /// helpers: { fudge: { model, dailyCapUsd }, ... }   keys: { fudge: "0x...", ... } (live only)
   constructor({ mode = "prelaunch", openrouterKey = "", openrouterUrl = "https://openrouter.ai/api/v1", gateway = null, keys = {}, mnemonic = "", chainId = 1, helpers = {}, store, clock, fetch = globalThis.fetch, alerts = null, minBalanceMicro = 50_000, log = () => {} }) {
@@ -33,6 +36,21 @@ export class Brain {
   }
 
   model(helper) { return this.helpers[helper]?.model || DEFAULT_MODEL; }
+  /// OpenRouter's public list of models, read once an hour: id -> { image: it takes pictures, maxOut: its longest answer }.
+  /// null when the list cannot be read.
+  async models() {
+    const now = this.clock.now();
+    if (!this._models || now - this._modelsAt > 3_600_000) {
+      try {
+        const r = await this.fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(15_000) });
+        const j = r?.ok ? await r.json() : null;
+        if (Array.isArray(j?.data) && j.data.length) { this._models = new Map(j.data.map((m) => [m.id, { image: (m.architecture?.input_modalities || []).includes("image"), maxOut: Number(m.top_provider?.max_completion_tokens) || 0 }])); this._modelsAt = now; }
+      } catch { /* the callers have a fallback */ }
+    }
+    return this._models || null;
+  }
+  /// Of the given model ids, those that take pictures; without the list, every id but the ones known to read text only.
+  async vision(ids) { const m = await this.models(); return (ids || []).filter((id) => (m?.has(id) ? m.get(id).image : !/deepseek/i.test(id))); }
   capMicro(helper) { return Math.round((this.helpers[helper]?.dailyCapUsd ?? 1) * 1e6); }
 
   wallet(helper) {
@@ -100,7 +118,7 @@ export class Brain {
   /// One chat completion. Returns { text, costMicro, model, usage }. Throws BudgetError when the helper cannot pay.
   /// `job` is the name of the job this thought belongs to (the ledger line carries it; lib/costs.mjs groups by it).
   /// `model` asks another model than the brownie's own for this one thought (a panel of reviewers); the cost is the brownie's all the same.
-  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning, plugins = null, job = null, model = null } = {}) {
+  async chat(helper, { system = "", messages = [], prompt = "", parts = null, maxTokens = 600, temperature = 0.7, reasoning, plugins = null, job = null, model = null } = {}) {
     await this.budgetOrThrow(helper);
     const started = this.clock.now();
     // the effort: the call's own, else the brownie's config (a thinker like Chip gets medium with more headroom), else low
@@ -110,11 +128,13 @@ export class Brain {
     const list = [];
     if (system) list.push({ role: "system", content: system });
     list.push(...messages);
-    if (prompt) list.push({ role: "user", content: prompt });
+    if (Array.isArray(parts) && parts.length) list.push({ role: "user", content: parts.map(toPart) }); // text and pictures in one message, for a model that sees
+    else if (prompt) list.push({ role: "user", content: prompt });
     // Claude 5 models think before they answer and that thinking is counted inside max_tokens. OpenRouter refuses
     // to switch it off, but "effort: low" leaves it at zero tokens on these jobs (measured), so that is the default;
     // a call may ask for more. The headroom stays as a belt to the braces.
     const body = { model: model || this.model(helper), messages: list, max_tokens: maxTokens + headroom, temperature, usage: { include: true } };
+    const most = this._models?.get(body.model)?.maxOut; if (most && body.max_tokens > most) body.max_tokens = most; // never more than the model can write (known once models() was read)
     if (reasoning) body.reasoning = reasoning;
     if (Array.isArray(plugins) && plugins.length) body.plugins = plugins; // OpenRouter plugins, e.g. [{ id: "web" }] for a web search before the answer
     const j = this.mode === "live" ? await this._viaGateway(helper, body) : await this._viaOpenRouter(helper, body);

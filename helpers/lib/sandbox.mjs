@@ -18,7 +18,8 @@ export class Sandbox {
     return r.json();
   }
 
-  /// { ok, id, image, mb, install: { exit, timedOut, stdout, stderr } | null, exit, timedOut, seconds, stdout, stderr, files, totalSeconds }.
+  /// { ok, id, image, mb, install: { exit, timedOut, stdout, stderr } | null, exit, timedOut, seconds, stdout, stderr, files, blobs, totalSeconds }
+  /// (files: the text files asked for; blobs: the pictures asked for, as base64). A job may carry only files, no code.
   /// Throws with the sandbox's own words when it refuses the job (a bad url, too big, busy).
   /// files: { "path": "content" } laid over the code after the clone (a reproduction script), a few and small.
   async run({ image = "node", git = null, tar = null, install = "", command, timeoutSeconds = 300, installTimeoutSeconds = 180, collect = [], files = null } = {}) {

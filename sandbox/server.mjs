@@ -15,10 +15,10 @@ const PORT = Number(process.env.PORT || 8799);
 const TOKEN = String(process.env.SANDBOX_TOKEN || "");
 if (!TOKEN) { console.error("SANDBOX_TOKEN is empty: refusing to start"); process.exit(1); }
 const JOBS = process.env.JOBS_DIR || "/var/lib/sandbox/jobs";
-const IMAGES = { node: "node:22-bookworm-slim", python: "python:3.12-slim", foundry: "ghcr.io/foundry-rs/foundry:latest" };
+const IMAGES = { node: "node:22-bookworm-slim", python: "python:3.12-slim", foundry: "ghcr.io/foundry-rs/foundry:latest", browser: "brownies-browser" }; // browser: built by setup.sh from browser.Dockerfile (Chromium, for screenshots with no network)
 const CPUS = process.env.CPUS || "1", MEMORY = process.env.MEMORY || "1500m";
 const RUNTIME = String(process.env.RUNTIME || ""); // "runsc" = gVisor, a second kernel under every container; empty = Docker's own
-const MAX_SECONDS = 600, MAX_INSTALL_SECONDS = 300, MAX_OUT = 200_000, MAX_CLONE_MB = 300, MAX_TAR_BYTES = 8 * 1024 * 1024, MAX_COLLECT = 5, MAX_COLLECT_BYTES = 1_000_000, QUEUE_MAX = 4;
+const MAX_SECONDS = 600, MAX_INSTALL_SECONDS = 300, MAX_OUT = 200_000, MAX_CLONE_MB = 300, MAX_TAR_BYTES = 8 * 1024 * 1024, MAX_COLLECT = 80, MAX_COLLECT_BYTES = 1_500_000, MAX_FILES = 64, MAX_FILES_BYTES = 12_000_000, QUEUE_MAX = 4;
 let running = 0, queued = 0, done = 0;
 const log = (s) => console.log(`${new Date().toISOString()} ${s}`);
 const clip = (s) => (s.length > MAX_OUT ? s.slice(0, MAX_OUT) + `\n[cut after ${MAX_OUT} characters]` : s);
@@ -49,7 +49,7 @@ async function box(id, dir, image, command, { network = "none", seconds = 60 } =
 }
 
 /// The code into the job folder: a public https git URL (shallow, size-capped) or a base64 gzip tarball.
-async function fetchCode(dir, { git, tar }) {
+async function fetchCode(dir, { git, tar, files }) {
   if (git?.url) {
     if (!/^https:\/\/[\w.-]+\/[\w./-]+$/.test(String(git.url))) throw new Error("the git url must be https and plain");
     const args = ["clone", "--depth", "1", "--no-tags", "--single-branch", "--recurse-submodules", "--shallow-submodules"];
@@ -67,7 +67,7 @@ async function fetchCode(dir, { git, tar }) {
     const r = await exec("tar", ["--no-same-owner", "--no-same-permissions", "-xzf", file, "-C", dir], { seconds: 60 });
     rmSync(file, { force: true });
     if (r.exit !== 0) throw new Error(`the tarball did not unpack: ${r.stderr.trim().split("\n").pop() || "no detail"}`);
-  } else throw new Error("send git { url, ref } or tar (base64 gzip)");
+  } else if (!files || typeof files !== "object" || !Object.keys(files).length) throw new Error("send git { url, ref }, tar (base64 gzip), or files");
   const du = await exec("du", ["-sm", dir], { seconds: 30 });
   const mb = Number((du.stdout || "0").split(/\s/)[0]) || 0;
   if (mb > MAX_CLONE_MB) throw new Error(`the code is ${mb} MB; the limit is ${MAX_CLONE_MB}`);
@@ -95,9 +95,9 @@ async function runJob(body) {
     // extra files laid over the code after the clone (a reproduction script, a test): a few, small, inside the folder
     if (body.files && typeof body.files === "object") {
       let total = 0;
-      for (const [p, c] of Object.entries(body.files).slice(0, 32)) {
+      for (const [p, c] of Object.entries(body.files).slice(0, MAX_FILES)) {
         if (!/^[\w./-]{1,200}$/.test(p) || p.includes("..")) continue;
-        const text = String(c ?? ""); total += text.length; if (total > 200_000) break;
+        const text = String(c ?? ""); total += text.length; if (total > MAX_FILES_BYTES) break;
         const f = resolve(dir, p);
         if (!f.startsWith(dir + "/")) continue;
         mkdirSync(dirname(f), { recursive: true });
@@ -108,14 +108,14 @@ async function runJob(body) {
     let inst = null;
     if (install) inst = await box(id, dir, image, install, { network: "bridge", seconds: installSeconds });
     const run = await box(id, dir, image, command, { network: "none", seconds });
-    const files = {};
+    const files = {}, blobs = {}; // text comes back as it is, pictures as base64 under blobs
     for (const p of collect) {
       const f = resolve(dir, p);
       if (!f.startsWith(dir + "/") || !existsSync(f)) continue;
       const st = statSync(f);
-      if (st.isFile() && st.size <= MAX_COLLECT_BYTES) files[p] = readFileSync(f, "utf8");
+      if (st.isFile() && st.size <= MAX_COLLECT_BYTES) { if (/\.(jpe?g|png|webp|gif)$/i.test(p)) blobs[p] = readFileSync(f).toString("base64"); else files[p] = readFileSync(f, "utf8"); }
     }
-    const out = { ok: true, id, image, mb, install: inst ? { exit: inst.exit, timedOut: inst.timedOut, seconds: inst.seconds, stdout: inst.stdout, stderr: inst.stderr } : null, exit: run.exit, timedOut: run.timedOut, seconds: run.seconds, stdout: run.stdout, stderr: run.stderr, files, totalSeconds: Math.round((Date.now() - started) / 1000) };
+    const out = { ok: true, id, image, mb, blobs, install: inst ? { exit: inst.exit, timedOut: inst.timedOut, seconds: inst.seconds, stdout: inst.stdout, stderr: inst.stderr } : null, exit: run.exit, timedOut: run.timedOut, seconds: run.seconds, stdout: run.stdout, stderr: run.stderr, files, totalSeconds: Math.round((Date.now() - started) / 1000) };
     log(`job ${id}: ${image} ${mb} MB, install ${inst ? inst.exit : "none"}, run exit ${run.exit}${run.timedOut ? " (timed out)" : ""} in ${out.totalSeconds} s`);
     return out;
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -138,7 +138,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") return json(200, { ok: true, running, queued, done, images: Object.keys(IMAGES), cpus: CPUS, memory: MEMORY });
     if (req.method === "POST" && req.url === "/run") {
       let s = "";
-      await new Promise((ok, no) => { req.on("data", (d) => { s += d; if (s.length > MAX_TAR_BYTES * 1.4 + 10_000) { no(new Error("too large")); req.destroy(); } }); req.on("end", ok); req.on("error", no); });
+      await new Promise((ok, no) => { req.on("data", (d) => { s += d; if (s.length > Math.max(MAX_TAR_BYTES * 1.4, MAX_FILES_BYTES * 1.1) + 100_000) { no(new Error("too large")); req.destroy(); } }); req.on("end", ok); req.on("error", no); });
       let body; try { body = JSON.parse(s || "{}"); } catch { return json(400, { error: "the body must be JSON" }); }
       try { return json(200, await enqueue(body)); } catch (e) { return json(e.status || 400, { error: e.message }); }
     }

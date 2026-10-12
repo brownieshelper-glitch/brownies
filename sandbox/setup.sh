@@ -24,6 +24,8 @@ if ! command -v runsc >/dev/null; then
 fi
 if docker info 2>/dev/null | grep -q runsc; then grep -q '^RUNTIME=' /etc/sandbox/sandbox.env || echo 'RUNTIME=runsc' >> /etc/sandbox/sandbox.env; fi
 for img in node:22-bookworm-slim python:3.12-slim ghcr.io/foundry-rs/foundry:latest; do docker image inspect "$img" >/dev/null 2>&1 || docker pull -q "$img" >/dev/null; done
+# the browser box (Chromium on the node image), built here; cached layers make a rebuild instant when nothing changed
+if [ -f /srv/sandbox/browser.Dockerfile ]; then docker build -q -t brownies-browser -f /srv/sandbox/browser.Dockerfile /srv/sandbox >/dev/null || echo "sandbox: the browser image did NOT build"; fi
 cat > /etc/systemd/system/sandbox.service <<'EOF'
 [Unit]
 Description=Brownies sandbox: strangers' code in a box, for the code reviews

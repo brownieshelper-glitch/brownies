@@ -14,7 +14,11 @@ fi
 id ember >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin ember
 mkdir -p /srv/ember/public /etc/ember
 chown -R ember:ember /srv/ember
-chmod 600 /etc/ember/ember.env 2>/dev/null || true
+# the stream runs as the user ember and reads its key from this file: root owns it, the group ember may read it,
+# nobody else. (It was 600 here until 2026-10-13, which undid the 640 set by deploy.sh: the first start found
+# "Permission denied" and no key.)
+chown root:ember /etc/ember/ember.env 2>/dev/null || true
+chmod 640 /etc/ember/ember.env 2>/dev/null || true
 chmod +x /srv/ember/stream.sh /srv/ember/health.sh
 
 cat > /etc/systemd/system/ember-display.service <<'EOF'

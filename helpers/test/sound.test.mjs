@@ -10,6 +10,12 @@ test("a clip made for a sound is a performance, not a sketch: its own orders and
   assert.match(SOUND_RULES, /"duration": 8 to 15, "captions": \[\]/);
   assert.match(SOUND_RULES, /It is a performance, not a sketch: no joke ending, no twist, no prop gag, nothing falling or breaking\./);
   assert.match(SOUND_RULES, /captions: an empty list, or one line under 40 characters/);
+  // the same evening the first /sprinkle copy stopped at the writing: a dance word read as coin talk, twice
+  assert.match(SOUND_RULES, /Words the scene must not use, because here they read as talk about coins even when a dance is meant: pump, pumping, launch, chain,/);
+  // our own performance: nobody's outfit, no institution, the movement in our own words
+  const brief = soundBrief(cleanSound("Storm II by GENER8ION"));
+  assert.match(brief, /The brownies wear nothing they do not always wear: no uniforms, no blazers, no outfit taken from the videos of the trend\./);
+  assert.match(brief, /never by an institution or a named place \(no school, no church, no stadium by name\), and write the movement in your own words as a simple routine a crowd can do together\./);
   assert.match(SOUND_RULES, /as one continuous shot unless the format is known for its cuts/);
   assert.equal(SOUND_STYLE, "photoreal");
 });

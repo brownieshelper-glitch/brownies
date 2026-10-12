@@ -48,7 +48,7 @@ export function splitSound(text) {
 export function soundBrief(sound) {
   if (!sound) return "";
   return `THIS TREND LIVES ON A SOUND (${soundName(sound)}): a dance or a movement everybody does to the same track. The track is added from the network's own library when the clip is posted, so the film itself is SILENT: write no music, no song title, no artist and no sung or spoken words into the scene, and no dialogue.
-Make it read as the trend at first sight: the same kind of place and line-up, the same kind of movement and energy, the same camera idea and pacing that the format is known for, performed by the brownies in their own way. If the format needs a crowd, more plain brownies (the same little cubes, no tools in their hands) may fill the rows behind the four. It is our performance of the format: no real person, nobody's costume or logo, no shot copied from anyone's video.
+Make it read as the trend at first sight: the same kind of place and line-up, the same kind of movement and energy, the same camera idea and pacing that the format is known for, performed by the brownies in their own way. If the format needs a crowd, more plain brownies (the same little cubes, no tools in their hands) may fill the rows behind the four. It is our performance of the format: no real person, nobody's costume or logo, no shot copied from anyone's video. The brownies wear nothing they do not always wear: no uniforms, no blazers, no outfit taken from the videos of the trend. Name the place by what it is (wide stone steps of an old building, a car park, a beach), never by an institution or a named place (no school, no church, no stadium by name), and write the movement in your own words as a simple routine a crowd can do together.
 The movement sits on a steady beat from the first second to the last and loops well; no cutaway joke in the middle of it. Captions: none, or one short line that does not get in the way of the dance.`;
 }
 
@@ -57,6 +57,7 @@ The movement sits on a steady beat from the first second to the last and loops w
 /// orders for a comedy episode and the rotation of places and styles were applied to it. Neither is, any more.
 export const SOUND_RULES = `Your task now: write one short video for an AI video model as JSON, nothing else around it: {"title": "a short title", "scene": "...", "duration": 8 to 15, "captions": [], "hook": "..."}.
 - scene: 60 to 120 words: what the camera sees from the first second to the last, as one continuous shot unless the format is known for its cuts: the place and the light, the line-up, the movement and who does it, the camera. The brownies are the performers (their look is given to the model separately, do not repeat it). It is a performance, not a sketch: no joke ending, no twist, no prop gag, nothing falling or breaking. Nothing written in the picture. No real person, no brand, no logo, nothing about coins, money or products.
+- Words the scene must not use, because here they read as talk about coins even when a dance is meant: pump, pumping, launch, chain, trade, stake, market, buy, sell, cash, price, holder, user, agent. Say bounce, jump, burst, row, line instead.
 - captions: an empty list, or one line under 40 characters, plain ASCII.
 - hook: one line under 90 characters for the post text, no hashtags.
 - duration: 8 to 15 seconds.`;

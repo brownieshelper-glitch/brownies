@@ -131,7 +131,7 @@ export class Shop {
       }
       if (req.method === "POST" && path === "/shop/ask") {
         let body;
-        try { body = await readBody(req, ASK_BODY_MAX, { answer: true }); } catch { res.setHeader("connection", "close"); return json(413, { error: `too large: up to ${ASK_FILES.max} files, ${ASK_FILES.bytesEach / 1048576} MB each and ${ASK_FILES.bytesAll / 1048576} MB in all` }); }
+        try { body = await readBody(req, ASK_BODY_MAX, { answer: true }); } catch { return json(413, { error: `too large: up to ${ASK_FILES.max} files, ${ASK_FILES.bytesEach / 1048576} MB each and ${ASK_FILES.bytesAll / 1048576} MB in all` }); }
         const r = await this.ask(body, clientIp(req));
         return json(r.status, r.body);
       }

@@ -81,3 +81,5 @@ helpers/test/milestone.test.mjs
 helpers/test/setup-hidden.test.mjs
 helpers/helpers/biscotti.mjs
 helpers/test/biscotti.test.mjs
+helpers/helpers/crust.mjs
+helpers/test/crust.test.mjs

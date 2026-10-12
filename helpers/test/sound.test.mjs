@@ -3,7 +3,57 @@
 // the app. The track itself is never ours to put in the file.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SOUND_PLACES, cleanSound, soundName, splitSound, soundBrief, soundSteps, soundCard } from "../lib/sound.mjs";
+import { SOUND_PLACES, SOUND_RULES, SOUND_STYLE, COPY_RULES, cleanSound, soundName, splitSound, soundBrief, soundSteps, soundCard, linkInfo, copyAsk, cleanCopy } from "../lib/sound.mjs";
+
+test("a clip made for a sound is a performance, not a sketch: its own orders and its own look", () => {
+  // 2026-10-12: the first one came out as a kitchen joke in pixel art with three captions and a punchline
+  assert.match(SOUND_RULES, /"duration": 8 to 15, "captions": \[\]/);
+  assert.match(SOUND_RULES, /It is a performance, not a sketch: no joke ending, no twist, no prop gag, nothing falling or breaking\./);
+  assert.match(SOUND_RULES, /captions: an empty list, or one line under 40 characters/);
+  assert.match(SOUND_RULES, /as one continuous shot unless the format is known for its cuts/);
+  assert.equal(SOUND_STYLE, "photoreal");
+});
+
+test("a link the owner sends: what the network says about it in public, through its own embed service; the video is never fetched", async () => {
+  const calls = [];
+  const fetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).startsWith("https://www.tiktok.com/oembed?url=")) return { ok: true, status: 200, json: async () => ({ title: "Joining the trend \u{1F923} original \"Storm II\" by GENER8ION  #StormII #GENER8ION", author_name: "somebody" }) };
+    if (String(url).startsWith("https://www.youtube.com/oembed?")) return { ok: true, status: 200, json: async () => ({ title: "A dance on the steps", author_name: "a channel" }) };
+    if (String(url).startsWith("https://publish.twitter.com/oembed?")) return { ok: true, status: 200, json: async () => ({ html: "<blockquote><p>the walk everybody does <a href=\"x\">#walk</a></p>&mdash; someone</blockquote>", author_name: "someone" }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const tt = await linkInfo("https://vm.tiktok.com/ZN8BC4ACB/", fetch);
+  assert.deepEqual(tt, { ok: true, place: "tiktok", url: "https://vm.tiktok.com/ZN8BC4ACB/", caption: 'Joining the trend original "Storm II" by GENER8ION #StormII #GENER8ION', author: "somebody" });
+  assert.equal(calls[0], "https://www.tiktok.com/oembed?url=https%3A%2F%2Fvm.tiktok.com%2FZN8BC4ACB%2F", "the embed service, not the page");
+  assert.equal((await linkInfo("https://youtu.be/abc", fetch)).caption, "A dance on the steps");
+  assert.match((await linkInfo("https://x.com/a/status/1", fetch)).caption, /^the walk everybody does #walk/);
+  // Instagram says nothing without a login: nothing is fetched at all
+  const before = calls.length;
+  assert.deepEqual(await linkInfo("https://www.instagram.com/reel/DdM2TrMzD_n/?x=1", fetch), { ok: false, place: "instagram", url: "https://www.instagram.com/reel/DdM2TrMzD_n/?x=1", why: "Instagram says nothing about a reel without a login" });
+  assert.equal(calls.length, before);
+  // anything else is not fetched either: no other host, no other scheme, no trick with the host name
+  for (const bad of ["https://example.com/video", "http://169.254.169.254/latest", "file:///etc/passwd", "https://tiktok.com.evil.test/v/1", "not a link", ""]) { const r = await linkInfo(bad, fetch); assert.equal(r.ok, false, bad); assert.equal(r.place, null, bad); }
+  assert.equal(calls.length, before, "nothing but the three embed services was called");
+  // a service that fails or says nothing
+  assert.equal((await linkInfo("https://www.tiktok.com/@a/video/1", async () => ({ ok: false, status: 429 }))).why, "the network answered 429 for that link");
+  assert.equal((await linkInfo("https://www.tiktok.com/@a/video/1", async () => { throw new Error("down"); })).why, "the link could not be read");
+  assert.equal((await linkInfo("https://www.tiktok.com/@a/video/1", async () => ({ ok: true, json: async () => ({ title: "" }) }))).why, "the network gave no caption for that link");
+});
+
+test("which trend is it: the format is asked for, never one person's video; the answer becomes a card, or nothing when it is not known", () => {
+  assert.match(COPY_RULES, /wants OUR version of that trend/);
+  assert.match(COPY_RULES, /Describe the format, not one person's video: no shot list of anybody's video, no words of a song, nobody's caption\./);
+  assert.match(COPY_RULES, /"known" is false when you cannot tell which trend it is\. Never guess one\./);
+  const ask = copyAsk({ link: "https://vm.tiktok.com/ZN8BC4ACB/", info: { ok: true, place: "tiktok", caption: "Joining the trend", author: "somebody" }, words: "the dance on the steps" });
+  assert.equal(ask, "THE LINK: https://vm.tiktok.com/ZN8BC4ACB/\nWHAT THE NETWORK SAYS ABOUT IT (tiktok, posted by somebody): Joining the trend\nTHE OWNER'S WORDS: the dance on the steps\nWhich trend is it? Answer with the JSON only.");
+  assert.match(copyAsk({ link: "https://www.instagram.com/reel/x/", info: { ok: false, place: "instagram", why: "Instagram says nothing about a reel without a login" } }), /\nThe network says nothing about it \(Instagram says nothing about a reel without a login\)\.\n/);
+  const card = cleanCopy({ known: true, name: "Storm dance", what: "Rows of people on wide steps break into one tight dance around a figure who stands still.", place: "wide stone steps outside an old building", moves: "Tight rows like a class photo, then everybody bounces as one pack. One long take, a slow push-in.", sound: { name: "Storm II", by: "GENER8ION" }, caption: "Four brownies, one storm", hashtags: ["StormII", "#GENER8ION", "not a tag!", "#StormII"] });
+  assert.deepEqual(card, { name: "Storm dance", what: "Rows of people on wide steps break into one tight dance around a figure who stands still.", our_version: "Four brownies, one storm. Rows of people on wide steps break into one tight dance around a figure who stands still.", shots_hint: "Tight rows like a class photo, then everybody bounces as one pack. One long take, a slow push-in.", place: "wide stone steps outside an old building", hashtags: ["#StormII", "#GENER8ION"], characters: [], sound: { name: "Storm II", by: "GENER8ION", url: null } });
+  assert.equal(cleanCopy({ known: false, name: "A guess", what: "Something that might be a trend, described at length." }), null, "not known is not filmed");
+  assert.equal(cleanCopy({ known: true, name: "X", what: "short" }), null); assert.equal(cleanCopy(null), null); assert.equal(cleanCopy("text"), null);
+  assert.equal(cleanCopy({ known: true, name: "The walk", what: "Everybody does the same slow walk towards the camera.", sound: null }).sound, null);
+});
 
 test("a sound, checked: a name, who it is by, a link; from a card or from 'Name by Artist'", () => {
   assert.deepEqual(cleanSound({ name: "Storm II", by: "GENER8ION", url: "https://www.tiktok.com/music/storm-ii-123" }), { name: "Storm II", by: "GENER8ION", url: "https://www.tiktok.com/music/storm-ii-123" });

@@ -6,12 +6,27 @@
 // The owner, 2026-10-12: "I want one of my agents uploading them after I send the video with the bio in the
 // Telegram chat."
 import { writeFileSync } from "node:fs";
+import { xHardProblems } from "./xrules.mjs";
 
 /// Telegram gives a bot files up to 20 MB (getFile); a larger one has to be sent smaller.
 export const TG_MAX_BYTES = 20 * 1024 * 1024;
-/// Where an own video goes when the caption names no place. X is left out on purpose: there the post is written
-/// by the brownie that posts on X, under X's rules, so it is only done when the owner asks for it by name.
-export const OWN_PLACES = ["youtube", "tiktok", "instagram", "facebook"];
+/// Where an own video goes when the caption names no place: every network, X among them (the owner, the same
+/// evening: "I also want him to post on Twitter").
+export const OWN_PLACES = ["youtube", "tiktok", "instagram", "facebook", "x"];
+/// What a post on X takes.
+export const X_MAX = 280;
+
+/// Why the owner's text cannot go on X as he wrote it ([] when it can): longer than a post there, or something X
+/// itself acts on (a link, an address, bait, money talk it calls a scam, a request for private information).
+/// Then the brownie that posts on X writes a shorter post from his text instead, inside the same rules.
+export function ownXProblems(text) {
+  const t = String(text ?? "").trim();
+  const out = [];
+  const len = [...t].reduce((a, ch) => a + (ch.codePointAt(0) > 0xffff ? 2 : 1), 0);
+  if (len > X_MAX) out.push(`it is ${len} characters and a post on X takes ${X_MAX}`);
+  out.push(...xHardProblems(t, { kind: "post" }));
+  return out;
+}
 
 const mb = (bytes) => (Number(bytes) / 1048576).toFixed(1);
 
@@ -75,11 +90,12 @@ export const OWN_SAYS = {
 };
 
 /// The card the owner approves. `tiktokDraft`: TikTok takes it as a draft in the inbox, finished in the app.
-export function ownCard({ n, seconds = 0, bytes = 0, text, places, tiktokDraft = true }) {
+export function ownCard({ n, seconds = 0, bytes = 0, text, places, tiktokDraft = true, xWhy = null }) {
+  if (xWhy === null) xWhy = places.includes("x") ? ownXProblems(text) : [];
   const size = [seconds ? `${Math.round(seconds)} s` : "", bytes ? `${mb(bytes)} MB` : ""].filter(Boolean).join(", ");
   const notes = [];
   if (places.includes("tiktok") && tiktokDraft) notes.push("On TikTok it lands in your inbox as a draft: you add the sound there and post.");
-  if (places.includes("x")) notes.push("On X the post is written by Fudge from your text, inside X's rules, so the words will not be exactly yours.");
+  if (places.includes("x")) notes.push(xWhy.length ? `On X your text cannot go as it is (${xWhy.join("; ")}), so Fudge writes a shorter post from it, inside X's rules.` : "On X it goes out with your words as they are.");
   if (places.some((p) => p !== "tiktok")) notes.push("It goes out with the sound that is in the file: a network's own sounds can only be added in its app.");
   return `Your video is saved as video ${n}${size ? ` (${size})` : ""}. The text, as you wrote it:\n\n${text}\n\nPost it? Approve sends it to ${list(places)}; Reject keeps it in the folder.${notes.length ? `\n${notes.join("\n")}` : ""}`;
 }

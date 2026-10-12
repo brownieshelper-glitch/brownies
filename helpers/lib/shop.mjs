@@ -6,7 +6,7 @@
 // clip. Every payment lands in the owner's wallet directly; the brownies never hold it. A paid order that cannot
 // be made is told to the owner, who refunds by hand: nothing moves money without him. Toffee (a hidden brownie)
 // makes the orders; the shop only takes them and hands out the files.
-import { createReadStream, copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { createReadStream, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { parsePayment } from "./x402seller.mjs";
@@ -37,6 +37,29 @@ export const BANNED = /\b(nsfw|nude|naked|sex|sexual|porn|erotic|kill|murder|blo
 /// For an idea the ban list is the hard part only: prices, returns and business claims are what a review is about.
 export const BANNED_IDEA = /\b(nsfw|nude|naked|sex|sexual|porn|erotic|kill|murder|blood|gore|terror|nazi|hitler|rape|seed phrases?|private keys?)\b/i;
 export const PROMPT_MIN = 10, PROMPT_MAX = 600;
+
+// ---- a request by form (the Biscotti page): no money moves, the owner reads it and answers by hand ----
+/// What a person may ask for by form.
+export const ASK_KINDS = { idea: "an idea review", brainstorm: "a brainstorm", code: "a code review", website: "a website check", remake: "a new version of a home page", other: "something else" };
+/// The files a request may carry: how many, how large, which kinds. A kind is told by the name's ending AND by the
+/// file's first bytes, so a program renamed to .pdf is refused.
+export const ASK_FILES = { max: 3, bytesEach: 4 * 1024 * 1024, bytesAll: 8 * 1024 * 1024, kinds: [".pdf", ".txt", ".md", ".png", ".jpg", ".jpeg", ".webp", ".zip"] };
+export const ASK_WORDS = { min: 20, max: 4000 };
+const ASK_BODY_MAX = 12 * 1024 * 1024;        // the files travel as base64 inside the JSON: a third more than their size
+const ASK_PER_HOUR = 3, ASK_PER_DAY = 40;      // per address, and for everyone together
+const ASK_DISK_MAX = 300 * 1024 * 1024;        // the folder of kept files never grows past this
+const oneLine = (v, max) => { const t = String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim(); return t.length > max ? null : t; };
+/// Is this file what its name says? The first bytes decide for the binary kinds; a text file must be text.
+export function fileLooksLike(ext, buf) {
+  const head = (n) => buf.subarray(0, n).toString("latin1");
+  if (ext === ".pdf") return head(5) === "%PDF-";
+  if (ext === ".png") return buf.length > 8 && buf[0] === 0x89 && head(4).slice(1) === "PNG";
+  if (ext === ".jpg" || ext === ".jpeg") return buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  if (ext === ".webp") return buf.length > 12 && head(4) === "RIFF" && buf.subarray(8, 12).toString("latin1") === "WEBP";
+  if (ext === ".zip") return buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x4b && (buf[2] === 3 || buf[2] === 5) && (buf[3] === 4 || buf[3] === 6);
+  if (ext === ".txt" || ext === ".md") return buf.length > 0 && !buf.includes(0) && !/\uFFFD/.test(buf.toString("utf8"));
+  return false;
+}
 const usdToMicro = (usd) => Math.round(Number(usd) * 1e6);
 const money = (micro) => `$${(Number(micro) / 1e6).toFixed(2)}`;
 const short = (a) => (a ? `${a.slice(0, 6)}...${a.slice(-4)}` : "");
@@ -62,6 +85,8 @@ export class Shop {
       this.items[id] = { ...it, usd: Number.isFinite(Number(over.usd)) && Number(over.usd) > 0 ? Number(over.usd) : it.usd };
     }
     this.checks = new Map(); // payer -> the times of the model checks, six per ten minutes
+    this.asksOpen = Boolean(config.asks); // the request form: closed until the settings say "shop": { "asks": true }
+    this.askTimes = new Map(); // address -> the times of its requests by form, three an hour
     this.sold = { count: 0, micro: 0 };
   }
 
@@ -78,6 +103,7 @@ export class Shop {
       items: Object.entries(this.items).map(([id, it]) => ({ id, title: it.title, what: it.what, usd: it.usd, mimeType: it.mimeType, minutes: it.minutes, maxChars: it.maxChars || PROMPT_MAX, how: `POST ${this.baseUrl}/shop/${id} with JSON {"prompt": "..."}; answer 402 carries PAYMENT-REQUIRED; send it again with PAYMENT-SIGNATURE` })),
       pay: { protocol: "x402", version: 2, scheme: "exact", network: `eip155:${this.seller.chainId}`, asset: this.seller.asset, payTo: this.seller.payTo || null },
       rules: RULES, docs: `${this.siteUrl}/shop.html`,
+      asks: this.asksOpen ? { open: true, how: `POST ${this.baseUrl}/shop/ask with JSON {"kind", "words", "contact", "link", "files": [{"name", "data": base64}]}`, kinds: Object.keys(ASK_KINDS), files: ASK_FILES } : { open: false },
     };
   }
 
@@ -102,6 +128,12 @@ export class Shop {
         const o = this.store.order(Number(m[1]));
         if (!o || o.key !== url.searchParams.get("key")) return json(404, { error: "no such order" });
         return json(200, this.orderView(o));
+      }
+      if (req.method === "POST" && path === "/shop/ask") {
+        let body;
+        try { body = await readBody(req, ASK_BODY_MAX, { answer: true }); } catch { res.setHeader("connection", "close"); return json(413, { error: `too large: up to ${ASK_FILES.max} files, ${ASK_FILES.bytesEach / 1048576} MB each and ${ASK_FILES.bytesAll / 1048576} MB in all` }); }
+        const r = await this.ask(body, clientIp(req));
+        return json(r.status, r.body);
       }
       if (req.method === "POST" && path === "/shop/quote") { const r = await this.quote(await readBody(req), clientIp(req)); return json(r.status, r.body); }
       if (req.method === "POST" && (m = /^\/shop\/([a-z]+)$/.exec(path))) {
@@ -176,6 +208,78 @@ export class Shop {
     await this.tell(`A quote was asked on order #${o.id} (${o.item}, paid by ${short(o.payer)}): "${what}"${contact ? `. Contact: ${contact}` : ". No contact given; the buyer's wallet is the only address."}. Nothing moves without you: answer them with a price if you want the work.`);
     return { status: 200, body: { ok: true, order: o.id, note: "The owner was told. A quote comes back by the contact you gave, or not at all; nothing is charged for asking." } };
   }
+  /// A request by form: what the person wants, in their words, how to reach them, a link, up to three files. No
+  /// money moves and no model is asked. The words and the files are kept, the owner is told (the files go to him as
+  /// documents), and he answers by hand. Closed unless the settings open it. { status, body }.
+  async ask(body, ip = "") {
+    if (!this.asksOpen) return { status: 503, body: { error: "requests by form are not open yet" } };
+    if (body?.website) return { status: 200, body: { ok: true, note: "Sent." } }; // the field no person sees: answered as if taken, nothing kept
+    const bad = (error) => ({ status: 400, body: { error } });
+    const kind = Object.hasOwn(ASK_KINDS, String(body?.kind)) ? String(body.kind) : null;
+    if (!kind) return bad(`say what you want: ${Object.keys(ASK_KINDS).join(", ")}`);
+    const words = cleanPrompt(body?.words ?? "", { max: ASK_WORDS.max, keepLines: true });
+    if (!words || words.length < ASK_WORDS.min) return bad(`tell us what you need in ${ASK_WORDS.min} to ${ASK_WORDS.max} characters`);
+    if (BANNED_IDEA.test(words)) return bad("we do not make that");
+    const contact = oneLine(body?.contact, 120);
+    if (!contact || contact.length < 3) return bad("say how to reach you: an email, or a handle on Telegram or X");
+    const link = oneLine(body?.link, 300);
+    if (link === null || (link && !/^https:\/\/[^\s"'<>]+$/i.test(link))) return bad("the link must start with https://");
+    // the files: each one decoded, measured, and checked against what its name says it is
+    const sent = Array.isArray(body?.files) ? body.files : [];
+    if (sent.length > ASK_FILES.max) return bad(`up to ${ASK_FILES.max} files`);
+    const files = [];
+    let total = 0;
+    for (const x of sent) {
+      const name = oneLine(x?.name, 120) || "";
+      const ext = extname(name).toLowerCase();
+      if (!ASK_FILES.kinds.includes(ext)) return bad(`"${name.slice(0, 60)}" is not a kind we take: ${ASK_FILES.kinds.join(" ")}`);
+      const data = String(x?.data ?? "");
+      if (!data || data.length > ASK_FILES.bytesEach * 1.4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return bad(`"${name.slice(0, 60)}" did not arrive whole`);
+      const buf = Buffer.from(data, "base64");
+      if (buf.length > ASK_FILES.bytesEach) return bad(`"${name.slice(0, 60)}" is over ${ASK_FILES.bytesEach / 1048576} MB`);
+      total += buf.length;
+      if (total > ASK_FILES.bytesAll) return bad(`the files are over ${ASK_FILES.bytesAll / 1048576} MB in all`);
+      if (!fileLooksLike(ext, buf)) return bad(`"${name.slice(0, 60)}" is not what its name says`);
+      files.push({ name: name.split(/[\\/]/).pop().replace(/[^A-Za-z0-9._ ()-]/g, "_").slice(-80), ext, buf });
+    }
+    // how often: three an hour from one address, forty a day in all, and never past the room on the disk
+    const now = this.clock.now();
+    const mine = (this.askTimes.get(ip) || []).filter((t) => now - t < 3_600_000);
+    if (mine.length >= ASK_PER_HOUR) return { status: 429, body: { error: "three requests an hour; try again later" } };
+    const dayKey = `shop:asks:${this.store.dayKey(now)}`, today = Number(this.store.getMeta(dayKey, 0)) || 0;
+    if (today >= ASK_PER_DAY) return { status: 429, body: { error: "the box is full for today; write to us tomorrow" } };
+    const folder = join(this.dir, "asks");
+    if (files.length) {
+      mkdirSync(folder, { recursive: true });
+      const kept = readdirSync(folder).reduce((a, n) => a + statSync(join(folder, n)).size, 0);
+      if (kept + total > ASK_DISK_MAX) return { status: 507, body: { error: "we cannot take files right now; send the request without them, or a link" } };
+    }
+    mine.push(now); this.askTimes.set(ip, mine);
+    if (this.askTimes.size > 5000) for (const [k, v] of this.askTimes) if (!v.length || now - v[v.length - 1] > 3_600_000) this.askTimes.delete(k);
+    const id = (Number(this.store.getMeta("shop:ask:n", 0)) || 0) + 1;
+    this.store.setMeta("shop:ask:n", id);
+    this.store.setMeta(dayKey, today + 1);
+    // a kept file is named by us, never by the sender, and no route serves this folder
+    const saved = files.map((x, i) => { const file = join(folder, `ask-${id}-${i + 1}${x.ext}`); writeFileSync(file, x.buf); return { name: x.name, bytes: x.buf.length, file }; });
+    this.store.setMeta(`shop:ask:${id}`, JSON.stringify({ at: now, kind, words, contact, link: link || "", files: saved.map(({ name, bytes, file }) => ({ name, bytes, file })) }));
+    this.log(`[shop] request ${id} by form: ${kind}, ${words.length} characters, ${saved.length} file(s)`);
+    const size = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} kB`);
+    await this.tell(`Biscotti got request #${id} by the form: ${ASK_KINDS[kind]}.\nFrom: ${contact}${link ? `\nLink: ${link}` : ""}${saved.length ? `\nFiles: ${saved.map((x) => `${x.name} (${size(x.bytes)})`).join(", ")}` : ""}\n\n${words.length > 3000 ? words.slice(0, 3000) + " [cut here, the rest is kept]" : words}\n\nNothing was paid and nothing was made. Answer them yourself.`);
+    for (const x of saved) await this.tellFile(x.file, x.name, `Request #${id}: ${x.name}`);
+    return { status: 200, body: { ok: true, request: id, note: "Sent. The owner reads every request and answers within a day, by the contact you gave. Nothing is charged for asking." } };
+  }
+  /// A kept file to the owner as a Telegram document. True when it went.
+  async tellFile(file, filename, caption = "") {
+    if (!this.telegram?.configured || !this.ownerChatId || typeof this.telegram._send !== "function") return false;
+    try {
+      const form = new FormData();
+      form.append("chat_id", String(this.ownerChatId));
+      if (caption) form.append("caption", String(caption).slice(0, 1000));
+      form.append("document", new Blob([readFileSync(file)]), filename);
+      await this.telegram._send("sendDocument", { method: "POST", body: form }, 120_000);
+      return true;
+    } catch (e) { this.log(`[shop] Telegram did not take the file ${filename}: ${e.message}`); return false; }
+  }
   mayCheck(payer, now) {
     const k = String(payer).toLowerCase();
     const times = (this.checks.get(k) || []).filter((t) => now - t < 600_000);
@@ -240,11 +344,18 @@ export class Shop {
 
 const b64 = (required, error) => Buffer.from(JSON.stringify(error ? { ...required, error } : required), "utf8").toString("base64");
 
-/// The request body: JSON when it parses, else the text as the prompt. Never more than 20 KB.
-function readBody(req) {
+/// The request body: JSON when it parses, else the text as the prompt. Never more than 20 KB, except where a
+/// route says so (the request form carries files).
+function readBody(req, max = 20_000, { answer = false } = {}) {
   return new Promise((res, rej) => {
-    let s = "";
-    req.on("data", (d) => { s += d; if (s.length > 20_000) { rej(new Error("too large")); req.destroy(); } });
+    let s = "", over = false, extra = 0;
+    // answer: the caller says why, so the rest of the body is let through and thrown away (a line cut while the
+    // sender is still writing loses the answer), up to three times the limit; otherwise the line is cut at once
+    req.on("data", (d) => {
+      if (over) { extra += d.length; if (extra > 3 * max) req.destroy(); return; }
+      s += d;
+      if (s.length > max) { over = true; s = ""; rej(new Error("too large")); if (!answer) req.destroy(); }
+    });
     req.on("end", () => { if (!s) return res({}); try { res(JSON.parse(s)); } catch { res({ prompt: s }); } });
     req.on("error", rej);
   });

@@ -6,7 +6,7 @@ An agent with a wallet can buy credit, get a key and call models with no human s
 ## Addresses
 
 Read them from `deployments/1.json` on this site. The fields are `token` (BROWNIE), `staking`, `sugar`, `minter`,
-`harvester`, `teamVault` and `skillRegistry`. USDC is `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`. SUGAR and USDC
+`harvester`, `teamVault` and `skillRegistry`. USDC is `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`. SUGAR and USDC
 both have 6 decimals.
 
 ## 1. Get balance
@@ -39,7 +39,7 @@ const key = `sk-brownie-${epoch}-` + Buffer.from(sig.slice(2), "hex").toString("
 ```
 
 `GET /api/protocol/account/{wallet}` returns the wallet's current epoch. `POST /v1/key/rotate` raises it by one,
-and every older key stops working.
+and every older key stops working. The grants the wallet gave end with it: give them again with the new key.
 
 ## 3. Call models
 
@@ -54,8 +54,14 @@ curl "$BROWNIES_URL/v1/chat/completions" \
 
 - `GET /v1/models` lists every model and its price. No key needed.
 - `GET /v1/key` returns `{ balance: { currency, available, used, credited }, wallet, epoch }`.
-- Always send `max_tokens`. The gateway refuses a request whose largest possible cost is above the balance.
+- Always send `max_tokens`. Before a request runs the gateway holds the most it could cost: the whole body (tools and
+  images included) plus the output bound, at the catalogue's price. A request the balance cannot cover is refused.
+- You are charged what the request cost, never more than the hold. A reply that is cut short is charged for what was
+  read and what was written.
+- The call is pinned to the model you name: `models`, `route`, `plugins`, `web_search_options` and `n` are removed, and
+  `provider.max_price` is set to the catalogue's price. Your other `provider` choices stay.
 - `401` wrong or replaced key. `402` balance too low. `400 unknown_model` model not in the catalogue.
+  `400 unpriced_model` the model has no fixed price (a router that picks the model): name a model.
 - A request costs what OpenRouter charges for the model. The gateway adds nothing.
 
 ## 4. Fund another agent

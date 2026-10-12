@@ -159,11 +159,132 @@
     <div class="wrap">
       <div class="band-head">
         <div><span class="kicker">The tax</span><h2>Every trade pays for AI.</h2></div>
-        <p>The coin's pool charges a 2% tax on each buy and each sell and pays it to one contract. The contract splits it the same way every time. Nobody can change the shares. The team can only switch the program off, and that is written on the chain.</p>
+        <div class="tax-intro">
+          <p>The coin's pool charges a 2% tax on each buy and each sell and pays it to one contract. The contract splits it the same way every time.</p>
+          <p>Nobody can change the shares. The team can only switch the program off, and that is written on the chain.</p>
+        </div>
       </div>
-      <div class="splitbar" role="img" aria-label="The tax is split 35% to stakers, 35% to the protocol and 30% to the brownies.">
-        <div class="s1">35%</div><div class="s2">35%</div><div class="s3">30%</div>
-      </div>
+      <figure class="taxflow">
+        <!-- The same split drawn twice: across for wide screens, down for phones. Every outline is 4 units. -->
+        <svg class="pipe-wide" viewBox="0 0 1200 360" role="img" aria-labelledby="pipeWideTitle pipeWideDesc">
+          <title id="pipeWideTitle">One tax, three fixed shares</title>
+          <desc id="pipeWideDesc">A buy or a sell on Uniswap sends a 2% tax to the Harvester contract. It splits the tax: 35% to stakers, 35% to the protocol wallet and 30% to the brownies vault.</desc>
+          <g stroke="#2A1710" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M116 162h176v36H116Z" fill="#ECE2CF"/>
+            <rect x="192" y="154" width="18" height="52" rx="8" fill="#FFFBF4"/>
+            <path d="M462 149h132q22 0 22-22V67q0-22 22-22h315v35H673q-22 0-22 22v47q0 35-35 35H462Z" fill="#FF5A1F"/>
+            <path d="M462 166h491v35H462Z" fill="#2A1710"/>
+            <path d="M462 191h132q22 0 22 22v69q0 22 22 22h315v-30H673q-22 0-22-22v-39q0-52-52-52H462Z" fill="#FFFBF4"/>
+            <rect x="714" y="36" width="16" height="53" rx="7" fill="#ECE2CF"/>
+            <rect x="714" y="157" width="16" height="53" rx="7" fill="#ECE2CF"/>
+            <rect x="714" y="265" width="16" height="48" rx="7" fill="#ECE2CF"/>
+            <circle cx="82" cy="180" r="65" fill="#FF5A1F"/>
+            <circle cx="82" cy="180" r="50" fill="#FF5A1F"/>
+            <path d="M68 153v54h19q19 0 19-14 0-11-14-14 12-3 12-13 0-13-17-13H68Z" fill="#F6EFE2"/>
+            <path d="M79 145v9M89 145v9M79 207v9M89 207v9" fill="none"/>
+            <rect x="278" y="98" width="208" height="165" rx="22" fill="#ECE2CF"/>
+            <rect x="294" y="114" width="176" height="133" rx="15" fill="#FFFBF4"/>
+            <rect x="355" y="129" width="52" height="40" rx="10" fill="#FF5A1F"/>
+            <path d="M369 141h24M369 150h24M369 159h14" fill="none"/>
+            <circle cx="292" cy="111" r="3" fill="#2A1710" stroke="none"/>
+            <circle cx="472" cy="111" r="3" fill="#2A1710" stroke="none"/>
+            <circle cx="292" cy="250" r="3" fill="#2A1710" stroke="none"/>
+            <circle cx="472" cy="250" r="3" fill="#2A1710" stroke="none"/>
+            <rect x="947" y="24" width="106" height="78" rx="22" fill="#ECE2CF"/>
+            <path d="M954 38h72q16 0 16 16v32" fill="none"/>
+            <path d="M1027 52h28v29h-28q-12 0-12-14.5t12-14.5Z" fill="#FF5A1F"/>
+            <circle cx="1031" cy="67" r="3" fill="#2A1710" stroke="none"/>
+            <rect x="947" y="145" width="106" height="78" rx="22" fill="#2A1710"/>
+            <path d="M954 159h72q16 0 16 16v32" fill="none" stroke="#F6EFE2"/>
+            <path d="M1027 173h28v29h-28q-12 0-12-14.5t12-14.5Z" fill="#F6EFE2"/>
+            <circle cx="1031" cy="188" r="3" fill="#2A1710" stroke="none"/>
+            <rect x="947" y="267" width="106" height="71" rx="22" fill="#ECE2CF"/>
+            <rect x="968" y="242" width="59" height="52" rx="16" fill="#2A1710"/>
+            <path d="M968 257v-1q0-14 15-14h29q15 0 15 14v6q0 6-6 6t-6-6v-6h-11v12q0 6-6 6t-6-6v-12h-12v6q0 6-6 6t-6-6Z" fill="#FF5A1F" stroke="none"/>
+            <circle cx="985" cy="281" r="7" fill="#FFFBF4" stroke="none"/>
+            <circle cx="1010" cy="281" r="7" fill="#FFFBF4" stroke="none"/>
+            <circle cx="987" cy="281" r="3" fill="#2A1710" stroke="none"/>
+            <circle cx="1012" cy="281" r="3" fill="#2A1710" stroke="none"/>
+            <path d="M947 297h106v19q0 22-22 22h-62q-22 0-22-22Z" fill="#FFFBF4"/>
+            <circle cx="1000" cy="315" r="9" fill="#FF5A1F"/>
+            <path d="M1000 310v10" fill="none"/>
+          </g>
+          <g fill="#2A1710" text-anchor="middle">
+            <text x="82" y="87" class="pipe-type" font-size="14">BUY / SELL</text>
+            <text x="82" y="275" class="pipe-display" font-size="27">Uniswap</text>
+            <text x="194" y="138" class="pipe-type" font-size="17">2% tax</text>
+            <text x="382" y="204" class="pipe-display" font-size="28">Harvester</text>
+            <text x="382" y="228" class="pipe-type" font-size="13">ONE CONTRACT</text>
+            <text x="817" y="71" class="pipe-type" font-size="24">35%</text>
+            <text x="817" y="191" class="pipe-type" font-size="24" fill="#F6EFE2">35%</text>
+            <text x="817" y="298" class="pipe-type" font-size="24">30%</text>
+          </g>
+          <g fill="#2A1710" class="pipe-display" font-size="24">
+            <text x="1074" y="70">Stakers</text>
+            <text x="1074" y="177">Protocol</text>
+            <text x="1074" y="201">wallet</text>
+            <text x="1074" y="291">Brownies</text>
+            <text x="1074" y="315">vault</text>
+          </g>
+          <g fill="#6B5447" class="pipe-type" font-size="12">
+            <text x="288" y="301">THE SHARES CANNOT CHANGE</text>
+          </g>
+        </svg>
+        <svg class="pipe-phone" viewBox="0 0 336 580" role="img" aria-labelledby="pipePhoneTitle pipePhoneDesc">
+          <title id="pipePhoneTitle">Follow the 2% tax</title>
+          <desc id="pipePhoneDesc">A buy or a sell on Uniswap pays a 2% tax to one Harvester contract. Three pipes carry fixed shares: 35% to stakers, 35% to the protocol wallet and 30% to the brownies vault.</desc>
+          <g stroke="#2A1710" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M61 77h80v32H61Z" fill="#ECE2CF"/>
+            <rect x="91" y="69" width="16" height="48" rx="7" fill="#FFFBF4"/>
+            <path d="M150 170V526q0 12 12 12H250V510H174V170Z" fill="#FFFBF4"/>
+            <path d="M174 170V393q0 12 12 12H250V377H198V170Z" fill="#2A1710"/>
+            <path d="M198 170V275q0 12 12 12H250V259H222V170Z" fill="#FF5A1F"/>
+            <circle cx="45" cy="92" r="37" fill="#FF5A1F"/>
+            <circle cx="45" cy="92" r="27" fill="#FF5A1F"/>
+            <path d="M37 77v30h10q11 0 11-8 0-6-8-8 7-1 7-7 0-7-10-7H37Z" fill="#F6EFE2"/>
+            <rect x="132" y="33" width="194" height="142" rx="22" fill="#ECE2CF"/>
+            <rect x="145" y="46" width="168" height="116" rx="15" fill="#FFFBF4"/>
+            <rect x="210" y="60" width="38" height="30" rx="9" fill="#FF5A1F"/>
+            <path d="M220 70h18M220 79h13" fill="none"/>
+            <rect x="227" y="249" width="15" height="48" rx="7" fill="#ECE2CF"/>
+            <rect x="227" y="367" width="15" height="48" rx="7" fill="#ECE2CF"/>
+            <rect x="227" y="500" width="15" height="48" rx="7" fill="#ECE2CF"/>
+            <rect x="247" y="240" width="80" height="65" rx="22" fill="#ECE2CF"/>
+            <path d="M254 254h45q15 0 15 15" fill="none"/>
+            <path d="M309 264h19v24h-19q-11 0-11-12t11-12Z" fill="#FF5A1F"/>
+            <circle cx="311" cy="276" r="3" fill="#2A1710" stroke="none"/>
+            <rect x="247" y="359" width="80" height="65" rx="22" fill="#2A1710"/>
+            <path d="M254 373h45q15 0 15 15" fill="none" stroke="#F6EFE2"/>
+            <path d="M309 383h19v24h-19q-11 0-11-12t11-12Z" fill="#F6EFE2"/>
+            <circle cx="311" cy="395" r="3" fill="#2A1710" stroke="none"/>
+            <rect x="247" y="495" width="80" height="66" rx="22" fill="#ECE2CF"/>
+            <rect x="266" y="473" width="43" height="47" rx="14" fill="#2A1710"/>
+            <path d="M266 489v-2q0-14 14-14h15q14 0 14 14v8q0 5-5 5t-5-5v-9h-9v15q0 5-5 5t-5-5v-15h-5v9q0 5-5 5t-4-5Z" fill="#FF5A1F" stroke="none"/>
+            <circle cx="278" cy="510" r="5" fill="#FFFBF4" stroke="none"/>
+            <circle cx="298" cy="510" r="5" fill="#FFFBF4" stroke="none"/>
+            <circle cx="280" cy="510" r="2" fill="#2A1710" stroke="none"/>
+            <circle cx="300" cy="510" r="2" fill="#2A1710" stroke="none"/>
+            <path d="M247 521h80v18q0 22-22 22h-36q-22 0-22-22Z" fill="#FFFBF4"/>
+            <circle cx="287" cy="541" r="8" fill="#FF5A1F"/>
+          </g>
+          <g fill="#2A1710">
+            <text x="45" y="38" text-anchor="middle" class="pipe-type" font-size="11">BUY / SELL</text>
+            <text x="4" y="150" class="pipe-display" font-size="23">Uniswap</text>
+            <text x="83" y="58" class="pipe-type" font-size="13">2%</text>
+            <text x="229" y="124" text-anchor="middle" class="pipe-display" font-size="27">Harvester</text>
+            <text x="229" y="146" text-anchor="middle" class="pipe-type" font-size="11">ONE CONTRACT</text>
+            <text x="6" y="258" class="pipe-type" font-size="28">35%</text>
+            <text x="6" y="287" class="pipe-display" font-size="24">Stakers</text>
+            <text x="6" y="371" class="pipe-type" font-size="28">35%</text>
+            <text x="6" y="400" class="pipe-display" font-size="24">Protocol</text>
+            <text x="6" y="425" class="pipe-display" font-size="24">wallet</text>
+            <text x="6" y="507" class="pipe-type" font-size="28">30%</text>
+            <text x="6" y="536" class="pipe-display" font-size="24">Brownies</text>
+            <text x="6" y="561" class="pipe-display" font-size="24">vault</text>
+          </g>
+        </svg>
+        <figcaption class="pipe-caption">One contract splits the tax. Nobody can change the shares.</figcaption>
+      </figure>
       <div class="splitkey">
         <div class="k1"><b>35% to stakers</b><span>Swapped to dollars and paid out as SUGAR, second by second.</span></div>
         <div class="k2"><b>35% to the protocol</b><span>Sent to the Brownies wallet. It pays for servers and growth.</span></div>

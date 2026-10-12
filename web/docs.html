@@ -158,7 +158,7 @@ const wallet = new Wallet(process.env.PRIVATE_KEY);
 const epoch = 0;
 const sig = await wallet.signMessage(`Brownies API key, chain 1, epoch ${epoch}`);
 const key = `sk-brownie-${epoch}-` + Buffer.from(sig.slice(2), "hex").toString("base64url");</code></pre>
-      <p>If a key leaks, replace it. Replacing raises the epoch by one. Every older key stops working at once, and your balance stays where it is.</p>
+      <p>If a key leaks, replace it. Replacing raises the epoch by one. Every older key stops working at once, and your balance stays where it is. The grants you gave to other wallets end with the old key. Give them again with the new one.</p>
 
       <h3>A request</h3>
 <pre class="code"><code>curl $BROWNIES_URL/v1/chat/completions \
@@ -188,7 +188,7 @@ console.log(reply.choices[0].message.content);</code></pre>
             <tr><td><code>GET /v1/models</code></td><td>Every model and its price. No key needed.</td></tr>
             <tr><td><code>POST /v1/chat/completions</code></td><td>A chat reply. Streaming works. Charged to your key.</td></tr>
             <tr><td><code>GET /v1/key</code></td><td>Your balance, what you have spent, and your epoch.</td></tr>
-            <tr><td><code>POST /v1/key/rotate</code></td><td>Replaces your key. Returns the new message to sign.</td></tr>
+            <tr><td><code>POST /v1/key/rotate</code></td><td>Replaces your key and ends the grants you gave. Returns the new message to sign.</td></tr>
             <tr><td><code>POST /v1/grants</code></td><td>Lets another wallet spend from your balance, up to a daily cap. It adds the header <code>X-Brownies-Pay-From</code> with your wallet. <code>GET /v1/grants</code> lists them, <code>POST /v1/grants/revoke</code> ends one.</td></tr>
             <tr><td><code>GET /api/protocol/account/{wallet}</code></td><td>Any wallet's balance and recent activity. No key needed.</td></tr>
             <tr><td><code>GET /api/protocol/stats</code></td><td>Totals for the whole protocol. No key needed.</td></tr>
@@ -198,13 +198,16 @@ console.log(reply.choices[0].message.content);</code></pre>
 
       <h3>What a request costs</h3>
       <p>Each request costs what OpenRouter charges for that model. The gateway adds nothing. The price of every model is in <code>GET /v1/models</code>. An <code>ambient/</code> model is paid per request: its price is the input plus the output bound you set with <code>max_tokens</code>, so set it to what you need.</p>
-      <p>Always send <code>max_tokens</code>. Before a request runs, the gateway checks that your balance covers the most it could cost. Without <code>max_tokens</code> it assumes 1024.</p>
+      <p>Always send <code>max_tokens</code>. Before a request runs, the gateway sets aside the most it could cost: everything you send, tools and images included, plus the output bound. If your balance cannot cover that, the request is refused and nothing is charged. After the reply you are charged what it cost, never more than what was set aside, and the rest is free again. Without <code>max_tokens</code> it assumes 1024.</p>
+      <p>A reply that is cut short is charged for what the model read and what it had written.</p>
+      <p>The request goes to the model you named, at the catalogue's price. A list of other models, a route, paid extras such as web search and a count of answers are taken out of it, and no provider that charges more than the catalogue's price is used. Your other provider choices stay.</p>
 
       <h3>Errors</h3>
       <ul>
         <li><code>401</code> means the key is wrong or was replaced.</li>
         <li><code>402</code> means the balance is too low for the request. Activate more SUGAR or lower <code>max_tokens</code>.</li>
         <li><code>400 unknown_model</code> means the model name is not in the catalogue.</li>
+        <li><code>400 unpriced_model</code> means the model has no fixed price, such as a router that picks the model for you, so its cost cannot be set aside. Name a model.</li>
       </ul>
     </section>
 

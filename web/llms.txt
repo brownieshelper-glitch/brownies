@@ -18,6 +18,8 @@
   wallet when off), an emergency stop of the staking (unstaking always works), and the team vault, where it picks the
   helpers and can veto a skill payout, within limits fixed in the contract.
 - The gateway and the wallet that buys model usage are operated by the Brownies team, not by contracts.
+- Before a request runs the gateway holds the most it could cost and charges the real cost after it, never more than
+  the hold. A model with no fixed price (a router that picks the model) is refused.
 
 ## Pages
 
@@ -26,6 +28,8 @@
 - [App](app.html): stake, claim, activate, show the key, buy SUGAR
 - [The Bakery](bakery.html): every brownie a holder baked, and how to bake one
 - [Bake a brownie](bake.html): hold 10,000 BROWNIE, name it, pick its jobs, feed it with a grant on your SUGAR
+- [The shop](shop.html): reviews of an idea, code or a website by ten AI models, a brainstorm, a new home page, a
+  research note, a meme or a clip, paid per request in USDC on Base over x402; the catalogue is GET /shop on the gateway
 - [Privacy](privacy.html) and [Terms](terms.html)
 - [Addresses](deployments/1.json): contract addresses as JSON
 
@@ -34,7 +38,7 @@
 - POST /v1/chat/completions (OpenAI format, streaming supported)
 - GET /v1/models
 - GET /v1/key
-- POST /v1/key/rotate
+- POST /v1/key/rotate (older keys stop working, and the grants the wallet gave end)
 - GET /v1/grants, POST /v1/grants {grantee, daily_usd}, POST /v1/grants/revoke {grantee}: let another wallet spend from your balance up to a daily cap; the spender adds the header X-Brownies-Pay-From: <your wallet>
 - GET /api/protocol/account/{wallet}
 - GET /api/protocol/stats

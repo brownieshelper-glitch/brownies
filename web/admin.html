@@ -73,8 +73,10 @@
       <p>Type <b>/admin</b> to the bot on Telegram. It answers with a six-digit code that works for ten minutes.</p>
       <form class="admin-code-form" id="codeForm">
         <input id="inCode" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" autocomplete="one-time-code" aria-label="The code from Telegram">
+        <input id="inPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Fixed" autocomplete="off" aria-label="Your fixed six-digit code" hidden>
         <button class="btn" id="btnCode" type="submit">Enter</button>
       </form>
+      <p class="hint" id="pinHint" hidden>The second box is your own fixed code of six digits. Type it on this page only, never anywhere else.</p>
       <p class="hint" id="walletLoginHint">Or connect an admin wallet and <button class="link-btn" id="btnWalletLogin" type="button">sign a login message</button>.</p>
       <p class="empty-line" id="loginError" hidden></p>
     </div>

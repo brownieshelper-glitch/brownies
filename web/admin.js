@@ -35,12 +35,18 @@
   function loginError(text) { const e = $("loginError"); e.textContent = text || ""; e.hidden = !text; }
 
   // ---- login ----
+  // the owner's fixed code: asked for when the server says it has one, sent with either kind of login
+  const askPin = () => { $("inPin").hidden = false; $("pinHint").hidden = false; };
+  const pinNow = () => ($("inPin").hidden ? undefined : $("inPin").value.trim());
+  const refused = (r) => { if (r.body?.pin) askPin(); loginError(r.body?.error ? r.body.error[0].toUpperCase() + r.body.error.slice(1) + "." : "Could not log in."); };
+  api("/info").then((i) => { if (i.ok && i.body?.pin) askPin(); });
   $("codeForm").onsubmit = async (ev) => {
     ev.preventDefault();
-    const code = $("inCode").value.trim();
+    const code = $("inCode").value.trim(), pin = pinNow();
     if (!/^\d{6}$/.test(code)) return loginError("The code is six digits.");
-    const r = await api("/login", { method: "POST", body: JSON.stringify({ code }) });
-    if (!r.ok) return loginError(r.body?.error || "Could not log in.");
+    if (pin !== undefined && !/^\d{6}$/.test(pin)) return loginError("Your fixed code is six digits.");
+    const r = await api("/login", { method: "POST", body: JSON.stringify({ code, pin }) });
+    if (!r.ok) return refused(r);
     enter(r.body.token);
   };
   $("btnWalletLogin").onclick = async () => {
@@ -51,12 +57,16 @@
     try {
       const message = n.body.message.replace("<nonce>", n.body.nonce);
       const signature = await Wt.state.signer.signMessage(message);
-      const r = await api("/login", { method: "POST", body: JSON.stringify({ address: Wt.state.account, signature, nonce: n.body.nonce }) });
-      if (!r.ok) return loginError(r.body?.error || "Could not log in.");
+      if (n.body.pin) askPin();
+      const pin = pinNow();
+      if (pin !== undefined && !/^\d{6}$/.test(pin)) return loginError("Type your fixed code of six digits first, then sign.");
+      const r = await api("/login", { method: "POST", body: JSON.stringify({ address: Wt.state.account, signature, nonce: n.body.nonce, pin }) });
+      if (!r.ok) return refused(r);
       enter(r.body.token);
     } catch (e) { loginError(explainError(e)); }
   };
   function enter(t) {
+    $("inPin").value = "";
     token = t; try { localStorage.setItem(KEY, t); } catch (_) {}
     loginError("");
     show(true);

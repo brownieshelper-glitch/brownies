@@ -5,6 +5,9 @@
 # printed from it. "stream.sh test" writes 20 seconds to /srv/ember/test.mp4 instead of streaming anywhere.
 # Every place has its own queue (ffmpeg's fifo): one that drops or refuses does not stop the others, and it is
 # tried again every RETRY seconds for as long as the stream runs. health.sh is the backstop for the rest.
+# The encoder keeps its headers apart (-flags +global_header), which the tee muxer asks for: without it a place
+# that dropped could never be opened again ("A non-NULL packet sent after an EOF" for ever, 2026-10-13, when
+# YouTube was lost for twelve minutes until the whole stream was restarted).
 set -euo pipefail
 ENV_FILE=${EMBER_ENV:-/etc/ember/ember.env}
 [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
@@ -22,7 +25,7 @@ RETRY=${EMBER_RETRY_SECONDS:-15}
 
 VIDEO=(-thread_queue_size 512 -f x11grab -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_ID")
 if [ -f "$MUSIC" ]; then AUDIO=(-thread_queue_size 512 -stream_loop -1 -i "$MUSIC"); else AUDIO=(-f lavfi -i anullsrc=channel_layout=mono:sample_rate=24000); fi
-ENC=(-map 0:v -map 1:a -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g $((FPS * 2)) -keyint_min $((FPS * 2)) -b:v "$VBITRATE" -maxrate "$VBITRATE" -bufsize 5000k -c:a aac -ar 44100 -ac 2 -b:a 128k -af "volume=0.9")
+ENC=(-map 0:v -map 1:a -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g $((FPS * 2)) -keyint_min $((FPS * 2)) -b:v "$VBITRATE" -maxrate "$VBITRATE" -bufsize 5000k -c:a aac -ar 44100 -ac 2 -b:a 128k -af "volume=0.9" -flags +global_header)
 
 if [ "${1:-}" = "test" ]; then
   mkdir -p /srv/ember

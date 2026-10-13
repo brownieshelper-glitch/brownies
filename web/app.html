@@ -105,21 +105,21 @@
 
     <section class="panel" aria-labelledby="hKey">
       <h2 id="hKey">Your key</h2>
-      <p class="sub">Your wallet signs one message. The signature is your API key. Signing is free. No code needed: <a class="link" href="chat.html">talk to any model on the Chat page</a> with the same key.</p>
+      <p class="sub">You sign in with your wallet and the gateway hands you an API key. Signing is free, and a key lasts 30 days. No code needed: <a class="link" href="chat.html">talk to any model on the Chat page</a> with the same key.</p>
       <dl class="kv">
         <div><dt>Balance</dt><dd class="big" id="vBalance"></dd></div>
         <div><dt>Spent so far</dt><dd id="vSpent"></dd></div>
       </dl>
       <div class="form">
         <div class="row">
-          <button class="btn bone-btn" id="btnKey" type="button" disabled>Show my key</button>
+          <button class="btn bone-btn" id="btnKey" type="button" disabled>Get my key</button>
           <button class="btn ghost" id="btnRotate" type="button" disabled>Replace my key</button>
         </div>
         <div id="keyWrap" hidden>
           <div class="keybox" id="keyBox"></div>
           <div class="row" style="margin-top:10px"><button class="btn ghost sm" id="btnCopyKey" type="button">Copy key</button></div>
         </div>
-        <p class="hint">Replace your key if it leaked. The old one stops working at once and your balance stays.</p>
+        <p class="hint">Replace your keys if one leaked. Every key of this wallet stops working at once and your balance stays.</p>
       </div>
     </section>
 

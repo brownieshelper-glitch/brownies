@@ -22,7 +22,7 @@ only mocks are in `test/`.
   A daily slot missed while the service was down runs once at start; a flag in the store keeps it from running twice.
 - `lib/brain.mjs` is the one chat client. `MODE=prelaunch` calls OpenRouter with `OPENROUTER_API_KEY`, reads
   `usage.cost` and stops a helper at its `dailyCapUsd`. `MODE=live` calls the gateway `/v1/chat/completions` with the
-  helper's own key (its wallet signs `Brownies API key, chain 1, epoch N`, see `gateway/auth.mjs`) and stops when
+  helper's own key (its wallet signs in to the gateway for a key that lasts a day, see `gateway/auth.mjs`) and stops when
   `GET /v1/key` says the balance is under 5 cents. Both modes count every call and report `cost_micro`.
 - `lib/store.mjs` is the memory (node:sqlite at `DB_PATH`): jobs done, posts made (never the same text twice),
   the last turns of each chat, the Telegram offset, spend per helper per day, approvals, alert times, Nib's latest note.

@@ -58,9 +58,11 @@ the contracts.
 ## The gateway and the key
 
 - Address: https://api.feedthebrownies.com. Any OpenAI SDK works with base URL <gateway>/v1 and the Brownies key.
-- The key: the wallet signs "Brownies API key, chain 1, epoch 0". The key is sk-brownie-0-<signature in base64url>.
-  Signing is free, no transaction. The app does it with "Show my key". Rotating raises the epoch by one; every
-  older key stops working, the balance stays.
+- The key: you sign in with your wallet and the gateway hands you a key. Signing is free, no transaction. The app
+  does it with "Get my key". The sign-in message names the site it is good on, works once and runs out in five
+  minutes: sign it only on our site. A key lasts 30 days, then you sign in again. Replacing ends every key of the
+  wallet at once; the balance stays.
+- After activating, the dollars show on the key about a minute later: the gateway waits for a few blocks first.
 - Routes: GET /v1/models (every model and its price, no key), POST /v1/chat/completions (streaming works),
   GET /v1/key (balance, spent, epoch), POST /v1/key/rotate, GET /api/protocol/account/{wallet},
   GET /api/protocol/stats. Every request needs max_tokens; without it the gateway assumes 1024.

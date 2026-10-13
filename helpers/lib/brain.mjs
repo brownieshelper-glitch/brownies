@@ -2,18 +2,30 @@
 //
 //   MODE=prelaunch  the call goes to OpenRouter with OPENROUTER_API_KEY; the response's usage.cost (dollars) is the
 //                   price. Each helper has a daily dollar cap and stops when it is reached.
-//   MODE=live       the call goes to the gateway (POST /v1/chat/completions) with the helper's own key: its wallet
-//                   signs "Brownies API key, chain 1, epoch N" (gateway/auth.mjs). The helper stops when GET /v1/key
-//                   says its balance is under a few cents. The balance is SUGAR the vault fed it, and tips.
+//   MODE=live       the call goes to the gateway (POST /v1/chat/completions) with the helper's own key. A key is
+//                   made by signing in (gateway/auth.mjs): the gateway hands out a message that works once, the
+//                   helper's wallet signs it, the gateway answers with a key that lasts a day; a new one is made
+//                   before it runs out. The helper stops when GET /v1/key says its balance is under a few cents.
+//                   The balance is SUGAR the vault fed it, and tips.
 //                   A baked brownie (lib/bakery.mjs) has a wallet derived from HELPERS_MNEMONIC by its walletIndex and
 //                   pays from its holder's grant: every gateway call carries X-Brownies-Pay-From: <holder>.
 //
 // Both modes count every call in the store (spend per helper per day) and return cost_micro for the job's report.
 import { Wallet, HDNodeWallet } from "ethers";
 
-// the same two lines as gateway/auth.mjs and the site: the runtime is deployed alone, so they are repeated here
-export const keyMessage = (chainId, epoch) => `Brownies API key, chain ${chainId}, epoch ${epoch}`;
-export const keyFromSignature = (sig, epoch) => `sk-brownie-${epoch}-` + Buffer.from(sig.slice(2), "hex").toString("base64url");
+// A helper's wallet signs ONE kind of text: the gateway's sign-in message for that very wallet, laid out word for
+// word as gateway/auth.mjs writes it (the runtime is deployed alone, so the sentence is repeated here). Anything
+// else the gateway might hand over is refused: a wallet that signs what it is given can be made to sign in anywhere.
+export const SIGNIN_STATEMENT = "Sign in to get your Brownies API key. This moves no money. Sign it only on the site named in the first line.";
+export function isOurSignIn(message, { wallet, chainId, nonce }) {
+  const l = String(message || "").split("\n");
+  const m = /^([a-z0-9.-]+(?::\d+)?) wants you to sign in with your Ethereum account:$/.exec(l[0] || "");
+  if (l.length !== 11 || !m || !/^[0-9a-f]{32}$/.test(String(nonce || ""))) return false;
+  const stamp = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+  return l[1].toLowerCase() === String(wallet).toLowerCase() && l[2] === "" && l[3] === SIGNIN_STATEMENT && l[4] === "" &&
+    (l[5] === `URI: https://${m[1]}` || l[5] === `URI: http://${m[1]}`) && l[6] === "Version: 1" && l[7] === `Chain ID: ${chainId}` && l[8] === `Nonce: ${nonce}` &&
+    l[9].startsWith("Issued At: ") && stamp.test(l[9].slice(11)) && l[10].startsWith("Expiration Time: ") && stamp.test(l[10].slice(17));
+}
 
 export class BudgetError extends Error {
   constructor(helper, reason) { super(`${helper} is out of budget: ${reason}`); this.helper = helper; this.reason = reason; this.budget = true; }
@@ -67,14 +79,19 @@ export class Brain {
   payFrom(helper) { return this.helpers[helper]?.payFrom || null; }
   payHeaders(helper) { const from = this.payFrom(helper); return from ? { "x-brownies-pay-from": from } : {}; }
 
-  /// The helper's gateway key for its current epoch. `fresh` re-reads the epoch (after a key_revoked answer).
+  /// The helper's gateway key: kept until five minutes before it runs out, then made again. `fresh` makes a new one
+  /// now (after the gateway refused the one we had: rotated, run out, or a gateway that started over).
   async key(helper, { fresh = false } = {}) {
-    if (!fresh && this.keyCache.has(helper)) return this.keyCache.get(helper);
+    const have = this.keyCache.get(helper);
+    if (!fresh && have && have.expiresAt - this.clock.now() > 5 * 60_000) return have;
     const w = this.wallet(helper);
-    const acc = await this.gateway.account(w.address);
-    const epoch = Number(acc.body?.epoch ?? 0);
-    const sig = await w.signMessage(keyMessage(this.chainId, epoch));
-    const k = { epoch, key: keyFromSignature(sig, epoch) };
+    const why = (r) => `${r.status}${r.body?.error?.code ? " " + r.body.error.code : ""}`;
+    const c = await this.gateway.signIn(w.address, 1);
+    if (!c.ok || !c.body?.message || !c.body?.nonce) throw new Error(`the gateway gave ${helper} no sign-in (${why(c)})`);
+    if (!isOurSignIn(c.body.message, { wallet: w.address, chainId: this.chainId, nonce: c.body.nonce })) throw new Error(`the gateway's sign-in message for ${helper} is not the one a helper signs: nothing was signed`);
+    const r = await this.gateway.keyFor(c.body.nonce, await w.signMessage(c.body.message));
+    if (!r.ok || !r.body?.key) throw new Error(`the gateway made ${helper} no key (${why(r)})`);
+    const k = { epoch: Number(r.body.epoch ?? 0), key: r.body.key, expiresAt: Date.parse(r.body.expires_at) || this.clock.now() + 86_400_000 };
     this.keyCache.set(helper, k);
     return k;
   }
@@ -204,7 +221,7 @@ export class Brain {
     let k = await this.key(helper);
     const H = this.payHeaders(helper);
     let r = await this.gateway.chat(k.key, body, H);
-    if (r.status === 401 && r.body?.error?.code === "key_revoked") { k = await this.key(helper, { fresh: true }); r = await this.gateway.chat(k.key, body, H); }
+    if (r.status === 401) { k = await this.key(helper, { fresh: true }); r = await this.gateway.chat(k.key, body, H); } // rotated, run out, or forgotten: sign in once more
     if (r.status === 403 && r.body?.error?.code === "no_grant") { this.balanceCache.delete(helper); await this.alerts?.budget(helper, "the holder's grant is missing"); throw new BudgetError(helper, "the holder's grant is missing"); }
     if (r.status === 401) { await this.alerts?.credentials("gateway", `the gateway refused ${helper}'s key`); throw new Error(`the gateway refused ${helper}'s key`); }
     if (r.status === 402) { this.balanceCache.delete(helper); await this.alerts?.budget(helper, "gateway balance too low"); throw new BudgetError(helper, "gateway balance too low"); }

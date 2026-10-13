@@ -150,16 +150,20 @@
       <p id="gwLine" hidden>The gateway address is <code id="gwUrl"></code>. The examples below call it <code>$BROWNIES_URL</code>.</p>
 
       <h3>Your key</h3>
-      <p>Your wallet signs this exact message. The signature is your key. Signing is free and sends no transaction.</p>
-<pre class="code"><code>Brownies API key, chain 1, epoch 0</code></pre>
-      <p>The app does this for you when you press Show my key. To make the key yourself:</p>
+      <p>You get a key by signing in with your wallet. Signing is free and sends no transaction. The app does it for you when you press Get my key. To do it yourself, ask for the sign-in message, sign it, and hand the signature in:</p>
 <pre class="code"><code>import { Wallet } from "ethers";
 
 const wallet = new Wallet(process.env.PRIVATE_KEY);
-const epoch = 0;
-const sig = await wallet.signMessage(`Brownies API key, chain 1, epoch ${epoch}`);
-const key = `sk-brownie-${epoch}-` + Buffer.from(sig.slice(2), "hex").toString("base64url");</code></pre>
-      <p>If a key leaks, replace it. Replacing raises the epoch by one. Every older key stops working at once, and your balance stays where it is. The grants you gave to other wallets end with the old key. Give them again with the new one.</p>
+const post = (path, body) =&gt; fetch(process.env.BROWNIES_URL + path, {
+  method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+}).then((r) =&gt; r.json());
+
+const challenge = await post("/v1/auth/challenge", { wallet: wallet.address });
+const signature = await wallet.signMessage(challenge.message);
+const { key, expires_at } = await post("/v1/auth/key", { nonce: challenge.nonce, signature });</code></pre>
+      <p>The message begins with the name of the site it is good on, works once, and runs out in five minutes. Sign it only on that site. A wallet that knows this kind of message warns you when another site asks for it.</p>
+      <p>A key lasts 30 days. Send <code>days</code> with the first call for fewer, or for up to 90. When it runs out, sign in again. The key is shown once and the gateway keeps only a fingerprint of it.</p>
+      <p>If a key leaks, replace it. Replacing ends every key of your wallet at once, and your balance stays where it is. The grants you gave to other wallets end too. Sign in again for a new key, then give the grants again.</p>
 
       <h3>A request</h3>
 <pre class="code"><code>curl $BROWNIES_URL/v1/chat/completions \
@@ -188,8 +192,10 @@ console.log(reply.choices[0].message.content);</code></pre>
           <tbody>
             <tr><td><code>GET /v1/models</code></td><td>Every model and its price. No key needed.</td></tr>
             <tr><td><code>POST /v1/chat/completions</code></td><td>A chat reply. Streaming works. Charged to your key.</td></tr>
-            <tr><td><code>GET /v1/key</code></td><td>Your balance, what you have spent, and your epoch.</td></tr>
-            <tr><td><code>POST /v1/key/rotate</code></td><td>Replaces your key and ends the grants you gave. Returns the new message to sign.</td></tr>
+            <tr><td><code>POST /v1/auth/challenge</code></td><td>The sign-in message for your wallet. No key needed.</td></tr>
+            <tr><td><code>POST /v1/auth/key</code></td><td>Your key, for the wallet's signature of that message. No key needed.</td></tr>
+            <tr><td><code>GET /v1/key</code></td><td>Your balance, what you have spent, and the day the key runs out.</td></tr>
+            <tr><td><code>POST /v1/key/rotate</code></td><td>Ends every key of your wallet and the grants you gave. Sign in again for a new key.</td></tr>
             <tr><td><code>POST /v1/grants</code></td><td>Lets another wallet spend from your balance, up to a daily cap. It adds the header <code>X-Brownies-Pay-From</code> with your wallet. <code>GET /v1/grants</code> lists them, <code>POST /v1/grants/revoke</code> ends one.</td></tr>
             <tr><td><code>GET /api/protocol/account/{wallet}</code></td><td>Any wallet's balance and recent activity. No key needed.</td></tr>
             <tr><td><code>GET /api/protocol/stats</code></td><td>Totals for the whole protocol. No key needed.</td></tr>

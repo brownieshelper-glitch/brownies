@@ -1,8 +1,11 @@
 // The Brownies gateway. OpenAI-style API in front of OpenRouter, billed to SUGAR activations read from Robinhood Chain.
 //
 //   GET  /v1/models                     the model catalogue with prices (OpenRouter's, cached)
+//   POST /v1/auth/challenge             { wallet } the sign-in message for that wallet (it names the site, works once,
+//                                       runs out in five minutes)
+//   POST /v1/auth/key                   { nonce, signature } the wallet's signature of that message, for a key
 //   GET  /v1/key                        the key's balance: { balance: { currency, available, used }, wallet, epoch }
-//   POST /v1/key/rotate                 bump the epoch: every older key dies on its next request
+//   POST /v1/key/rotate                 bump the epoch: every key of the wallet dies at once
 //   POST /v1/chat/completions           chat, streaming or not, charged after the call at OpenRouter's stated cost
 //   GET  /v1/grants                     the grants this wallet gave and received, with today's room
 //   POST /v1/grants                     { grantee, daily_usd } let another wallet spend from this balance, so much a day
@@ -12,7 +15,8 @@
 //   their brownies this way).
 //   GET  /api/protocol/stats            public totals: activations, spend, requests, on-chain harvester figures
 //   GET  /api/protocol/account/:wallet  public: that wallet's balance and recent activity
-//   POST /api/protocol/index-tx         { tx } credit an activation the indexer has not reached yet
+//   POST /api/protocol/index-tx         { tx } credit an activation the indexer has not reached yet, once enough
+//                                       blocks stand on top of it (until then: pending, with the seconds left)
 //   GET  /api/team/activity             public: what the brownies reported (?limit= ?before= ?helper= ?kind=
 //                                       ?order=asc ?offset=)
 //   GET  /api/team/towers               public: the jobs done, 100 to a tower: bricks and dates of each tower
@@ -21,8 +25,8 @@
 //   POST /api/team/hide                 { id } or { url }: a report taken off every public view, with the team key
 //   GET  /health
 //
-// A key is the wallet's signature of "Brownies API key, chain 1, epoch N" (the chain is the CHAIN_ID of the gateway: Ethereum) (auth.mjs). One SUGAR atom is one
-// micro-dollar of balance. The gateway never holds a private key for any user and never moves tokens.
+// A key is a random secret made after a sign-in with the wallet and kept here only as a hash (auth.mjs). One SUGAR
+// atom is one micro-dollar of balance. The gateway never holds a private key for any user and never moves tokens.
 import { createServer } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
@@ -30,7 +34,7 @@ import { Ledger } from "./ledger.mjs";
 import { Chain } from "./chain.mjs";
 import { TeamLog, clean as cleanEntry, isHelperName, KINDS } from "./teamlog.mjs";
 import { Visits } from "./visits.mjs";
-import { verifyKey, err, keyMessage, beneficiaryToWallet, walletToBeneficiary, parseWallet } from "./auth.mjs";
+import { keyHash, mintKey, newNonce, signInMessage, signInSite, signerOf, SIGNIN_TTL_MS, err, beneficiaryToWallet, walletToBeneficiary, parseWallet } from "./auth.mjs";
 
 // ---- config ----
 // The secrets file lives outside the project folder (which syncs to OneDrive): BROWNIES_GATEWAY_ENV names it.
@@ -59,6 +63,12 @@ const cfg = {
   ledgerAddress: process.env.LEDGER_ADDRESS || "", // Programmable's fee ledger for the coin
   teamVaultAddress: process.env.TEAM_VAULT_ADDRESS || "",
   startBlock: Number(process.env.START_BLOCK || 0),
+  // an activation is credited once this many blocks stand on top of its own (about a minute on Ethereum)
+  confirmations: Number(process.env.CONFIRMATIONS ?? 5),
+  // the sites a key may be made on: the sign-in message names one of them, and a browser elsewhere gets none
+  signinSites: String(process.env.SIGNIN_SITES || "feedthebrownies.com,www.feedthebrownies.com").split(/[\s,]+/).filter(Boolean),
+  keyDays: Math.min(90, Math.max(1, Number(process.env.KEY_DAYS || 30))), // how long a key lasts unless fewer days are asked for
+  signinPerMinute: Number(process.env.SIGNIN_PER_MINUTE || 12), // sign-in steps one address may take in a minute
   // the keeper's floors: claim once this much WETH waits, keep this much ETH for gas, release once the day's budget is worth this
   claimMinEth: Number(process.env.CLAIM_MIN_ETH || 0.05),
   keeperFloorEth: Number(process.env.KEEPER_FLOOR_ETH || 0.01),
@@ -145,17 +155,20 @@ const allow = (key, perMinute) => {
   return true;
 };
 const indexMisses = new Map(); // tx -> when it was last looked up and not found
+const indexWaits = new Map();  // tx -> when enough blocks can stand on top of it
 const bearer = (req) => { const h = req.headers.authorization || ""; return h.startsWith("Bearer ") ? h.slice(7).trim() : ""; };
 const dollars = (micro) => (micro / 1e6).toFixed(6);
 const sha = (v) => createHash("sha256").update(String(v)).digest();
 const sameSecret = (a, b) => timingSafeEqual(sha(a), sha(b));
 
 function authed(req) {
-  const k = verifyKey(bearer(req), cfg.chainId);
-  const bal = ledger.balance(k.beneficiary);
-  if (k.epoch !== bal.epoch) throw err(401, "key_revoked", `This key carries epoch ${k.epoch}; the wallet's current epoch is ${bal.epoch}. Sign the current message.`);
-  return { ...k, bal };
+  const k = ledger.key(keyHash(bearer(req)));
+  if (!k) throw err(401, "invalid_api_key", "This key is not one of ours. Sign in to get one: POST /v1/auth/challenge.");
+  if (k.gone === "rotated") throw err(401, "key_revoked", "The wallet replaced its keys, so this one is refused. Sign in again to get a new one.");
+  if (k.gone) throw err(401, "key_expired", "This key has run out. Sign in again to get a new one.");
+  return { wallet: beneficiaryToWallet(k.beneficiary), beneficiary: k.beneficiary, epoch: k.epoch, expires: k.expires, bal: ledger.balance(k.beneficiary) };
 }
+const iso = (ms) => new Date(ms).toISOString();
 
 const PAY_FROM = "x-brownies-pay-from";
 /// Who pays for this request: the key's own balance, or the grant a granter named in the header gave this wallet.
@@ -411,17 +424,43 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/health") return json(res, 200, { ok: true, live: cfg.live, chainId: cfg.chainId, sugar: cfg.sugarAddress || null, lastBlock: ledger.lastBlock, upstream: Boolean(cfg.openrouterKey), pantry: pantry ? pantry.view() : null });
     if ((url.pathname.startsWith("/v1/") || url.pathname === "/api/protocol/index-tx") && !cfg.live) throw err(503, "not_launched", "The coin is not launched yet.");
     if (url.pathname === "/v1/models" && req.method === "GET") { const m = await models(); return json(res, 200, m.body); }
+    // signing in: the message to sign, then the key for its signature. A dozen a minute per address.
+    if (url.pathname === "/v1/auth/challenge" && req.method === "POST") {
+      if (!allow("signin:" + clientIp(req), cfg.signinPerMinute)) throw err(429, "slow_down", "Too many sign-ins from this address in a minute.");
+      const body = parseObject(await readBody(req, 4096, res));
+      const wallet = parseWallet(body.wallet, "wallet");
+      if (!wallet) throw err(400, "bad_wallet", "wallet must be an address.");
+      const site = signInSite(cfg.signinSites, { originHeader: req.headers.origin || "", asked: body.site });
+      const days = body.days === undefined ? cfg.keyDays : Number(body.days);
+      if (!Number.isFinite(days) || days < 0.04 || days > 90) throw err(400, "bad_days", "days must be between 0.04 (about an hour) and 90.");
+      const now = Date.now(), nonce = newNonce();
+      const message = signInMessage({ ...site, wallet, chainId: cfg.chainId, nonce, issuedAt: now, expiresAt: now + SIGNIN_TTL_MS });
+      ledger.addSignin({ nonce, wallet, message, keyMs: Math.round(days * 86_400_000), expires: now + SIGNIN_TTL_MS }, now);
+      return json(res, 200, { object: "challenge", wallet, nonce, message, site: site.domain, expires_at: iso(now + SIGNIN_TTL_MS), key_days: days, note: "Sign the message with the wallet, then POST /v1/auth/key { nonce, signature } within five minutes. Sign it only on the site its first line names." });
+    }
+    if (url.pathname === "/v1/auth/key" && req.method === "POST") {
+      if (!allow("signin:" + clientIp(req), cfg.signinPerMinute)) throw err(429, "slow_down", "Too many sign-ins from this address in a minute.");
+      const body = parseObject(await readBody(req, 4096, res));
+      if (!/^[0-9a-f]{32}$/.test(String(body.nonce || ""))) throw err(400, "bad_nonce", "nonce is the one the challenge gave.");
+      if (!/^0x[0-9a-fA-F]{130}$/.test(String(body.signature || ""))) throw err(400, "bad_signature", "signature is the wallet's signature of the challenge's message.");
+      const c = ledger.takeSignin(body.nonce); // it works once, right or wrong
+      if (!c) throw err(401, "challenge_expired", "That sign-in ran out or was used already. Ask for a new one.");
+      if (signerOf(c.message, body.signature) !== c.wallet) throw err(401, "bad_signature", "That is not this wallet's signature of the sign-in message.");
+      const { key, hash } = mintKey();
+      const made = ledger.addKey({ hash, beneficiary: walletToBeneficiary(c.wallet), keyMs: c.keyMs });
+      return json(res, 200, { object: "key", key, wallet: c.wallet, epoch: made.epoch, expires_at: iso(made.expires), note: "This key is shown once: keep it secret. It pays from this wallet's balance until it runs out or the wallet rotates its keys (POST /v1/key/rotate)." });
+    }
     if (url.pathname === "/v1/key" && req.method === "GET") {
       const who = authed(req);
       const pay = payer(req, who);
-      if (pay.grant) return json(res, 200, { object: "key", wallet: who.wallet, beneficiary: who.beneficiary, epoch: who.epoch, message: keyMessage(cfg.chainId, who.epoch), paid_by: pay.grant.from, grant: grantView(pay.grant), balance: { currency: "USD", available: dollars(pay.availableMicro), used: dollars(pay.grant.spentMicro), credited: dollars(pay.grant.dailyMicro) } });
-      return json(res, 200, { object: "key", wallet: who.wallet, beneficiary: who.beneficiary, epoch: who.epoch, message: keyMessage(cfg.chainId, who.epoch), balance: { currency: "USD", available: dollars(who.bal.availableMicro), used: dollars(who.bal.spentMicro), credited: dollars(who.bal.creditedMicro) } });
+      if (pay.grant) return json(res, 200, { object: "key", wallet: who.wallet, beneficiary: who.beneficiary, epoch: who.epoch, expires_at: iso(who.expires), paid_by: pay.grant.from, grant: grantView(pay.grant), balance: { currency: "USD", available: dollars(pay.availableMicro), used: dollars(pay.grant.spentMicro), credited: dollars(pay.grant.dailyMicro) } });
+      return json(res, 200, { object: "key", wallet: who.wallet, beneficiary: who.beneficiary, epoch: who.epoch, expires_at: iso(who.expires), balance: { currency: "USD", available: dollars(who.bal.availableMicro), used: dollars(who.bal.spentMicro), credited: dollars(who.bal.creditedMicro) } });
     }
     if (url.pathname === "/v1/key/rotate" && req.method === "POST") {
       const who = authed(req);
       const ended = ledger.grantsBy(who.beneficiary).map((g) => g.grantee); // the grants this wallet gave end with the old key
       const epoch = ledger.bumpEpoch(who.beneficiary);
-      return json(res, 200, { object: "key", wallet: who.wallet, epoch, message: keyMessage(cfg.chainId, epoch), grants_ended: ended, note: `Sign the new message to get the new key. Every older key is refused from now on.${ended.length ? ` The ${ended.length} grant${ended.length === 1 ? "" : "s"} this wallet gave ended with the old key; give them again with the new one.` : ""}` });
+      return json(res, 200, { object: "key", wallet: who.wallet, epoch, grants_ended: ended, note: `Every key of this wallet is refused from now on, this one too. Sign in again to get a new one.${ended.length ? ` The ${ended.length} grant${ended.length === 1 ? "" : "s"} this wallet gave ended with the old key; give them again with the new one.` : ""}` });
     }
     if (url.pathname === "/v1/grants" && req.method === "GET") {
       const who = authed(req);
@@ -471,11 +510,16 @@ const server = createServer(async (req, res) => {
       if (!chain) throw err(503, "not_live", "The chain is not connected yet.");
       // anyone may ask, a few times a minute; a hash that was not found is not looked up again for a minute
       if (!allow("index:" + clientIp(req), 6)) throw err(429, "slow_down", "Six lookups a minute per address.");
-      const tx = body.tx.toLowerCase(), missedAt = indexMisses.get(tx) || 0;
+      const tx = body.tx.toLowerCase(), missedAt = indexMisses.get(tx) || 0, readyAt = indexWaits.get(tx) || 0;
       if (Date.now() - missedAt < 60_000) return json(res, 200, { booked: 0, note: "looked up a moment ago, nothing found yet" });
-      const booked = await chain.indexTx(body.tx);
-      if (!booked) { indexMisses.set(tx, Date.now()); if (indexMisses.size > 10_000) indexMisses.clear(); }
-      return json(res, 200, { booked });
+      // found, but too few blocks stand on top of it yet: the chain is not asked again before they can have come
+      const waiting = (ms) => json(res, 200, { booked: 0, pending: true, wait_seconds: Math.max(1, Math.ceil(ms / 1000)), note: `The payment is in a block. It is credited once ${cfg.confirmations} blocks stand on top of it, so that a block that gets replaced cannot leave credit nobody paid for.` });
+      if (readyAt > Date.now()) return waiting(readyAt - Date.now());
+      const r = await chain.indexTx(body.tx);
+      if (r.waitBlocks > 0) { indexWaits.set(tx, Date.now() + r.waitSeconds * 1000); if (indexWaits.size > 10_000) indexWaits.clear(); return waiting(r.waitSeconds * 1000); }
+      indexWaits.delete(tx);
+      if (!r.booked) { indexMisses.set(tx, Date.now()); if (indexMisses.size > 10_000) indexMisses.clear(); }
+      return json(res, 200, { booked: r.booked });
     }
     if (url.pathname === "/api/team/activity" && req.method === "GET") {
       const num = (k) => Number(url.searchParams.get(k) || 0) || 0;

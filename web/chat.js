@@ -4,7 +4,7 @@
    answers 503 not_launched and the page says so. */
 (async () => {
   const B = window.Brownies;
-  const { load, toast, gw, keyMessage, keyFromSignature, explainError } = B;
+  const { load, toast, gw, signIn, explainError } = B;
   const $ = (id) => document.getElementById(id);
   const S = await load();
   const Wt = window.BrowniesWallet;
@@ -57,10 +57,8 @@
   sel.onchange = () => { U.model = sel.value; };
 
   async function makeKey() {
-    const r = await gw(S, `/api/protocol/account/${account()}`);
-    U.epoch = Number(r.body?.epoch || 0);
-    const sig = await Wt.state.signer.signMessage(keyMessage(S.cfg.chainId, U.epoch));
-    U.key = keyFromSignature(sig, U.epoch);
+    const k = await signIn(S, Wt.state.signer, account());
+    U.key = k.key; U.epoch = k.epoch;
   }
 
   keyBtn.onclick = async () => {

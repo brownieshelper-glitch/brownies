@@ -303,15 +303,25 @@
   /// "5 Oct 2026" for a time in milliseconds (UTC)
   const day = (at) => { const d = new Date(at); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
 
-  const keyMessage = (chainId, epoch) => `Brownies API key, chain ${chainId}, epoch ${epoch}`;
-  function keyFromSignature(sig, epoch) {
-    const hex = sig.replace(/^0x/, "");
-    let bin = ""; for (let i = 0; i < hex.length; i += 2) bin += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
-    return `sk-brownie-${epoch}-` + btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  /* A gateway key for the connected wallet. The gateway hands out a sign-in message that names this very site,
+     works once and runs out in five minutes; the wallet signs it; the gateway answers with the key and the day it
+     runs out. Until 2026-10-13 a key was the wallet's signature of a fixed sentence, which any page could ask a
+     wallet for. Returns { key, epoch, expiresAt }. */
+  async function signIn(S, signer, wallet) {
+    const post = (path, body) => gw(S, path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const said = (r, fallback) => (r.body && r.body.error && r.body.error.message) || fallback;
+    const c = await post("/v1/auth/challenge", { wallet });
+    if (!c.ok || !c.body || !c.body.message) throw new Error(said(c, "The gateway did not answer. Try again."));
+    // the wallet is only ever shown a message that names the site it is asked on
+    if (c.body.message.indexOf(location.host + " wants you to sign in with your Ethereum account:\n") !== 0) throw new Error("The sign-in message does not name this site, so it was not signed.");
+    const signature = await signer.signMessage(c.body.message);
+    const r = await post("/v1/auth/key", { nonce: c.body.nonce, signature });
+    if (!r.ok || !r.body || !r.body.key) throw new Error(said(r, "The gateway made no key. Try again."));
+    return { key: r.body.key, epoch: Number(r.body.epoch || 0), expiresAt: Date.parse(r.body.expires_at) || 0 };
   }
   const beneficiary = (wallet) => E.zeroPadValue(wallet, 32);
 
-  window.Brownies = { load, ABI, amount, coin, coinHeld, sugar, usd, eth, dollars, short, parse, explainError, toast, tx, gw, ago, day, keyMessage, keyFromSignature, beneficiary, local };
+  window.Brownies = { load, ABI, amount, coin, coinHeld, sugar, usd, eth, dollars, short, parse, explainError, toast, tx, gw, ago, day, signIn, beneficiary, local };
 })();
 
 /* A visit from a tagged link (an ad, a post) is counted by the gateway once, with the tags only: no cookie, no

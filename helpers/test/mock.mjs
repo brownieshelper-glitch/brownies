@@ -51,15 +51,21 @@ export function makeFetch() {
 }
 
 // ---- the gateway: team log, public reads, keys and chat (live mode) ----
-function verifyKey(bearer, accounts) {
-  const m = /^Bearer sk-brownie-(\d+)-(.+)$/.exec(bearer || "");
+function verifyKey(bearer, g) {
+  const m = /^Bearer (sk-brownie-k1\.[A-Za-z0-9_-]{43})$/.exec(bearer || "");
   if (!m) return { error: { status: 401, code: "missing_api_key" } };
-  let wallet;
-  try { wallet = verifyMessage(`Brownies API key, chain 1, epoch ${m[1]}`, "0x" + Buffer.from(m[2], "base64url").toString("hex")); } catch { return { error: { status: 401, code: "invalid_api_key" } }; }
-  const cur = accounts[wallet.toLowerCase()]?.epoch || 0;
-  if (Number(m[1]) < cur) return { error: { status: 401, code: "key_revoked" } };
-  return { wallet: wallet.toLowerCase() };
+  const k = g.keys.get(m[1]);
+  if (!k) return { error: { status: 401, code: "invalid_api_key" } };
+  if (k.expires < g.now()) return { error: { status: 401, code: "key_expired" } };
+  if (k.epoch < (g.accounts[k.wallet]?.epoch || 0)) return { error: { status: 401, code: "key_revoked" } };
+  return { wallet: k.wallet };
 }
+/// The sign-in message as gateway/auth.mjs writes it.
+export const signInText = ({ site = "feedthebrownies.com", wallet, chainId = 1, nonce, at }) => [
+  `${site} wants you to sign in with your Ethereum account:`, wallet, "",
+  "Sign in to get your Brownies API key. This moves no money. Sign it only on the site named in the first line.", "",
+  `URI: https://${site}`, "Version: 1", `Chain ID: ${chainId}`, `Nonce: ${nonce}`, `Issued At: ${new Date(at).toISOString()}`, `Expiration Time: ${new Date(at + 300_000).toISOString()}`,
+].join("\n");
 export function mockGateway(fetch, { url = "https://gw.test", teamKey = "team-key-0123456789abcdef0123456789" } = {}) {
   const g = { url, teamKey, reports: [], accounts: {}, balances: {}, chatCost: 0.0012, reply: () => "A plain sentence from the gateway.", chats: [],
     stats: { ledger: { activations: 3, creditedMicro: 5_000_000, spentMicro: 120_000, requests: 9 }, onchain: null },
@@ -73,11 +79,28 @@ export function mockGateway(fetch, { url = "https://gw.test", teamKey = "team-ke
   fetch.on("GET", `${url}/api/protocol/stats`, () => ({ json: g.stats }));
   fetch.on("GET", `${url}/api/team/summary`, () => ({ json: g.summary }));
   fetch.on("GET", new RegExp(`^${url}/api/protocol/account/(0x[0-9a-fA-F]{40})`), (c, m) => ({ json: { wallet: m[1], epoch: g.accounts[m[1].toLowerCase()]?.epoch || 0 } }));
+  // signing in: a message that works once, then a key for the wallet's signature of it
+  g.keys = new Map(); g.signins = new Map(); g.now = () => Date.now(); g.signInMessage = signInText; let made = 0;
+  fetch.on("POST", `${url}/v1/auth/challenge`, (c) => {
+    const nonce = String(++made).padStart(32, "0"), wallet = c.body.wallet;
+    const message = g.signInMessage({ wallet, nonce, at: g.now() });
+    g.signins.set(nonce, { wallet, message, days: Number(c.body.days) || 30 });
+    return { json: { object: "challenge", wallet, nonce, message, site: "feedthebrownies.com", key_days: Number(c.body.days) || 30 } };
+  });
+  fetch.on("POST", `${url}/v1/auth/key`, (c) => {
+    const s = g.signins.get(c.body.nonce); g.signins.delete(c.body.nonce);
+    let signer = null; try { signer = verifyMessage(s.message, c.body.signature); } catch { signer = null; }
+    if (!s || !signer || signer.toLowerCase() !== s.wallet.toLowerCase()) return { status: 401, json: { error: { code: s ? "bad_signature" : "challenge_expired", message: "no" } } };
+    const wallet = s.wallet.toLowerCase(), epoch = g.accounts[wallet]?.epoch || 0;
+    const key = "sk-brownie-k1." + `key${g.keys.size + 1}`.padEnd(43, "A");
+    g.keys.set(key, { wallet, epoch, expires: g.now() + s.days * 86_400_000 });
+    return { json: { object: "key", key, wallet: s.wallet, epoch, expires_at: new Date(g.now() + s.days * 86_400_000).toISOString() } };
+  });
   // grants: g.grants[granter wallet, lowercase][grantee wallet, lowercase] = room in dollars; the header names the granter
   g.grants = {};
   const room = (c, wallet) => { const from = String(c.headers["x-brownies-pay-from"] || "").toLowerCase(); if (!from) return null; const r = g.grants[from]?.[wallet]; return r == null ? { none: true, from } : { from, room: r }; };
   fetch.on("GET", `${url}/v1/key`, (c) => {
-    const v = verifyKey(c.headers.authorization, g.accounts);
+    const v = verifyKey(c.headers.authorization, g);
     if (v.error) return { status: v.error.status, json: { error: v.error } };
     const gr = room(c, v.wallet);
     if (gr?.none) return { status: 403, json: { error: { code: "no_grant", message: "no grant" } } };
@@ -85,7 +108,7 @@ export function mockGateway(fetch, { url = "https://gw.test", teamKey = "team-ke
     return { json: { object: "key", wallet: v.wallet, balance: { currency: "USD", available: (g.balances[v.wallet] || 0).toFixed(6), used: "0", credited: "0" } } };
   });
   fetch.on("POST", `${url}/v1/chat/completions`, (c) => {
-    const v = verifyKey(c.headers.authorization, g.accounts);
+    const v = verifyKey(c.headers.authorization, g);
     if (v.error) return { status: v.error.status, json: { error: v.error } };
     const gr = room(c, v.wallet);
     if (gr?.none) return { status: 403, json: { error: { code: "no_grant", message: "no grant" } } };
@@ -229,6 +252,7 @@ export function makeWorld({ mode = "prelaunch", clock = new FakeClock(), tz = "U
   const fetch = makeFetch();
   const store = new Store(":memory:", { tz });
   const gw = mockGateway(fetch);
+  gw.now = () => clock.now(); // the gateway's keys run out by the same clock the helpers read
   const gateway = new Gateway({ url: "https://gw.test", teamKey: gw.teamKey, fetch, log });
   const or = mockOpenRouter(fetch, { reply: reply || (() => "Every trade of BROWNIE pays a 2% tax. Half of it reaches stakers as SUGAR, one dollar of AI each."), cost: cost ?? 0.001 });
   const tg = mockTelegram(fetch);

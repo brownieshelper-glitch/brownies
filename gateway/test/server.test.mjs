@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Wallet } from "ethers";
 import { Ledger } from "../ledger.mjs";
-import { walletToBeneficiary, keyMessage, keyFromSignature } from "../auth.mjs";
+import { walletToBeneficiary } from "../auth.mjs";
 
 const SUGAR = "0x" + "5".repeat(40);
 const seen = []; // every chat body the fake upstream received
@@ -23,6 +23,9 @@ const MODELS = { data: [
   { id: "test/model", pricing: { prompt: "0.000001", completion: "0.000002" } }, // 1 and 2 USD per million tokens
   { id: "test/router", pricing: { prompt: "-1", completion: "-1" } }, // a router states no fixed price
 ] };
+const rpcSeen = []; // every chain call the gateway made
+const YOUNG_TX = "0x" + "7".repeat(64);
+const YOUNG_RECEIPT = { transactionHash: YOUNG_TX, transactionIndex: "0x0", blockHash: "0x" + "b".repeat(64), blockNumber: "0xe", from: "0x" + "1".repeat(40), to: SUGAR, cumulativeGasUsed: "0x5208", gasUsed: "0x5208", effectiveGasPrice: "0x1", contractAddress: null, logs: [], logsBloom: "0x" + "0".repeat(512), status: "0x1", type: "0x2" };
 const sse = (lines) => lines.map((l) => `data: ${typeof l === "string" ? l : JSON.stringify(l)}`).join("\n\n");
 const delta = (text, id = "gen-1") => ({ id, choices: [{ delta: { content: text } }] });
 const whole = (cost) => JSON.stringify({ id: "gen-1", choices: [{ message: { content: "hello" } }], usage: { prompt_tokens: 10, completion_tokens: 5, cost } });
@@ -32,7 +35,7 @@ async function startGateway() {
   // every secret is set to empty here: the child must never read a real key, pay, bridge or send anything
   gateway = spawn(process.execPath, [fileURLToPath(new URL("../server.mjs", import.meta.url))], {
     env: { ...process.env, PORT: String(port), DB_PATH: dbPath, OPENROUTER_URL: up, OPENROUTER_API_KEY: "test", SUGAR_ADDRESS: SUGAR, RPC_URL: up, CHAIN_ID: "1",
-      BROWNIES_GATEWAY_ENV: "", PANTRY_PRIVATE_KEY: "", KEEPER_PRIVATE_KEY: "", TEAM_LOG_KEY: "", HARVESTER_ADDRESS: "", LEDGER_ADDRESS: "", TEAM_VAULT_ADDRESS: "", PRICE_MULTIPLIER: "1" },
+      BROWNIES_GATEWAY_ENV: "", PANTRY_PRIVATE_KEY: "", KEEPER_PRIVATE_KEY: "", TEAM_LOG_KEY: "", HARVESTER_ADDRESS: "", LEDGER_ADDRESS: "", TEAM_VAULT_ADDRESS: "", PRICE_MULTIPLIER: "1", SIGNIN_SITES: "feedthebrownies.com,www.feedthebrownies.com", SIGNIN_PER_MINUTE: "1000", CONFIRMATIONS: "5" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   gateway.stdout.on("data", (d) => (log += d));
@@ -71,7 +74,9 @@ before(async () => {
       // the chain: just enough JSON-RPC for the indexer to find nothing
       let rpc = {};
       try { rpc = JSON.parse(raw); } catch { /* not JSON */ }
-      const one = (q) => ({ jsonrpc: "2.0", id: q.id, result: q.method === "eth_chainId" ? "0x1" : q.method === "eth_blockNumber" ? "0x10" : q.method === "eth_getLogs" ? [] : "0x" });
+      // one activation that is in block 14 while the chain stands at 16: two blocks on top of it, five are wanted
+      const one = (q) => ({ jsonrpc: "2.0", id: q.id, result: q.method === "eth_chainId" ? "0x1" : q.method === "eth_blockNumber" ? "0x10" : q.method === "eth_getLogs" ? [] : q.method === "eth_getTransactionReceipt" ? (q.params?.[0] === YOUNG_TX ? YOUNG_RECEIPT : null) : "0x" });
+      if (!Array.isArray(rpc)) rpcSeen.push(rpc.method); else rpcSeen.push(...rpc.map((q) => q.method));
       jsonOut(200, JSON.stringify(Array.isArray(rpc) ? rpc.map(one) : one(rpc)));
     });
   });
@@ -93,7 +98,13 @@ async function funded(micro) {
     l.recordActivation({ id: nextId++, beneficiary: walletToBeneficiary(w.address), sender: w.address, atoms: micro, block: 1, tx: "0x" + String(nextId).padStart(64, "0") });
     l.db.close();
   }
-  return { w, key: keyFromSignature(await w.signMessage(keyMessage(1, 0)), 0) };
+  return { w, key: await signIn(w) };
+}
+const post = (path, body, headers = {}) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+/// A key the way everybody gets one: ask for the sign-in message, sign it, hand the signature in.
+async function signIn(w, extra = {}, headers = {}) {
+  const c = await (await post("/v1/auth/challenge", { wallet: w.address, ...extra }, headers)).json();
+  return (await (await post("/v1/auth/key", { nonce: c.nonce, signature: await w.signMessage(c.message) })).json()).key;
 }
 const chat = (key, body, headers = {}) => fetch(`${base}/v1/chat/completions`, { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
 const account = async (key) => (await fetch(`${base}/v1/key`, { headers: { authorization: `Bearer ${key}` } })).json();
@@ -195,7 +206,64 @@ test("rotating the key ends the grants the wallet gave, and says so", async () =
   const rot = await (await fetch(`${base}/v1/key/rotate`, { method: "POST", headers: auth })).json();
   assert.deepEqual(rot.grants_ended.map((a) => a.toLowerCase()), [brownie.w.address.toLowerCase()]);
   assert.equal((await chat(brownie.key, ask("plain"), from)).status, 403, "and no longer after the rotation");
-  assert.equal((await fetch(`${base}/v1/key`, { headers: auth })).status, 401, "the old key is dead too");
+  const dead = await fetch(`${base}/v1/key`, { headers: auth });
+  assert.equal(dead.status, 401, "the old key is dead too"); assert.equal((await dead.json()).error.code, "key_revoked");
+  // the wallet signs in again and has a key at the new epoch, with its balance
+  const again = await account(await signIn(w));
+  assert.equal(again.epoch, 1); assert.equal(again.wallet, w.address); assert.ok(Number(again.balance.available) > 4.9);
+});
+
+test("a key is made by signing in: the message names the site and works once, another wallet's signature is refused, and a key lasts as long as it says", async () => {
+  const w = Wallet.createRandom(), thief = Wallet.createRandom();
+  const c = await (await post("/v1/auth/challenge", { wallet: w.address, days: 2 })).json();
+  assert.equal(c.object, "challenge"); assert.equal(c.site, "feedthebrownies.com"); assert.equal(c.key_days, 2);
+  assert.ok(c.message.startsWith(`feedthebrownies.com wants you to sign in with your Ethereum account:\n${w.address}\n`));
+  assert.match(c.message, new RegExp(`\nChain ID: 1\nNonce: ${c.nonce}\nIssued At: `));
+  // somebody else's signature of the same message: refused, and the sign-in is used up
+  const bad = await post("/v1/auth/key", { nonce: c.nonce, signature: await thief.signMessage(c.message) });
+  assert.equal(bad.status, 401); assert.equal((await bad.json()).error.code, "bad_signature");
+  const late = await post("/v1/auth/key", { nonce: c.nonce, signature: await w.signMessage(c.message) });
+  assert.equal(late.status, 401, "one try for each sign-in, right or wrong"); assert.equal((await late.json()).error.code, "challenge_expired");
+  // a fresh one, signed by the wallet itself
+  const c2 = await (await post("/v1/auth/challenge", { wallet: w.address, days: 2 })).json();
+  const made = await (await post("/v1/auth/key", { nonce: c2.nonce, signature: await w.signMessage(c2.message) })).json();
+  assert.match(made.key, /^sk-brownie-k1\.[A-Za-z0-9_-]{43}$/); assert.equal(made.wallet, w.address); assert.equal(made.epoch, 0);
+  const left = Date.parse(made.expires_at) - Date.now();
+  assert.ok(left > 47.9 * 3_600_000 && left <= 48 * 3_600_000, "two days, as asked");
+  const me = await account(made.key);
+  assert.equal(me.wallet, w.address); assert.equal(me.expires_at, made.expires_at); assert.equal(me.message, undefined, "there is no sentence to sign any more");
+  assert.equal((await post("/v1/auth/key", { nonce: c2.nonce, signature: await w.signMessage(c2.message) })).status, 401, "the same signature makes no second key");
+  // what does not count as a key
+  const tried = async (key) => { const r = await fetch(`${base}/v1/key`, { headers: { authorization: `Bearer ${key}` } }); return [r.status, (await r.json()).error.code]; };
+  const old = "sk-brownie-0-" + Buffer.from((await w.signMessage("Brownies API key, chain 1, epoch 0")).slice(2), "hex").toString("base64url");
+  assert.deepEqual(await tried(old), [401, "key_retired"], "the wallet's signature of the old fixed sentence opens nothing");
+  assert.deepEqual(await tried("sk-brownie-k1." + "A".repeat(43)), [401, "invalid_api_key"]);
+  assert.deepEqual(await tried(made.key.slice(0, -1) + (made.key.endsWith("A") ? "B" : "A")), [401, "invalid_api_key"]);
+  // bad asks
+  assert.equal((await post("/v1/auth/challenge", { wallet: "0x12" })).status, 400);
+  assert.equal((await post("/v1/auth/challenge", { wallet: w.address, days: 400 })).status, 400);
+  assert.equal((await post("/v1/auth/key", { nonce: "x", signature: "0x" })).status, 400);
+});
+
+test("a page on another site gets no sign-in message; our own site gets one that names it", async () => {
+  const w = Wallet.createRandom();
+  const evil = await post("/v1/auth/challenge", { wallet: w.address, site: "feedthebrownies.com" }, { origin: "https://feedthebrownies.com.evil.example" });
+  assert.equal(evil.status, 403); assert.equal((await evil.json()).error.code, "site_not_allowed");
+  const ours = await (await post("/v1/auth/challenge", { wallet: w.address }, { origin: "https://www.feedthebrownies.com" })).json();
+  assert.ok(ours.message.startsWith("www.feedthebrownies.com wants you to sign in")); assert.match(ours.message, /\nURI: https:\/\/www\.feedthebrownies\.com\n/);
+  assert.match(await signIn(w, {}, { origin: "https://feedthebrownies.com" }), /^sk-brownie-k1\./);
+});
+
+test("an activation is not credited while fewer than five blocks stand on top of it, and the chain is not asked again before they can have come", async () => {
+  const before = rpcSeen.filter((m) => m === "eth_getTransactionReceipt").length;
+  const first = await (await post("/api/protocol/index-tx", { tx: YOUNG_TX })).json();
+  assert.equal(first.booked, 0); assert.equal(first.pending, true); assert.equal(first.wait_seconds, 36, "three more blocks, twelve seconds each");
+  assert.match(first.note, /credited once 5 blocks stand on top of it/);
+  const second = await (await post("/api/protocol/index-tx", { tx: YOUNG_TX })).json();
+  assert.equal(second.pending, true); assert.ok(second.wait_seconds <= 36 && second.wait_seconds >= 34);
+  assert.equal(rpcSeen.filter((m) => m === "eth_getTransactionReceipt").length, before + 1, "the second ask was answered from memory");
+  const unknown = await (await post("/api/protocol/index-tx", { tx: "0x" + "8".repeat(64) })).json();
+  assert.deepEqual(unknown, { booked: 0 });
 });
 
 test("a request target that is not a path gets a 400 and the gateway stays up", async () => {

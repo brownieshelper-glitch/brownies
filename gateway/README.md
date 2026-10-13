@@ -7,9 +7,12 @@ How money flows:
 1. USDG reaches the inference funding wallet (through the harvester, the staking stream or the par door) and the same
    number of SUGAR atoms is minted on chain. One atom is one micro dollar.
 2. A holder calls `activate(amount, beneficiary)` on SUGAR. The token burns and the chain emits `Activated`.
-3. This service indexes `Activated` and credits the beneficiary. A wallet's beneficiary is its address padded to 32 bytes.
-4. The wallet signs `Brownies API key, chain 1, epoch N` (the chain is the CHAIN_ID of the gateway: Ethereum, 1) once. The signature, base64url, is the API key:
-   `sk-brownie-N-<signature>`. No account, nothing stored, nothing to leak but a key the wallet can rotate.
+3. This service indexes `Activated` and credits the beneficiary once `CONFIRMATIONS` blocks (5) stand on top of the
+   payment, so a block that gets replaced leaves no credit. A wallet's beneficiary is its address padded to 32 bytes.
+4. The wallet signs in: `POST /v1/auth/challenge {wallet}` returns a message that names the site, works once and runs
+   out in five minutes; the wallet signs it; `POST /v1/auth/key {nonce, signature}` returns the API key,
+   `sk-brownie-k1.<random>`, and the day it runs out. No account. The gateway keeps a hash of the key, never the key.
+   (Until 2026-10-13 the key was the wallet's signature of a fixed sentence, which any page could ask a wallet for.)
 5. Every request is forwarded to OpenRouter with the gateway's upstream key and charged after the call at the cost
    OpenRouter states, times `PRICE_MULTIPLIER` (1.0 = at cost). The owner buys OpenRouter balance with the USDG from
    step 1. That purchase is the one trusted step, and the site says so.
@@ -38,7 +41,7 @@ cp .env.example .env     # fill SUGAR_ADDRESS, START_BLOCK, OPENROUTER_API_KEY
 npm start
 ```
 
-Routes: `GET /v1/models`, `GET /v1/key`, `POST /v1/key/rotate`, `POST /v1/chat/completions` (streaming works),
+Routes: `GET /v1/models`, `POST /v1/auth/challenge`, `POST /v1/auth/key`, `GET /v1/key`, `POST /v1/key/rotate`, `POST /v1/chat/completions` (streaming works),
 `GET /v1/grants`, `POST /v1/grants`, `POST /v1/grants/revoke`, `GET /api/protocol/stats`, `GET /api/protocol/account/:wallet`,
 `POST /api/protocol/index-tx`, `GET /health`.
 

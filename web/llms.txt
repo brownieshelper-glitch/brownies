@@ -13,7 +13,11 @@
   pays for the AI.
 - Activating SUGAR burns it and credits dollars to a key on the gateway. Activation is final and the balance is
   not redeemable for cash.
-- A key is a wallet's signature of "Brownies API key, chain 1, epoch N", written as sk-brownie-N-base64url(signature).
+- A key is made by signing in with a wallet. POST /v1/auth/challenge {wallet} returns a message that names the site,
+  works once and runs out in five minutes. The wallet signs it. POST /v1/auth/key {nonce, signature} returns the key
+  (sk-brownie-k1...) and the day it runs out: 30 days, or the days asked for, up to 90.
+- Activated dollars show on the key about a minute after the payment: the gateway waits until a few blocks stand
+  on top of it.
 - The contracts cannot be upgraded. The Brownies team owns three switches: the program on/off (fees to the team
   wallet when off), an emergency stop of the staking (unstaking always works), and the team vault, where it picks the
   helpers and can veto a skill payout, within limits fixed in the contract.
@@ -40,8 +44,9 @@
 
 - POST /v1/chat/completions (OpenAI format, streaming supported)
 - GET /v1/models
+- POST /v1/auth/challenge {wallet}, then POST /v1/auth/key {nonce, signature}: sign in for a key (no key needed)
 - GET /v1/key
-- POST /v1/key/rotate (older keys stop working, and the grants the wallet gave end)
+- POST /v1/key/rotate (every key of the wallet stops working, and the grants the wallet gave end)
 - GET /v1/grants, POST /v1/grants {grantee, daily_usd}, POST /v1/grants/revoke {grantee}: let another wallet spend from your balance up to a daily cap; the spender adds the header X-Brownies-Pay-From: <your wallet>
 - GET /api/protocol/account/{wallet}
 - GET /api/protocol/stats

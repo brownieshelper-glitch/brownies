@@ -206,7 +206,8 @@ async function flow() {
 
   // the key
   await click("btnKey");
-  ok("show my key displays a key", await until(async () => (await text("keyBox")).startsWith("sk-brownie-0-")), (await text("keyBox")).slice(0, 18) + "...");
+  ok("get my key displays a key", await until(async () => (await text("keyBox")).startsWith("sk-brownie-k1.")), (await text("keyBox")).slice(0, 18) + "...");
+  const firstKey = await text("keyBox");
 
   // buy and activate 3 USDC
   const bal0 = await num("vBalance");
@@ -236,7 +237,7 @@ async function flow() {
 
   // replace the key
   await click("btnRotate");
-  ok("replace my key makes an epoch 1 key", await until(async () => (await text("keyBox")).startsWith("sk-brownie-1-"), 30000), (await text("keyBox")).slice(0, 18) + "...");
+  ok("replace my key makes another key", await until(async () => { const k = await text("keyBox"); return k.startsWith("sk-brownie-k1.") && k !== firstKey; }, 30000), (await text("keyBox")).slice(0, 18) + "...");
   await idle("btnRotate");
 
   // tip a brownie: half a SUGAR to the first on the payroll (approve, then tip); the vault counts it for that helper

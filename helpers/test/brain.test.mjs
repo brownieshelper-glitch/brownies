@@ -3,7 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Wallet } from "ethers";
 import { makeWorld } from "./mock.mjs";
-import { Brain, BudgetError, keyMessage, keyFromSignature, REASONING_HEADROOM } from "../lib/brain.mjs";
+import { Brain, BudgetError, isOurSignIn, REASONING_HEADROOM } from "../lib/brain.mjs";
+import { signInText } from "./mock.mjs";
 
 test("prelaunch: the call goes to OpenRouter with usage accounting, the cost is counted, the cap stops the helper", async () => {
   const W = makeWorld({ cost: 0.0023, config: { nib: { dailyCapUsd: 0.005 } } });
@@ -41,7 +42,7 @@ test("prelaunch: a refused OpenRouter key alerts the owner about the credentials
   assert.match(W.alerts.sent[0].text, /Openrouter refused the brownies' credentials/);
 });
 
-test("live: the helper signs the gateway's key message, pays with its balance, and stops under a few cents", async () => {
+test("live: the helper signs in to the gateway for a key, pays with its balance, and stops under a few cents", async () => {
   const W = makeWorld({ mode: "live" });
   const wallet = new Wallet(W.keys.fudge).address.toLowerCase();
   W.gw.balances[wallet] = 0.06;
@@ -51,8 +52,10 @@ test("live: the helper signs the gateway's key message, pays with its balance, a
   assert.equal(W.gw.chats.length, 1);
   assert.equal(W.gw.chats[0].wallet, wallet, "the gateway recovered Fudge's wallet from the key");
   assert.equal(W.or.calls.length, 0, "nothing went to OpenRouter");
-  const expected = keyFromSignature(await new Wallet(W.keys.fudge).signMessage(keyMessage(1, 0)), 0);
-  assert.equal(W.fetch.callsTo("/v1/chat/completions")[0].headers.authorization, `Bearer ${expected}`);
+  const sent = W.fetch.callsTo("/v1/chat/completions")[0].headers.authorization;
+  assert.match(sent, /^Bearer sk-brownie-k1\.[A-Za-z0-9_-]{43}$/, "a key the gateway made, not a signature");
+  assert.equal(W.fetch.callsTo("/v1/auth/challenge")[0].body.wallet, new Wallet(W.keys.fudge).address);
+  assert.equal(W.fetch.callsTo("/v1/auth/challenge")[0].body.days, 1, "a helper's key lasts a day: it can always make another");
   assert.deepEqual(W.store.spentToday("fudge", W.clock.now()), { micro: 4000, calls: 1 });
   await W.brain.chat("fudge", { prompt: "Again" });
   assert.equal(W.gw.balances[wallet].toFixed(3), "0.052");
@@ -62,11 +65,36 @@ test("live: the helper signs the gateway's key message, pays with its balance, a
   assert.match(c.reason, /gateway balance 0\.0480 USD/);
   await assert.rejects(() => W.brain.chat("fudge", { prompt: "No" }), BudgetError);
   assert.match(W.alerts.sent[0].text, /Fudge is out of budget\. Deposit SUGAR to the vault, or wait for the next tax claim\./);
+  assert.equal(W.fetch.callsTo("/v1/auth/challenge").length, 1, "one sign-in served every call of the day");
   // Crumb has its own wallet and nothing on it
   assert.equal((await W.brain.canSpend("crumb")).ok, false);
 });
 
-test("live: a rotated epoch (key_revoked) makes the helper sign the new message and go on", async () => {
+test("live: a helper's wallet signs our own sign-in message and nothing else", async () => {
+  const wallet = Wallet.createRandom().address, nonce = "0".repeat(31) + "7", at = Date.parse("2026-10-13T15:00:00Z");
+  const ours = signInText({ wallet, nonce, at });
+  assert.equal(isOurSignIn(ours, { wallet, chainId: 1, nonce }), true);
+  assert.equal(isOurSignIn(ours, { wallet: wallet.toLowerCase(), chainId: 1, nonce }), true);
+  assert.equal(isOurSignIn(signInText({ site: "localhost:8080", wallet, nonce, at }).replace("https://localhost", "http://localhost"), { wallet, chainId: 1, nonce }), true);
+  for (const [why, text] of [
+    ["another wallet", signInText({ wallet: Wallet.createRandom().address, nonce, at })],
+    ["another chain", signInText({ wallet, nonce, at, chainId: 8453 })],
+    ["another number", signInText({ wallet, nonce: "0".repeat(31) + "8", at })],
+    ["another sentence", ours.replace("Sign in to get your Brownies API key.", "Sign in to Some Exchange.")],
+    ["a line more", ours + "\nResources:\n- https://evil.example"],
+    ["a site and a link that differ", ours.replace("URI: https://feedthebrownies.com", "URI: https://evil.example")],
+    ["plain words", "Give this site access to everything."],
+    ["nothing", ""],
+  ]) assert.equal(isOurSignIn(text, { wallet, chainId: 1, nonce }), false, why);
+  // a gateway that hands over anything else gets no signature at all
+  const W = makeWorld({ mode: "live" });
+  W.gw.balances[new Wallet(W.keys.fudge).address.toLowerCase()] = 1;
+  W.gw.signInMessage = ({ wallet: w }) => `evil.example wants you to sign in with your Ethereum account:\n${w}\n\nLog in to Evil.`;
+  await assert.rejects(() => W.brain.chat("fudge", { prompt: "Hello" }), /not the one a helper signs: nothing was signed/);
+  assert.equal(W.fetch.callsTo("/v1/auth/key").length, 0);
+});
+
+test("live: a key the gateway refuses (rotated away, or run out) makes the helper sign in again and go on", async () => {
   const W = makeWorld({ mode: "live" });
   const wallet = new Wallet(W.keys.chip).address.toLowerCase();
   W.gw.balances[wallet] = 1;
@@ -74,9 +102,16 @@ test("live: a rotated epoch (key_revoked) makes the helper sign the new message 
   W.gw.accounts[wallet] = { epoch: 2 }; // the owner rotated Chip's key on the gateway
   await W.brain.chat("chip", { prompt: "two" });
   assert.equal(W.gw.chats.length, 2);
-  const epochs = (path) => W.fetch.callsTo(path).map((c) => c.headers.authorization.slice(0, 20));
-  assert.deepEqual(epochs("/v1/key"), ["Bearer sk-brownie-0-", "Bearer sk-brownie-0-", "Bearer sk-brownie-2-"], "the balance read met the 401 and signed epoch 2");
-  assert.deepEqual(epochs("/v1/chat/completions"), ["Bearer sk-brownie-0-", "Bearer sk-brownie-2-"]);
+  const keys = (path) => W.fetch.callsTo(path).map((c) => c.headers.authorization.slice(7, 26));
+  assert.deepEqual(keys("/v1/key"), ["sk-brownie-k1.key1A", "sk-brownie-k1.key1A", "sk-brownie-k1.key2A"], "the balance read met the 401 and signed in again");
+  assert.deepEqual(keys("/v1/chat/completions"), ["sk-brownie-k1.key1A", "sk-brownie-k1.key2A"]);
+  assert.equal(W.gw.keys.get(W.fetch.callsTo("/v1/chat/completions")[1].headers.authorization.slice(7)).epoch, 2, "the new key carries the new epoch");
+  // a day later the key has run out: a new one is made before it is used, with no refusal in between
+  W.clock.advance(24 * 3_600_000);
+  await W.brain.chat("chip", { prompt: "three" });
+  assert.equal(W.fetch.callsTo("/v1/auth/challenge").length, 3);
+  assert.equal(keys("/v1/chat/completions").at(-1), "sk-brownie-k1.key3A");
+  assert.equal(W.gw.chats.length, 3);
 });
 
 test("yesNo reads the first word", async () => {

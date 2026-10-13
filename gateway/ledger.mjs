@@ -77,6 +77,21 @@ export class Ledger {
         upstream_id TEXT,
         model TEXT
       );
+      CREATE TABLE IF NOT EXISTS signin (
+        nonce TEXT PRIMARY KEY,
+        wallet TEXT NOT NULL,
+        message TEXT NOT NULL,
+        key_ms INTEGER NOT NULL,
+        expires INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS api_keys (
+        hash TEXT PRIMARY KEY,
+        beneficiary TEXT NOT NULL,
+        epoch INTEGER NOT NULL,
+        created INTEGER NOT NULL,
+        expires INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS api_keys_b ON api_keys(beneficiary, created);
     `);
     // a book opened before grants existed gets the column that says who spent through a grant
     if (!this.db.prepare("PRAGMA table_info(spend)").all().some((c) => c.name === "via")) this.db.exec("ALTER TABLE spend ADD COLUMN via TEXT");
@@ -118,6 +133,18 @@ export class Ledger {
       dropHold: this.db.prepare("DELETE FROM holds WHERE id = ?"),
       noteHold: this.db.prepare("UPDATE holds SET floor_micro = MAX(floor_micro, ?), upstream_id = COALESCE(?, upstream_id), model = COALESCE(?, model) WHERE id = ?"),
       allHolds: this.db.prepare("SELECT id, beneficiary, micro, via, day, at, floor_micro, upstream_id, model FROM holds ORDER BY id"),
+      // sign-ins waiting for their signature, and the keys made from them (kept as hashes)
+      addSignin: this.db.prepare("INSERT INTO signin(nonce, wallet, message, key_ms, expires) VALUES(?, ?, ?, ?, ?)"),
+      signin: this.db.prepare("SELECT nonce, wallet, message, key_ms, expires FROM signin WHERE nonce = ?"),
+      dropSignin: this.db.prepare("DELETE FROM signin WHERE nonce = ?"),
+      oldSignins: this.db.prepare("DELETE FROM signin WHERE expires < ?"),
+      extraSignins: this.db.prepare("DELETE FROM signin WHERE wallet = ? AND nonce NOT IN (SELECT nonce FROM signin WHERE wallet = ? ORDER BY expires DESC LIMIT ?)"),
+      addKey: this.db.prepare("INSERT INTO api_keys(hash, beneficiary, epoch, created, expires) VALUES(?, ?, ?, ?, ?)"),
+      key: this.db.prepare("SELECT hash, beneficiary, epoch, created, expires FROM api_keys WHERE hash = ?"),
+      dropKey: this.db.prepare("DELETE FROM api_keys WHERE hash = ?"),
+      oldKeysOf: this.db.prepare("DELETE FROM api_keys WHERE beneficiary = ? AND (expires < ? OR epoch <> ?)"),
+      extraKeys: this.db.prepare("DELETE FROM api_keys WHERE beneficiary = ? AND hash NOT IN (SELECT hash FROM api_keys WHERE beneficiary = ? ORDER BY created DESC LIMIT ?)"),
+      keysOf: this.db.prepare("SELECT COUNT(*) AS n FROM api_keys WHERE beneficiary = ? AND expires >= ? AND epoch = ?"),
     };
     this.recovered = this._recover();
   }
@@ -273,8 +300,8 @@ export class Ledger {
     });
   }
 
-  /// Raises the wallet's epoch: every key signed for an older one is refused from now on. The grants the wallet gave
-  /// end in the same step: a grant made with a key that leaked must not outlive that key. The new epoch.
+  /// Raises the wallet's epoch: every key made before is refused from now on (it is told so when it is next used, and
+  /// swept when the wallet signs in again). The grants the wallet gave end in the same step: a grant made with a key that leaked must not outlive that key. The new epoch.
   bumpEpoch(beneficiary, now = Date.now()) {
     const b = beneficiary.toLowerCase();
     return this._tx(() => {
@@ -285,6 +312,50 @@ export class Ledger {
       return cur + 1;
     });
   }
+
+  // ---- signing in, and the keys made from it (auth.mjs) ----
+
+  /// Keeps a sign-in message until its signature comes back. The ones that ran out are swept on the way, and a wallet
+  /// has five waiting at most (the oldest go), so nobody can fill the table by asking.
+  addSignin({ nonce, wallet, message, keyMs, expires }, now = Date.now()) {
+    this._tx(() => {
+      this.q.oldSignins.run(now);
+      this.q.addSignin.run(nonce, wallet, message, keyMs, expires);
+      this.q.extraSignins.run(wallet, wallet, 5);
+    });
+  }
+  /// Takes a sign-in out: it works once, right or wrong. Null when it is not there or ran out.
+  takeSignin(nonce, now = Date.now()) {
+    return this._tx(() => {
+      const r = this.q.signin.get(nonce);
+      if (!r) return null;
+      this.q.dropSignin.run(nonce);
+      return Number(r.expires) < now ? null : { nonce: r.nonce, wallet: r.wallet, message: r.message, keyMs: Number(r.key_ms), expires: Number(r.expires) };
+    });
+  }
+  /// Books a new key by its hash, at the wallet's current epoch. Keys that ran out or were rotated away are swept,
+  /// and a wallet keeps its twenty newest. Returns { epoch, expires }.
+  addKey({ hash, beneficiary, keyMs }, now = Date.now()) {
+    const b = beneficiary.toLowerCase();
+    return this._tx(() => {
+      this.q.ensureAccount.run(b);
+      const epoch = this.balance(b).epoch;
+      this.q.oldKeysOf.run(b, now, epoch);
+      this.q.addKey.run(hash, b, epoch, now, now + keyMs);
+      this.q.extraKeys.run(b, b, 20);
+      return { epoch, expires: now + keyMs };
+    });
+  }
+  /// The key with this hash while it is good: not run out, and made at the wallet's current epoch. Otherwise
+  /// { gone: "expired" | "rotated" } for one we knew, or null for one we never made.
+  key(hash, now = Date.now()) {
+    const r = this.q.key.get(hash);
+    if (!r) return null;
+    if (Number(r.expires) < now) { this.q.dropKey.run(hash); return { gone: "expired" }; }
+    if (Number(r.epoch) !== this.balance(r.beneficiary).epoch) { this.q.dropKey.run(hash); return { gone: "rotated" }; }
+    return { beneficiary: r.beneficiary, epoch: Number(r.epoch), created: Number(r.created), expires: Number(r.expires) };
+  }
+  liveKeys(beneficiary, now = Date.now()) { const b = beneficiary.toLowerCase(); return Number(this.q.keysOf.get(b, now, this.balance(b).epoch).n); }
 
   stats() {
     const t = this.q.totals.get();

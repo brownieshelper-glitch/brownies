@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<title>Brownies, the stream's thumbnail</title>
+<!-- The picture a network shows for the stream before anyone presses play: 1280 by 720, the size YouTube, Twitch and
+     X ask for. The words come from the address, so the picture is made again with other words without touching
+     this file:  live-thumb.html?a=Brownies+kitchen&b=LIVE+24/24&c=feedthebrownies.com
+     ember/thumbnail.mjs opens this page and saves the picture. Not part of the public site. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #2A1710; --ink-2: #35201A; --line: #4F3A32; --bone: #F6EFE2; --accent: #FF5A1F; }
+  html, body { margin: 0; background: #111; }
+  #thumb { position: relative; width: 1280px; height: 720px; overflow: hidden; background: var(--ink); color: var(--bone); font-family: "Baloo 2", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif; }
+  /* the brownies are cocoa themselves, so they stand on cream, as they do on the site: on cocoa only their icing shows */
+  .floor { position: absolute; left: 0; right: 0; top: 322px; bottom: 0; background: var(--bone); }
+  .words { position: absolute; left: 56px; top: 0; width: 1168px; height: 322px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+  .a { margin: 0; font-weight: 800; font-size: 152px; line-height: 0.9; letter-spacing: -0.03em; white-space: nowrap; }
+  .b { display: inline-flex; align-items: center; gap: 22px; margin-top: 14px; padding: 6px 34px 0 28px; background: var(--accent); color: var(--ink); border-radius: 20px; font-weight: 800; font-size: 104px; line-height: 1.12; letter-spacing: -0.02em; white-space: nowrap; transform: rotate(-2deg); transform-origin: left center; }
+  .dot { width: 46px; height: 46px; margin-top: -8px; border-radius: 50%; background: var(--bone); border: 8px solid var(--ink); box-sizing: border-box; flex: none; }
+  .team { position: absolute; left: 0; right: 0; bottom: 58px; display: flex; justify-content: center; }
+  .team svg { display: block; height: 322px; width: auto; }
+  .strip { position: absolute; left: 0; right: 0; bottom: 0; height: 58px; display: flex; align-items: center; justify-content: center; background: var(--accent); color: var(--ink); font-family: "JetBrains Mono", Consolas, monospace; font-weight: 700; font-size: 28px; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div id="thumb">
+  <div class="floor"></div>
+  <div class="words">
+    <p class="a" id="a"></p>
+    <div class="b"><span class="dot"></span><span id="b"></span></div>
+  </div>
+  <div class="team" id="team"></div>
+  <div class="strip" id="c"></div>
+</div>
+<script src="mascot.js"></script>
+<script>
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var words = { a: q.get("a") || "Brownies kitchen", b: q.get("b") || "LIVE 24/24", c: q.get("c") == null ? "feedthebrownies.com" : q.get("c") };
+    for (var k in words) document.getElementById(k).textContent = words[k];
+    if (!words.c) document.getElementById("c").style.display = "none";
+    document.getElementById("team").innerHTML = Mascot.lineup({ gap: 26 });
+    // words of any length stay inside the picture: each line shrinks until it fits
+    function fit(el, box, max, min) { var size = max; el.style.fontSize = size + "px"; while (box.scrollWidth > 1168 && size > min) { size -= 2; el.style.fontSize = size + "px"; } }
+    function fitAll() {
+      var a = document.getElementById("a"); fit(a, a, 152, 60);
+      var b = document.querySelector(".b"); b.style.transform = "none"; fit(b, b, 104, 44);
+      // the tag leans; a long one leans less, and it is set lower by as much as its far end rises, so it never covers the line above
+      var w = b.getBoundingClientRect().width, deg = Math.max(0.8, Math.min(2, 1300 / w));
+      b.style.transform = "rotate(-" + deg.toFixed(2) + "deg)";
+      b.style.marginTop = Math.round(6 + Math.sin(deg * Math.PI / 180) * w) + "px";
+      document.documentElement.dataset.ready = "1";
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitAll); else fitAll();
+  })();
+</script>
+</body>
+</html>

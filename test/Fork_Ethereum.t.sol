@@ -71,8 +71,8 @@ contract ForkEthereumTest is Test {
         uint256 usdc = IERC20Like(USDC).balanceOf(funding);
         assertGt(usdc, 650e6, "0.65 ETH is worth more than 650 dollars");
         assertEq(h.totalStakersFunded() + h.totalTeamFunded(), usdc, "every dollar reached the funding wallet");
-        assertEq(h.totalStakersFunded(), usdc * 35 / 65);
-        assertEq(core.SUGAR().balanceOf(address(core.TEAM_VAULT())), h.totalTeamFunded(), "the brownies' 30% as SUGAR");
+        assertEq(h.totalStakersFunded(), usdc * 20 / 65, "the stakers' 20%");
+        assertEq(core.SUGAR().balanceOf(address(core.TEAM_VAULT())), h.totalTeamFunded(), "the brownies' 45% as SUGAR");
         assertEq(core.STAKING().totalFunded(), h.totalStakersFunded());
         assertEq(IERC20Like(WETH).balanceOf(address(h)), 0);
     }

@@ -25,7 +25,7 @@
       row(list, "Paid to stakers", B.usd(paid));
       row(list, "Sent to feed the brownies", B.usd(team));
       row(list, "AI bought with SUGAR", B.usd(bought));
-      row(list, "Sent to the protocol wallet", B.eth(main) + " ETH");
+      row(list, "Sent to the team wallet", B.eth(main) + " ETH");
       row(list, "BROWNIE staked now", B.coin(staked));
       if (released != null) row(list, "SUGAR handed to the brownies", B.sugar(released, 2));
       if (skills != null) row(list, "Skills proposed by stakers", String(skills));

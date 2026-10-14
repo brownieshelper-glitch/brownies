@@ -7,11 +7,12 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import {CustomRevert} from "@uniswap/v4-core/src/libraries/CustomRevert.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
@@ -132,7 +133,45 @@ contract SharingModule is IBrownieModule {
     function take(address to, uint256 amount) external { hook.takeModuleBudget(to, amount); }
 }
 
-contract HookTest is Test, Deployers {
+/// The launch every hook test starts from: the pool manager, two trusted routers, the graph (launcher, token, hook)
+/// and the helpers to swap through them.
+/// A liquidity router like Uniswap's PositionManager: it adds liquidity inside its own unlock and names the wallet that
+/// asked (msgSender()). The coins come from that wallet (approved to this router), the ETH with the call.
+contract TestLiquidityRouter is IUnlockCallback {
+    using CurrencySettler for Currency;
+
+    IPoolManager immutable manager;
+    address caller;
+
+    constructor(IPoolManager m) {
+        manager = m;
+    }
+
+    function msgSender() external view returns (address) {
+        return caller;
+    }
+
+    function add(PoolKey memory key, ModifyLiquidityParams memory p) external payable {
+        caller = msg.sender;
+        manager.unlock(abi.encode(msg.sender, key, p));
+        caller = address(0);
+    }
+
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+        require(msg.sender == address(manager));
+        (address payer, PoolKey memory key, ModifyLiquidityParams memory p) = abi.decode(data, (address, PoolKey, ModifyLiquidityParams));
+        (BalanceDelta d,) = manager.modifyLiquidity(key, p, "");
+        if (d.amount0() < 0) key.currency0.settle(manager, address(this), uint256(uint128(-d.amount0())), false);
+        if (d.amount1() < 0) key.currency1.settle(manager, payer, uint256(uint128(-d.amount1())), false);
+        if (d.amount0() > 0) key.currency0.take(manager, payer, uint256(uint128(d.amount0())), false);
+        if (d.amount1() > 0) key.currency1.take(manager, payer, uint256(uint128(d.amount1())), false);
+        return "";
+    }
+
+    receive() external payable {}
+}
+
+abstract contract HookFixture is Test, Deployers {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
@@ -150,14 +189,23 @@ contract HookTest is Test, Deployers {
     TestRouter router;
     TestRouter router2; // Programmable's trading router stands in: a second trusted router for the window
     BrownieLauncher launcher;
+    TestLiquidityRouter lpRouter; // the owner's door to add liquidity (Uniswap's PositionManager on mainnet)
     BrownieHook hook;
     BrownieToken token;
     FixedFeeModule fixedModule;
+    // the launch tax of the next graph a test deploys (none by default: the tests above it never see one)
+    uint16 launchBuyBps;
+    uint16 launchSellBps;
+    uint32 launchBlocks;
+    address launchTaxWallet;
+    address launchTaxFreeBuyer;
+    address constant TAX_WALLET = address(0x7A);
 
-    function setUp() public {
+    function setUp() public virtual {
         deployFreshManagerAndRouters();
         router = new TestRouter(manager);
         router2 = new TestRouter(manager);
+        lpRouter = new TestLiquidityRouter(manager);
         fixedModule = new FixedFeeModule(200, 200);
         _launch(address(fixedModule));
         vm.deal(alice, 100 ether);
@@ -187,6 +235,12 @@ contract HookTest is Test, Deployers {
         c.capRouter2 = address(router2);
         c.moduleDelay = 1 days;
         c.moduleGas = 150_000;
+        c.launchBuyBps = launchBuyBps;
+        c.launchSellBps = launchSellBps;
+        c.launchBlocks = launchBlocks;
+        c.launchTaxWallet = launchTaxWallet;
+        c.launchTaxFreeBuyer = launchTaxFreeBuyer;
+        c.liquidityRouter = address(lpRouter);
     }
 
     /// The graph as Programmable's factory runs it, in its acyclic order: the launcher (depends on nothing), the
@@ -255,6 +309,21 @@ contract HookTest is Test, Deployers {
         return hook.harvestable() + hook.moduleBudget() + hook.platformOwed();
     }
 
+    /// The owner's two steps to change the module: propose, wait the hook's delay, apply. The clock is read through the
+    /// cheat code: with the IR pipeline a second `block.timestamp + X` in the same test can fold into the first.
+    function _install(address mod) internal {
+        vm.prank(OWNER);
+        hook.proposeModule(mod);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        vm.prank(OWNER);
+        hook.applyModule();
+    }
+}
+
+contract HookTest is HookFixture {
+    using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
+
     // ------------------------------------------------------------------ the launch
     function test_launch_shape() public view {
         assertTrue(launcher.hasHookFlags(address(hook)), "hook address carries every permission bit");
@@ -270,6 +339,8 @@ contract HookTest is Test, Deployers {
         assertEq(address(manager).balance, 0, "the ETH side starts empty");
         assertEq(hook.module(), address(fixedModule));
         assertEq(hook.owner(), OWNER);
+        assertFalse(hook.launchTaxActive(), "no launch tax unless configured");
+        assertEq(hook.openedBlock(), uint64(block.number));
         (string memory desc, string memory site, string memory image,) = token.metadata();
         assertEq(site, "https://feedthebrownies.com");
         assertGt(bytes(desc).length, 0);
@@ -284,9 +355,49 @@ contract HookTest is Test, Deployers {
         other.initializeGraph(address(token), address(hook));
     }
 
+    /// Liquidity comes from the launcher and from the owner, nobody else. The owner adds through the liquidity router the
+    /// hook was given (Uniswap's PositionManager on mainnet), which names the wallet behind it. A stranger through the
+    /// same router is refused, and so is the owner through any other router.
+    function test_only_the_launcher_and_the_owner_add_liquidity() public {
+        _afterWindow();
+        vm.deal(OWNER, 10 ether);
+        _approve(OWNER);
+        _swap(OWNER, true, -1 ether, 1 ether);
+        _swap(alice, true, -1 ether, 1 ether);
+        (, int24 tick,,) = manager.getSlot0(key.toId());
+        ModifyLiquidityParams memory p = ModifyLiquidityParams({tickLower: (tick / 60 - 10) * 60, tickUpper: (tick / 60 + 10) * 60, liquidityDelta: 1e18, salt: 0});
+        assertEq(hook.LIQUIDITY_ROUTER(), address(lpRouter));
+        // a stranger through the owner's door
+        vm.startPrank(alice);
+        token.approve(address(lpRouter), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(CustomRevert.WrappedError.selector, address(hook), IHooks.beforeAddLiquidity.selector, abi.encodeWithSelector(BrownieHook.OnlyLauncher.selector), abi.encodeWithSelector(Hooks.HookCallFailed.selector)));
+        lpRouter.add{value: 1 ether}(key, p);
+        vm.stopPrank();
+        // the owner through a router the hook does not know
+        TestLiquidityRouter other = new TestLiquidityRouter(manager);
+        vm.startPrank(OWNER);
+        token.approve(address(other), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(CustomRevert.WrappedError.selector, address(hook), IHooks.beforeAddLiquidity.selector, abi.encodeWithSelector(BrownieHook.OnlyLauncher.selector), abi.encodeWithSelector(Hooks.HookCallFailed.selector)));
+        other.add{value: 1 ether}(key, p);
+        // the owner through the door: the pool is deeper
+        token.approve(address(lpRouter), type(uint256).max);
+        uint128 before = manager.getLiquidity(key.toId());
+        lpRouter.add{value: 1 ether}(key, p);
+        vm.stopPrank();
+        assertEq(manager.getLiquidity(key.toId()), before + 1e18, "the owner's liquidity is in");
+        // and still taxed like any trade: a buy and a sell pay the normal fee around the owner's position
+        _swap(alice, true, -0.1 ether, 0.1 ether);
+        assertEq(_feeTotal(), 0.0023 ether * 10 + 0.0023 ether * 10 + 0.0023 ether, "three buys of 1, 1 and 0.1 ETH, each 2.3%");
+    }
+
     function test_second_pool_refused() public {
         PoolKey memory other = PoolKey({currency0: key.currency0, currency1: key.currency1, fee: 3000, tickSpacing: 60, hooks: IHooks(address(hook))});
+        // a stranger is refused for not being the launcher
         vm.expectRevert();
+        manager.initialize(other, TickMath.getSqrtPriceAtTick(0));
+        // and the launcher itself, because the hook's one pool is open already
+        vm.prank(address(launcher));
+        vm.expectRevert(abi.encodeWithSelector(CustomRevert.WrappedError.selector, address(hook), IHooks.beforeInitialize.selector, abi.encodeWithSelector(BrownieHook.AlreadyOpened.selector), abi.encodeWithSelector(Hooks.HookCallFailed.selector)));
         manager.initialize(other, TickMath.getSqrtPriceAtTick(0));
     }
 
@@ -462,6 +573,301 @@ contract HookTest is Test, Deployers {
         new BrownieLauncher(address(manager), address(this), START_TICK, address(0), 1 ether);
     }
 
+    // ------------------------------------------------------------------ the launch tax
+    function _withLaunchTax(address firstModule, string memory seed) internal returns (uint256 n0) {
+        launchBuyBps = 2500;
+        launchSellBps = 2500;
+        launchBlocks = 13;
+        _launchGraph(firstModule, seed, address(0), 0, 0);
+        _approve(alice);
+        _approve(bob);
+        n0 = hook.openedBlock();
+    }
+
+    /// 25% on buys and on sells from the block the pool opens in, for 13 blocks; then the normal fee. The platform leg
+    /// stays 0.3% of the gross throughout.
+    function test_launch_tax_for_the_first_blocks_then_normal() public {
+        uint256 n0 = _withLaunchTax(address(fixedModule), "t1");
+        assertEq(n0, block.number, "counted from the block the pool opened in");
+        assertEq(hook.launchTaxEndBlock(), n0 + 13);
+        assertTrue(hook.launchTaxActive());
+
+        // a buy naming its ETH, in the launch block
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(_feeTotal(), 0.00253 ether, "25% + 0.3% of the named ETH");
+        assertEq(hook.platformOwed(), 0.00003 ether, "the platform leg is still 0.3%");
+        assertEq(hook.harvestable(), 0.0025 ether, "the whole 25% is the project's");
+
+        // a buy naming its coins
+        uint256 before = _feeTotal();
+        BalanceDelta d = _swap(bob, true, int256(1_000_000 ether), 1 ether);
+        uint256 paid = uint256(uint128(-_eth(d)));
+        uint256 fee = _feeTotal() - before;
+        assertEq(fee, (paid - fee) * 2530 / 7470, "fee = net * bps / (10000 - bps)");
+        assertApproxEqRel(fee * BPS, paid * 2530, 1e12, "which is 25.3% of what was paid");
+
+        // a sell naming its coins, and one naming its ETH
+        before = _feeTotal();
+        uint256 ethBefore = bob.balance;
+        d = _swap(bob, false, -int256(500_000 ether), 0);
+        fee = _feeTotal() - before;
+        assertEq(fee, (uint256(uint128(_eth(d))) + fee) * 2530 / BPS, "25.3% of the gross ETH the pool paid");
+        assertEq(bob.balance - ethBefore, uint256(uint128(_eth(d))));
+        before = _feeTotal();
+        _swap(bob, false, 0.0001 ether, 0);
+        assertEq(_feeTotal() - before, uint256(0.0001 ether) * 2530 / 7470, "the pool paid named + fee");
+
+        // the last block of the launch tax
+        vm.roll(n0 + 12);
+        assertTrue(hook.launchTaxActive());
+        before = _feeTotal();
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(_feeTotal() - before, 0.00253 ether, "block 13 of 13 still pays it");
+
+        // the block after: the normal fee, for buys and for sells
+        vm.roll(n0 + 13);
+        assertFalse(hook.launchTaxActive());
+        before = _feeTotal();
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(_feeTotal() - before, 0.00023 ether, "2% + 0.3% from here on");
+        before = _feeTotal();
+        d = _swap(alice, false, -int256(1_000_000 ether), 0);
+        fee = _feeTotal() - before;
+        assertEq(fee, (uint256(uint128(_eth(d))) + fee) * 230 / BPS, "2.3% on sells too");
+        vm.roll(n0 + 5_000_000);
+        assertFalse(hook.launchTaxActive(), "and it never comes back");
+    }
+
+    /// The launch tax is the contract's, not the module's: a module is not asked during it, cannot lower or raise it
+    /// and takes no share of it. After it, the module is back inside its ceilings.
+    function test_launch_tax_is_out_of_the_modules_hands() public {
+        SharingModule s = new SharingModule(); // asks 3% with half for itself
+        uint256 n0 = _withLaunchTax(address(s), "t2");
+        s.setHook(hook);
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(hook.harvestable(), 0.0025 ether, "25%, not the module's 3%");
+        assertEq(hook.moduleBudget(), 0, "no share for the module");
+        assertEq(s.afterSwaps(), 1, "the module still hears the swap");
+        vm.roll(n0 + 13);
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(hook.moduleBudget(), 0.00015 ether, "after it: half of the module's 3%");
+        assertEq(hook.harvestable(), 0.0025 ether + 0.00015 ether);
+
+        // a module that asks for the moon, and one that fails, change nothing either
+        vm.roll(n0);
+        _withLaunchTax(address(new GreedyModule()), "t3");
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(hook.harvestable(), 0.0025 ether);
+        assertEq(hook.moduleBudget(), 0);
+        _withLaunchTax(address(new RevertingModule()), "t4");
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(hook.harvestable(), 0.0025 ether, "a failing module does not block a launch-tax trade");
+    }
+
+    /// The wallet cap and the launch tax run side by side: the cap counts coins by the clock, the tax counts blocks.
+    function test_launch_tax_with_the_wallet_cap() public {
+        uint256 n0 = _withLaunchTax(address(fixedModule), "t5");
+        uint256 t0 = hook.openedAt();
+        _swap(alice, true, int256(20_000_000 ether), 1 ether);
+        assertEq(hook.purchased(alice), 20_000_000 ether, "2% of the supply");
+        vm.expectRevert();
+        _swap(alice, true, int256(1 ether), 1 ether);
+        // the tax ends by blocks while the cap still runs by the clock
+        vm.roll(n0 + 13);
+        assertFalse(hook.launchTaxActive());
+        vm.expectRevert();
+        _swap(alice, true, int256(1 ether), 1 ether);
+        // and the cap ends by the clock whatever the block
+        vm.roll(n0 + 1);
+        vm.warp(t0 + 180);
+        assertTrue(hook.launchTaxActive());
+        _swap(alice, true, int256(1_000_000 ether), 1 ether);
+    }
+
+    /// The launcher's own first buy, inside the launch, pays the launch tax like any other buy.
+    function test_launch_tax_on_the_initial_buy() public {
+        launchBuyBps = 2500;
+        launchSellBps = 2500;
+        launchBlocks = 13;
+        uint256 aliceEthBefore = alice.balance;
+        _launchGraph(address(fixedModule), "t6", alice, 20_000_000 ether, 1 ether);
+        assertEq(token.balanceOf(alice), 20_000_000 ether);
+        uint256 paid = 1 ether - (alice.balance - aliceEthBefore);
+        uint256 fee = _feeTotal();
+        assertEq(fee, (paid - fee) * 2530 / 7470, "25.3% of what the first buy paid");
+        assertEq(hook.platformOwed(), paid * 30 / BPS);
+    }
+
+    /// The walls of the launch tax itself: 30% at most, 50 blocks at most, both set or neither, never below the base.
+    function test_launch_tax_bounds() public {
+        BrownieHook.Config memory c = _config(address(0), address(token), address(launcher));
+        c.launchBuyBps = 3000;
+        c.launchSellBps = 3000;
+        c.launchBlocks = 50;
+        BrownieHook h = new BrownieHook(c);
+        assertEq(h.LAUNCH_BUY_BPS(), 3000);
+        assertEq(h.LAUNCH_BLOCKS(), 50);
+        assertEq(h.launchTaxEndBlock(), type(uint256).max, "not opened yet");
+        c.launchBuyBps = 3001;
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+        c.launchBuyBps = 3000;
+        c.launchSellBps = 3001;
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+        c.launchSellBps = 3000;
+        c.launchBlocks = 51;
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+        c.launchBlocks = 0; // a rate without a length
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+        c.launchBlocks = 13;
+        c.launchBuyBps = 199; // below the base fee of 2%
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+        c.launchBuyBps = 2500;
+        c.launchSellBps = 0;
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+    }
+
+    /// With a launch tax wallet, the part of the launch tax above the base fee is that wallet's: 23% of 25%. The base 2%
+    /// goes to the harvester as always, the platform leg is untouched, and anyone can send the wallet its ETH.
+    function test_launch_tax_wallet_gets_the_extra() public {
+        launchTaxWallet = TAX_WALLET;
+        uint256 n0 = _withLaunchTax(address(fixedModule), "w1");
+        assertEq(hook.LAUNCH_TAX_WALLET(), TAX_WALLET);
+
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(_feeTotal() + hook.launchTaxOwed(), 0.00253 ether, "25% + 0.3% of the named ETH in all");
+        assertEq(hook.platformOwed(), 0.00003 ether, "platform 0.3%");
+        assertEq(hook.harvestable(), 0.0002 ether, "the base 2% to the harvester");
+        assertEq(hook.launchTaxOwed(), 0.0023 ether, "the extra 23% to the launch tax wallet");
+        assertEq(hook.moduleBudget(), 0);
+
+        // a sell splits the same way
+        uint256 hBefore = hook.harvestable();
+        uint256 tBefore = hook.launchTaxOwed();
+        uint256 pBefore = hook.platformOwed();
+        BalanceDelta d = _swap(alice, false, -int256(1_000_000 ether), 0);
+        uint256 h = hook.harvestable() - hBefore;
+        uint256 t = hook.launchTaxOwed() - tBefore;
+        uint256 pf = hook.platformOwed() - pBefore;
+        uint256 gross = uint256(uint128(_eth(d))) + h + t + pf;
+        assertEq(h + t + pf, gross * 2530 / BPS, "25.3% of the gross");
+        assertEq(pf, gross * 30 / BPS);
+        assertEq(t, (h + t) * 2300 / 2500, "23 parts of 25 to the wallet");
+        assertEq(hook.totalLaunchTax(), hook.launchTaxOwed());
+
+        // anyone sends it; plain ETH; nothing twice; the other legs are untouched
+        uint256 owed = hook.launchTaxOwed();
+        uint256 harvestBefore = hook.harvestable();
+        vm.prank(bob);
+        assertEq(hook.claimLaunchTax(), owed);
+        assertEq(TAX_WALLET.balance, owed, "plain ETH in the launch tax wallet");
+        assertEq(hook.launchTaxOwed(), 0);
+        assertEq(hook.claimLaunchTax(), 0, "nothing twice");
+        assertEq(hook.harvestable(), harvestBefore);
+        assertEq(hook.harvest(), harvestBefore);
+        assertEq(HARVESTER.balance, harvestBefore);
+
+        // after the launch tax nothing more is owed to it, for ever
+        vm.roll(n0 + 13);
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(hook.launchTaxOwed(), 0, "the normal fee has no launch tax part");
+        assertEq(hook.harvestable(), 0.0002 ether);
+        assertEq(hook.totalLaunchTax(), owed);
+        hook.claimPlatform();
+        hook.harvest();
+        assertEq(manager.balanceOf(address(hook), 0), 0, "no claim left behind");
+    }
+
+    /// The exempt wallet (the launch wallet): its buys pay the base fee during the launch tax, through either trusted
+    /// router, inside the wallet cap. Everyone else pays the launch tax, and so do the exempt wallet's own sells.
+    function test_launch_tax_exempt_buyer() public {
+        launchTaxWallet = TAX_WALLET;
+        launchTaxFreeBuyer = alice;
+        uint256 n0 = _withLaunchTax(address(fixedModule), "x1");
+        uint256 t0 = hook.openedAt();
+        assertEq(hook.LAUNCH_TAX_FREE_BUYER(), alice);
+
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(_feeTotal(), 0.00023 ether, "the exempt wallet pays 2% + 0.3%");
+        assertEq(hook.launchTaxOwed(), 0, "and nothing to the launch tax wallet");
+        SwapParams memory p = SwapParams({zeroForOne: true, amountSpecified: -0.01 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+        vm.prank(alice);
+        router2.swap{value: 0.01 ether}(key, p);
+        assertEq(_feeTotal(), 0.00046 ether, "through the second trusted router too");
+        assertEq(hook.launchTaxOwed(), 0);
+
+        // anyone else: the launch tax
+        _swap(bob, true, -0.01 ether, 0.01 ether);
+        assertEq(hook.launchTaxOwed(), 0.0023 ether, "bob pays it");
+        assertEq(_feeTotal(), 0.00046 ether + 0.00023 ether, "and the base part on top of alice's");
+
+        // the exempt wallet's sells pay it like everyone's
+        uint256 tBefore = hook.launchTaxOwed();
+        _swap(alice, false, -int256(1_000_000 ether), 0);
+        assertGt(hook.launchTaxOwed(), tBefore, "a sell by the exempt wallet pays the launch tax");
+
+        // the exemption lives inside the wallet cap: the exempt wallet cannot buy more than the cap
+        vm.expectRevert();
+        _swap(alice, true, int256(20_000_000 ether), 1 ether);
+
+        // and once the cap is over the exemption is over, even if the launch tax still runs
+        vm.roll(n0 + 1);
+        vm.warp(t0 + 180);
+        assertTrue(hook.launchTaxActive());
+        tBefore = hook.launchTaxOwed();
+        _swap(alice, true, -0.01 ether, 0.01 ether);
+        assertEq(hook.launchTaxOwed() - tBefore, 0.0023 ether, "no cap, no exemption");
+    }
+
+    /// The launcher's own first buy for the exempt wallet pays the base fee; for any other wallet it pays the launch tax.
+    function test_launch_tax_exempt_initial_buy() public {
+        launchBuyBps = 2500;
+        launchSellBps = 2500;
+        launchBlocks = 13;
+        launchTaxWallet = TAX_WALLET;
+        launchTaxFreeBuyer = alice;
+        uint256 aliceEthBefore = alice.balance;
+        _launchGraph(address(fixedModule), "x2", alice, 20_000_000 ether, 1 ether);
+        assertEq(token.balanceOf(alice), 20_000_000 ether);
+        uint256 paid = 1 ether - (alice.balance - aliceEthBefore);
+        uint256 fee = _feeTotal();
+        assertEq(fee, (paid - fee) * 230 / 9770, "2.3% of what the first buy paid");
+        assertEq(hook.launchTaxOwed(), 0);
+
+        // the same launch for a wallet that is not the exempt one
+        uint256 bobEthBefore = bob.balance;
+        _launchGraph(address(fixedModule), "x3", bob, 20_000_000 ether, 1 ether);
+        paid = 1 ether - (bob.balance - bobEthBefore);
+        fee = _feeTotal() + hook.launchTaxOwed();
+        assertEq(fee, (paid - fee) * 2530 / 7470, "25.3% for anyone else");
+        assertGt(hook.launchTaxOwed(), 0);
+    }
+
+    /// A launch tax wallet or an exempt buyer without a launch tax is a mistake in the config.
+    function test_launch_tax_wallet_bounds() public {
+        BrownieHook.Config memory c = _config(address(0), address(token), address(launcher));
+        c.launchTaxWallet = TAX_WALLET;
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+        c.launchTaxWallet = address(0);
+        c.launchTaxFreeBuyer = alice;
+        vm.expectRevert(BrownieHook.BadConfig.selector);
+        new BrownieHook(c);
+        c.launchBuyBps = 2500;
+        c.launchSellBps = 2500;
+        c.launchBlocks = 13;
+        c.launchTaxWallet = TAX_WALLET;
+        BrownieHook h = new BrownieHook(c);
+        assertEq(h.LAUNCH_TAX_WALLET(), TAX_WALLET);
+        assertEq(h.LAUNCH_TAX_FREE_BUYER(), alice);
+        assertEq(h.claimLaunchTax(), 0, "nothing owed, nothing sent");
+    }
+
     // ------------------------------------------------------------------ the fee leaves
     function test_harvest_and_platform_claim() public {
         _afterWindow();
@@ -483,14 +889,6 @@ contract HookTest is Test, Deployers {
     }
 
     // ------------------------------------------------------------------ the module's walls
-    function _install(address mod) internal {
-        vm.prank(OWNER);
-        hook.proposeModule(mod);
-        vm.warp(block.timestamp + 1 days);
-        vm.prank(OWNER);
-        hook.applyModule();
-    }
-
     function test_module_is_clamped_to_the_ceilings() public {
         _afterWindow();
         _install(address(new GreedyModule()));

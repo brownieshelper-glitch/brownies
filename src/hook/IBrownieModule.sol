@@ -12,6 +12,8 @@ pragma solidity 0.8.26;
   onPhase() runs after the hook's own work for the phases the module asked for in phases(). For the "before" phases
             a revert blocks the action (that is what those phases are for); for the "after" phases a revert is
             ignored and logged. A module that wants no events returns phases() == 0 and the hook never calls it.
+            The two add-liquidity phases are never asked: only the launcher and the owner add liquidity, and no
+            module may stand in their way. Their bits stay so that the numbering does not move.
 */
 /// Phase bits for phases() and onPhase(). The before-swap phase is feeFor() itself.
 library Phases {

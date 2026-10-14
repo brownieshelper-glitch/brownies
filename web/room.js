@@ -134,7 +134,7 @@
   const rulesG = mk("g", {}, L.wall);
   mk("rect", { class: "rules-board", x: 1216, y: 226, width: 344, height: 250, rx: 10 }, rulesG);
   text(1236, 254, "THE RULES, FIXED IN CODE", "rules-head", rulesG);
-  ["2% tax on every trade", "35% to stakers, as SUGAR", "35% to the protocol", "30% to the brownies", "1 SUGAR pays for 1 dollar of AI", "1/30 of the vault a day", "3 days of voting on a skill"].forEach((s, i) => text(1236, 286 + i * 27, s, "rules-text", rulesG));
+  ["2% tax on every trade", "45% to the brownies", "35% to the team", "20% to stakers, as SUGAR", "1 SUGAR pays for 1 dollar of AI", "1/30 of the vault a day", "3 days of voting on a skill"].forEach((s, i) => text(1236, 286 + i * 27, s, "rules-text", rulesG));
 
   // ---------- the jobs board and the sugar jars ----------
   const boardG = mk("g", {}, L.wall);

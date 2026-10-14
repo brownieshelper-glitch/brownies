@@ -163,8 +163,25 @@ export function domainSeparator(name, tokenAddress) {
 // ---- the hook's constructor config (the same numbers as the direct path, hookpath.mjs) ----------------------------------
 export const PROGRAMMABLE_TRADING_ROUTER = "0xd92A36B0000531EF3063dEd4De20A0783308446C"; // their Ethereum trading router: msgSender() like the Universal Router
 
-export function hookConfig({ cfg, harvester, owner }) {
+/// The launch tax of a coin config: `launchTax: { buyBps, sellBps, blocks, wallet, devExempt }`. The project's fee on buys
+/// and sells for the first `blocks` blocks, counting the block the pool opens in; then the normal fee. None when the
+/// config has none. The walls are the hook constructor's: at most 30%, at most 50 blocks, never below the normal fee.
+/// `wallet`: the plain address that receives the part of the launch tax above the normal fee (none: the harvester gets
+/// it all). `devExempt`: the launch (dev) wallet's own buys pay the normal fee during the launch tax.
+export function launchTaxOf(cfg) {
+  const t = cfg.launchTax;
+  if (!t || t.enabled === false) return { buyBps: 0, sellBps: 0, blocks: 0, wallet: null, devExempt: false };
+  const buyBps = Number(t.buyBps), sellBps = Number(t.sellBps), blocks = Number(t.blocks);
+  if (![buyBps, sellBps, blocks].every(Number.isInteger) || blocks < 1 || blocks > 50 || buyBps > 3000 || sellBps > 3000 || buyBps < Number(cfg.creatorBuyFeeBps) || sellBps < Number(cfg.creatorSellFeeBps)) {
+    throw new Error("launchTax: buyBps and sellBps go from the normal fee up to 3000 (30%), blocks from 1 to 50");
+  }
+  return { buyBps, sellBps, blocks, wallet: t.wallet ? ethers.getAddress(t.wallet) : null, devExempt: Boolean(t.devExempt) };
+}
+
+export function hookConfig({ cfg, harvester, owner, launchWallet = null }) {
   const h = cfg.hook || {};
+  const lt = launchTaxOf(cfg);
+  if (lt.devExempt && !launchWallet) throw new Error("launchTax.devExempt needs the launch wallet");
   const capOn = Boolean(cfg.walletCap?.enabled);
   return {
     poolManager: A.POOL_MANAGER, token: { target: TARGET_IDS.token }, quote: NATIVE, harvester: ethers.getAddress(harvester),
@@ -174,7 +191,10 @@ export function hookConfig({ cfg, harvester, owner }) {
     maxBuyBps: String(h.maxBuyBps ?? 300), maxSellBps: String(h.maxSellBps ?? 300), maxModuleShareBps: String(h.maxModuleShareBps ?? 5000),
     capBps: String(capOn ? Number(cfg.walletCap.bps) : 10000), capSeconds: String(capOn ? Number(cfg.walletCap.minutes) * 60 : 1),
     capRouter: A.UNIVERSAL_ROUTER, capRouter2: ethers.getAddress(h.capRouter2 || PROGRAMMABLE_TRADING_ROUTER),
-    moduleDelay: String(h.moduleDelaySeconds ?? 86_400), moduleGas: String(h.moduleGas ?? 150_000),
+    moduleDelay: String(h.moduleDelaySeconds ?? 0), moduleGas: String(h.moduleGas ?? 150_000),
+    launchBuyBps: String(lt.buyBps), launchSellBps: String(lt.sellBps), launchBlocks: String(lt.blocks),
+    launchTaxWallet: lt.wallet || NATIVE, launchTaxFreeBuyer: lt.devExempt ? ethers.getAddress(launchWallet) : NATIVE,
+    liquidityRouter: A.POSITION_MANAGER, // the owner's door to add liquidity (Uniswap's PositionManager)
   };
 }
 
@@ -195,6 +215,13 @@ export function buildStampedPack({
   if (!fs.existsSync(imagePath)) throw new Error("image file missing: " + imagePath);
   const description = String(cfg.description || "").normalize("NFC").trim();
   if (Buffer.byteLength(description) < 20) throw new Error("description: at least 20 bytes");
+  // a launch tax is disclosed in the coin's own description, in numbers: the rate and the number of blocks
+  const tax = launchTaxOf(cfg);
+  if (tax.blocks > 0 && !(description.includes(`${tax.buyBps / 100}%`) && description.includes(`${tax.sellBps / 100}%`) && new RegExp(`\\b${tax.blocks} blocks\\b`).test(description))) {
+    throw new Error(`description: the launch tax must be written in it ("${tax.buyBps / 100}%", "${tax.sellBps / 100}%" and "${tax.blocks} blocks")`);
+  }
+  if (tax.wallet && !/tax wallet/i.test(description)) throw new Error("description: it must say that part of the launch tax goes to a tax wallet (the words \"tax wallet\")");
+  if (tax.devExempt && !/launch wallet|dev wallet/i.test(description)) throw new Error("description: it must say that the launch wallet's buys do not pay the launch tax (the words \"launch wallet\")");
   const tick = Number(initialTick);
   if (!Number.isInteger(tick) || tick % 60 !== 0) throw new Error("initialTick must be a multiple of 60");
 
@@ -216,7 +243,7 @@ export function buildStampedPack({
   const token = pick("src/hook/BrownieToken.sol", "BrownieToken");
   const hook = pick("src/hook/BrownieHook.sol", "BrownieHook");
 
-  const config = hookConfig({ cfg, harvester, owner });
+  const config = hookConfig({ cfg, harvester, owner, launchWallet });
   const capTokens = (TOKEN_SUPPLY * BigInt(config.capBps)) / 10000n;
   const immutables = {
     launcher: runtimeImmutables(output, launcher, { poolManager: A.POOL_MANAGER, INITIALIZER: GRAPH_FACTORY, INITIAL_TICK: String(tick), BUYER: ethers.getAddress(launchWallet), INITIAL_BUY_TOKENS: initialBuyTokens.toString() }, "launcher"),
@@ -226,6 +253,8 @@ export function buildStampedPack({
       PLATFORM_RECIPIENT: config.platformRecipient, PLATFORM_BPS: config.platformBps, LAUNCHER: { target: TARGET_IDS.launcher },
       BASE_BUY_BPS: config.baseBuyBps, BASE_SELL_BPS: config.baseSellBps, MAX_BUY_BPS: config.maxBuyBps, MAX_SELL_BPS: config.maxSellBps, MAX_MODULE_SHARE_BPS: config.maxModuleShareBps,
       CAP_TOKENS: capTokens.toString(), CAP_SECONDS: config.capSeconds, CAP_ROUTER: config.capRouter, CAP_ROUTER_2: config.capRouter2, MODULE_DELAY: config.moduleDelay, MODULE_GAS: config.moduleGas,
+      LAUNCH_BUY_BPS: config.launchBuyBps, LAUNCH_SELL_BPS: config.launchSellBps, LAUNCH_BLOCKS: config.launchBlocks,
+      LAUNCH_TAX_WALLET: config.launchTaxWallet, LAUNCH_TAX_FREE_BUYER: config.launchTaxFreeBuyer, LIQUIDITY_ROUTER: config.liquidityRouter,
     }, "hook"),
   };
 
@@ -249,6 +278,9 @@ export function buildStampedPack({
     standardJsonSha256: sha256(inputBytes), sources: Object.fromEntries([...sources].map(([p, c]) => [p, sha256(Buffer.from(c, "utf8"))])), artifacts,
     targets: { launcher: "src/hook/BrownieLauncher.sol:BrownieLauncher", token: "src/hook/BrownieToken.sol:BrownieToken", hook: "src/hook/BrownieHook.sol:BrownieHook" },
     graphFactory: GRAPH_FACTORY, router: ROUTER_24H, initialTick: tick, hookConfig: config,
+    launchTax: tax.blocks > 0
+      ? { buyBps: tax.buyBps, sellBps: tax.sellBps, blocks: tax.blocks, note: "the project's fee for the first `blocks` blocks, counting the block the pool opens in (the launch block); immutable in the hook (LAUNCH_BUY_BPS, LAUNCH_SELL_BPS, LAUNCH_BLOCKS, LAUNCH_TAX_WALLET, LAUNCH_TAX_FREE_BUYER); the module is not asked; the base part (the normal fee) goes to the harvester as always and the part above it goes to `wallet`, a plain address of the project (claimLaunchTax() by anyone), or to the harvester when `wallet` is null; `exemptBuyer`, when set, is the launch wallet: its buys pay the normal fee instead, only while the wallet cap runs and counted against that cap, and its sells pay the launch tax like everyone's; from the block after the last one the base fee and the permanent ceilings apply; the platform fee stays its own leg on the gross throughout", wallet: tax.wallet, exemptBuyer: tax.devExempt ? ethers.getAddress(launchWallet) : null }
+      : null,
     initialBuy: { buyer: ethers.getAddress(launchWallet), tokens: initialBuyTokens.toString(), maxEthWei: devBuyWei.toString(), note: "executed by the launcher inside the launch transaction with the ETH sent on the Router call; the unused part is refunded to the buyer in the same transaction" },
     note: "built by eth-launch/custom-hook/build.mjs from the exact sources listed in sources.txt",
   };

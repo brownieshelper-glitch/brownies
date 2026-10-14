@@ -27,6 +27,7 @@ import { Alerts } from "./lib/alerts.mjs";
 import { loadFacts, HELPERS } from "./lib/facts.mjs";
 import { sendSummary } from "./lib/summary.mjs";
 import { Admin } from "./lib/admin.mjs";
+import { Sandbox } from "./lib/sandbox.mjs";
 import { Recruit } from "./lib/recruit.mjs";
 import { Bakery } from "./lib/bakery.mjs";
 import { JobsApi, totalsView, money as moneyFmt, OPEN as OPEN_JOB_STATES, STATE_LABEL as JOB_STATE } from "./lib/moneyjobs.mjs";
@@ -41,6 +42,7 @@ import { existsSync } from "node:fs";
 import { Fudge } from "./helpers/fudge.mjs";
 import { listText as suggestionsList } from "./lib/suggestions.mjs";
 import { billText } from "./lib/costs.mjs";
+import { rosterText } from "./lib/roster.mjs";
 import { Shop } from "./lib/shop.mjs";
 import { Seller } from "./lib/x402seller.mjs";
 import { Crumb } from "./helpers/crumb.mjs";
@@ -72,6 +74,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const privateFile = S.privateFile || new URL("./private.json", import.meta.url);
   const priv = existsSync(privateFile) ? JSON.parse(readFileSync(privateFile, "utf8")) : { helpers: {} };
   for (const [name, c] of Object.entries(priv.helpers || {})) config.helpers[name] = c;
+  config.planned = [...(config.planned || []), ...(priv.planned || [])]; // the brownies that are named and not built yet (the roster shows them)
   const clock = new RealClock();
   const store = new Store(S.dbPath, { tz: config.timezone || "UTC" });
   const gateway = new Gateway({ url: S.gatewayUrl, teamKey: S.teamLogKey, log });
@@ -87,6 +90,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const linkedin = new LinkedIn({ clientId: S.linkedin.clientId, clientSecret: S.linkedin.clientSecret, version: S.linkedin.version, redirectUri: `${S.gatewayUrl}/linkedin/callback`, store, clock, log });
   const videosDir = priv.helpers?.sprinkle?.videosDir || env.VIDEOS_DIR || "/var/lib/brownies/videos";
   const clips = new Clips({ store, clock, baseUrl: S.gatewayUrl, dir: videosDir, log });
+  const sandbox = new Sandbox({ url: S.sandbox.url, token: S.sandbox.token, log }); // the box strangers' code runs in, for the code reviews (sandbox/server.mjs on the stream server)
   const facts = loadFacts() + (await addressesBlock(S.deploymentJson));
   const deps = (name) => ({ config: config.helpers[name] || {}, brain, gateway, store, clock, alerts, facts, log });
   const chip = new Chip({ ...deps("chip"), github, telegram, ownerChatId: S.telegram.ownerChatId });
@@ -144,7 +148,7 @@ export async function build({ env = process.env, configFile = null } = {}) {
   for (const [name, c] of Object.entries(priv.helpers || {})) {
     const mod = await import(new URL(c.module, import.meta.url));
     const Cls = mod.default || Object.values(mod).find((v) => typeof v === "function" && v.prototype?.jobs);
-    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster });
+    all[name] = new Cls({ ...deps(name), telegram, github, youtube, tiktok, instagram, linkedin, clips, x, hfCredentials: S.hfCredentials, ownerChatId: S.telegram.ownerChatId, groupChatId: S.telegram.groupChatId, hire, fire, recruits, roster, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, deploymentJson: S.deploymentJson, rpcUrl: S.rpcUrl, emberUrl: S.emberUrl, ads: S.ads, sandbox });
   }
   if (all.patch) chip.patch = all.patch; // Chip merges nothing the tests refuse
   if (all.zest) all.zest.team = all; // a picked opening reaches the brownie that prepares it
@@ -154,6 +158,8 @@ export async function build({ env = process.env, configFile = null } = {}) {
   const seller = new Seller({ chainId: S.shop.chainId, payTo: S.shop.payTo, settlerKey: S.shop.settlerKey, rpcUrl: S.shop.rpcUrl, log });
   W.shop = new Shop({ store, clock, log, seller, config: config.shop || {}, baseUrl: S.gatewayUrl, siteUrl: S.siteUrl, dir: `${videosDir}/shop`, telegram, ownerChatId: S.telegram.ownerChatId, maker: all.toffee || null });
   if (all.toffee) { all.toffee.shop = W.shop; all.toffee.team = all; }
+  if (all.biscotti) { all.biscotti.shop = W.shop; all.biscotti.team = all; } // the idea reviews: Toffee hands the orders over, the shop keeps the pages
+  W.sandbox = sandbox; // the box the code reviews run in, for the start-up line and the control room
   // bounties, hackathons and audit contests (helpers/contests.mjs, hidden with Zest): Chip prepares the entries, the owner approves
   const contestsFile = new URL("./helpers/contests.mjs", import.meta.url);
   if (existsSync(contestsFile)) { const { Contests } = await import(contestsFile); chip.contests = new Contests({ chip, github, store, clock, telegram, ownerChatId: S.telegram.ownerChatId, log, siteUrl: S.siteUrl }); }
@@ -240,11 +246,15 @@ export async function build({ env = process.env, configFile = null } = {}) {
   if (all.zest) all.zest.studio = W.studio; // a studio job's proposal quotes the offer
   W.bakery = new Bakery({ W, log, origins, hire, fire, recruits, roster, config: config.bakery || {}, adminWallets: S.adminWallets, rpcUrl: S.rpcUrl, deploymentJson: S.deploymentJson });
   crumb.onHolderCommand = (cmd, rest, ctx) => W.bakery.holderCommand(cmd, rest, ctx); // /link and /mybrownie from holders' private chats
+  if (all.praline) all.praline.bakery = W.bakery; // a baked brownie is a milestone for its holder
+  crumb.onHolderCommand = (cmd, rest, ctx) => ((cmd === "bounty" || cmd === "bounties") && all.nougat ? all.nougat.holderCommand(cmd, rest, ctx) : W.bakery.holderCommand(cmd, rest, ctx)); // /link and /mybrownie (the Bakery), /bounty and /bounties (Nougat) from holders' private chats
   // TikTok: /tiktok in the owner's chat gives a one-time link; the browser comes back to /tiktok/callback with the code
   W.tiktokAuth = new TikTokAuth({ tiktok, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `TikTok is connected (${me.name}). From now on the vertical copy of every finished video lands in your TikTok inbox as a draft to post from the app. /tiktok test sends the latest one now.`).catch(() => {}); } });
   W.instagramAuth = new Connect({ name: "instagram", client: instagram, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `Instagram is connected (${me.name}${me.account_type ? ", " + me.account_type.toLowerCase() + " account" : ""}). From now on every cartoon episode and trend clip that goes to TikTok goes up as a reel too, and memes as pictures. /instagram test posts the latest clip now.`).catch(() => {}); } });
   W.linkedinAuth = new Connect({ name: "linkedin", client: linkedin, store, clock, log, baseUrl: S.gatewayUrl, onConnected: async (me) => { if (telegram.configured && S.telegram.ownerChatId) await telegram.sendMessage(S.telegram.ownerChatId, `LinkedIn is connected (${me.name}). Truffle writes one post a day about the business for your Approve; /truffle post writes one now, /truffle profile drafts your headline and About, /truffle learn and /truffle study teach it the voice you like.`).catch(() => {}); } });
   scheduler.isOff = (name) => W.admin.isPaused(name);
+  // the roster, once at the start: who works, who waits for a setup or for the owner (the control room shows it live)
+  setTimeout(() => W.admin.roster().then((v) => { for (const line of rosterText(v).split("\n")) log(`[team] ${line}`); }).catch((e) => log(`[team] the roster could not be read: ${e.message}`)), 20_000).unref?.();
   return W;
 }
 
@@ -262,6 +272,7 @@ async function main() {
   log(W.youtube?.configured ? "[helpers] YouTube is connected: finished videos go up unlisted, the owner publishes" : "[helpers] YouTube is not configured: videos stay in Telegram");
   log(!W.tiktok.configured ? "[helpers] TikTok is not configured" : W.tiktok.connected ? `[helpers] TikTok is connected (${W.tiktok.tokens()?.display_name || W.tiktok.tokens()?.username || "the Brownies account"}): vertical videos go to the owner's inbox as drafts` : "[helpers] TikTok app is set; the owner connects the account with /tiktok");
   log(!W.instagram.configured ? "[helpers] Instagram is not configured" : W.instagram.connected ? `[helpers] Instagram is connected (@${W.instagram.tokens()?.username || W.instagram.tokens()?.user_id}): cartoon clips go up as reels` : "[helpers] Instagram app is set; the owner connects the account with /instagram");
+  log(W.sandbox?.configured ? "[helpers] the sandbox is set: code reviews are for sale" : "[helpers] no sandbox (SANDBOX_URL, SANDBOX_TOKEN): code reviews are closed");
   log(!W.linkedin.configured ? "[helpers] LinkedIn is not configured" : W.linkedin.connected ? `[helpers] LinkedIn is connected (${W.linkedin.tokens()?.name || "the profile"}), ${W.linkedin.daysLeft()} days left` : "[helpers] LinkedIn app is set; the owner connects the profile with /linkedin");
   if (W.off.length) log(`[helpers] switched off by HELPERS_OFF: ${W.off.join(", ")} (no job runs for them)`);
   W.shop.open().then((o) => log(o.ok ? `[shop] open: payments land in ${S.shop.payTo}, the settler is ${W.shop.seller.address}` : `[shop] closed: ${o.reason}`)).catch((e) => log(`[shop] could not tell if it is open: ${e.message}`));
@@ -276,6 +287,10 @@ async function main() {
     if (req.url.startsWith("/instagram/")) return W.instagramAuth.handle(req, res);
     if (req.url.startsWith("/linkedin/")) return W.linkedinAuth.handle(req, res);
     if (req.url.startsWith("/clips/")) return W.clips.handle(req, res);
+    if (req.url === "/shop" || req.url.startsWith("/shop/") || req.url.startsWith("/shop?")) return W.shop.handle(req, res);
+    if (req.url === "/bounties" || req.url.startsWith("/bounties?")) { if (W.helpers.nougat) return W.helpers.nougat.handle(req, res); res.writeHead(404); return res.end(); }
+    if (req.url === "/shop" || req.url.startsWith("/shop/") || req.url.startsWith("/shop?")) return W.shop.handle(req, res);
+    if (req.url.startsWith("/praline/")) { if (W.helpers.praline) return W.helpers.praline.handle(req, res); res.writeHead(404); return res.end(); }
     const now = Date.now();
     const body = {
       ok: true, mode: S.mode, uptimeSeconds: Math.round((now - started) / 1000), reports: gateway.reports, thoughts: brain.calls,

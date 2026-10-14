@@ -60,18 +60,25 @@ export class Chain {
     this.weth = null; // made on first use from harvester.WETH()
     this.topic = topicId("Activated(uint256,address,bytes32,uint256)");
     this.maxRange = 9_000_000; // the RPC allows 10M blocks per getLogs
+    // An activation is credited only once this many blocks stand on top of its own (5: about a minute on Ethereum).
+    // Credit given at the very tip stayed when that block was replaced and the payment with it (finding 24 of the
+    // gateway's own review, 2026-10-12): the balance was real and the payment was not.
+    this.confirmations = Number.isInteger(Number(cfg.confirmations)) && Number(cfg.confirmations) >= 0 ? Number(cfg.confirmations) : 5;
+    this.blockSeconds = Number(cfg.blockSeconds) > 0 ? Number(cfg.blockSeconds) : 12;
     this.claimMinWei = parseEther(String(cfg.claimMinEth ?? 0.05));
     this.keeperFloorWei = parseEther(String(cfg.keeperFloorEth ?? 0.01));
     this.releaseMinMicro = BigInt(Math.round(Number(cfg.releaseMinSugar ?? 1) * 1e6));
     this.signer = cfg.keeperPrivateKey ? new Wallet(cfg.keeperPrivateKey, this.provider) : null;
+    this.maxGwei = Number(cfg.keeperMaxGwei) > 0 ? Number(cfg.keeperMaxGwei) : 40; // the keeper waits out a fee spike: above this it sends nothing
     this.lastWarn = new Map(); // topic -> time, so a standing problem is logged once an hour, not every tick
     this.claimMemo = null; this.claimStuck = 0; this.claimBackoffUntil = 0; // a claim that moved nothing is not repeated every tick
     this.stopped = false;
   }
 
-  /// Read every Activated since the last indexed block, book the new ones. Safe to call any time.
+  /// Read every Activated since the last indexed block, book the new ones. Safe to call any time. Only blocks with
+  /// `confirmations` blocks on top of them are read: the newest ones wait their turn.
   async index() {
-    const head = await this.provider.getBlockNumber();
+    const head = (await this.provider.getBlockNumber()) - this.confirmations;
     let from = this.ledger.lastBlock ?? Number(this.cfg.startBlock);
     if (from > head) return 0;
     let booked = 0;
@@ -98,18 +105,21 @@ export class Chain {
     return booked;
   }
 
-  /// Credits from an activation tx that the indexer has not reached yet (the site calls this right after a wallet
-  /// activates, so the balance shows at once).
+  /// Credits from an activation tx that the indexer has not reached yet (the site calls this after a wallet
+  /// activates, so the balance shows as soon as it may). Returns { found, booked, waitBlocks, waitSeconds }: a
+  /// transaction that is in a block but has too few blocks on top of it is found, booked 0, and says how long is left.
   async indexTx(txHash) {
     const r = await this.provider.getTransactionReceipt(txHash);
-    if (!r) return 0;
+    if (!r) return { found: false, booked: 0, waitBlocks: 0, waitSeconds: 0 };
+    const onTop = (await this.provider.getBlockNumber()) - Number(r.blockNumber);
+    if (onTop < this.confirmations) { const waitBlocks = this.confirmations - onTop; return { found: true, booked: 0, waitBlocks, waitSeconds: waitBlocks * this.blockSeconds }; }
     let booked = 0;
     for (const l of r.logs) {
       if (l.address.toLowerCase() !== this.cfg.sugarAddress.toLowerCase() || l.topics[0] !== this.topic) continue;
       const parsed = this.sugar.interface.parseLog(l);
       if (this.ledger.recordActivation({ id: Number(parsed.args.id), beneficiary: parsed.args.beneficiary, sender: parsed.args.from, atoms: Number(parsed.args.amount), block: r.blockNumber, tx: txHash })) booked++;
     }
-    return booked;
+    return { found: true, booked, waitBlocks: 0, waitSeconds: 0 };
   }
 
   async wethContract() {
@@ -178,6 +188,12 @@ export class Chain {
       this.warnOnce("sim:" + label, `[keeper] ${label} would revert: ${short(e)}`);
       return { skipped: true, reason: short(e) };
     }
+    // a claim that moves a little WETH is not worth sending into a fee spike: the next tick finds it still waiting
+    try {
+      const fee = this.provider.getFeeData ? await this.provider.getFeeData() : null;
+      const gwei = fee ? Number(fee.maxFeePerGas ?? fee.gasPrice ?? 0n) / 1e9 : 0;
+      if (gwei > this.maxGwei) { this.warnOnce("fee:" + fn, `[keeper] ${label} waits: the fee is ${gwei.toFixed(0)} gwei, over the ceiling of ${this.maxGwei}`); return { skipped: true, reason: `the fee is ${gwei.toFixed(0)} gwei` }; }
+    } catch { /* no reading of the fee: the send goes on as before */ }
     const tx = await c[fn](overrides);
     const r = await tx.wait();
     this.log.log(`[keeper] ${label} in ${r.hash}`);

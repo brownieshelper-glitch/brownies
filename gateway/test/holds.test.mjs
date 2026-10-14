@@ -47,7 +47,7 @@ test("a grant's holds count against its day and the granter's balance", () => {
   assert.equal(l.grantRoom(B, GRANTEE).spentMicro, 20_000);
 });
 
-test("a restart forgets holds that were in flight", () => {
+test("a restart lets go a hold whose call had not reached the upstream (one that had is booked: review.test.mjs)", () => {
   const dir = mkdtempSync(join(tmpdir(), "brownies-"));
   const path = join(dir, "l.sqlite");
   const l = new Ledger(path);

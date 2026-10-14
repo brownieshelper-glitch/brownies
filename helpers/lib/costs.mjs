@@ -109,6 +109,8 @@ const money = (n) => `$${Number(n || 0).toFixed(2)}`;
 export function billText(v) {
   const out = [`The bill, ${v.day} (${v.timezone}).`, `Today: ${money(v.today.usd)} in all. AI ${money(v.today.aiUsd)} in ${v.today.calls} call${v.today.calls === 1 ? "" : "s"}, video ${money(v.today.videoUsd)} in ${v.today.videos} clip${v.today.videos === 1 ? "" : "s"}.`];
   if (v.openrouter) out.push(`OpenRouter: ${money(v.openrouter.leftUsd)} left of ${money(v.openrouter.boughtUsd)} bought.`);
+  // the key's own limit, when it has one: at zero nothing can be asked whatever the credits say
+  if (v.openrouter && v.openrouter.limitUsd != null) out.push(`The key's own limit: ${money(v.openrouter.limitLeftUsd)} left of ${money(v.openrouter.limitUsd)}.${Number(v.openrouter.limitLeftUsd) <= 0 ? " AT THE LIMIT: no brownie can think until it is raised (openrouter.ai, Settings, API Keys)." : ""}`);
   out.push(v.higgsfield ? `Higgsfield: about ${money(v.higgsfield.leftUsd)} left of the ${money(v.higgsfield.refillUsd)} you set (${v.higgsfield.clips} clip${v.higgsfield.clips === 1 ? "" : "s"} since).` : "Higgsfield: no balance set. After a top-up: /refill <usd>.");
   out.push("");
   for (const h of v.helpers) {

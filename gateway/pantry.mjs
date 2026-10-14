@@ -16,7 +16,9 @@ export class Pantry {
     this.eth = new JsonRpcProvider(ethRpcUrl, 1, { staticNetwork: true });
     this.base = new JsonRpcProvider(baseRpcUrl, 8453, { staticNetwork: true });
     this.bridge = bridge; this.payer = payer;
-    this.bridgeMinUsdc = bridgeMinUsdc; this.lowUsdc = lowUsdc; this.keepEth = keepEth; this.everySeconds = everySeconds;
+    this.bridgeMinUsdc = bridgeMinUsdc; this.lowUsdc = lowUsdc; this.keepEth = keepEth;
+    this.everySeconds = Number.isFinite(Number(everySeconds)) && Number(everySeconds) >= 30 ? Number(everySeconds) : 600; // a setting like "10m" is not a number: the usual ten minutes then, never a tick every millisecond
+    this.ticking = false;
     this.now = now; this.log = log; this.report = report;
     this.state = { at: 0, ethereum: null, base: null, lastBridge: null, error: null, bridging: false };
     this.timer = null;
@@ -40,7 +42,9 @@ export class Pantry {
 
   /// One reading, and the bridge when it is due.
   async tick() {
-    if (this.state.bridging) return this.state;
+    // one tick at a time, from before the first reading: two ticks must never read the same balance and both bridge it
+    if (this.ticking || this.state.bridging) return this.state;
+    this.ticking = true;
     try {
       const b = await this.balances();
       this.state = { ...this.state, at: this.now(), ethereum: { eth: b.ethereum.eth, usdc: b.ethereum.usdc }, base: b.base, error: null };
@@ -56,7 +60,7 @@ export class Pantry {
     } catch (e) {
       this.state = { ...this.state, at: this.now(), error: e.shortMessage || e.message, bridging: false };
       this.log(`[pantry] ${this.state.error}`);
-    }
+    } finally { this.ticking = false; }
     return this.state;
   }
 

@@ -39,6 +39,20 @@ helpers/helpers/sprinkle.mjs
 helpers/test/sprinkle.test.mjs
 helpers/helpers/toffee.mjs
 helpers/test/toffee.test.mjs
+helpers/helpers/praline.mjs
+helpers/test/praline.test.mjs
+helpers/helpers/nougat.mjs
+helpers/test/nougat.test.mjs
+helpers/helpers/caramel.mjs
+helpers/test/caramel.test.mjs
+helpers/helpers/ember.mjs
+helpers/test/ember.test.mjs
+helpers/helpers/butterscotch.mjs
+helpers/test/butterscotch.test.mjs
+
+# the kitchen cam's music bed and test recordings are made on the owner's PC, not kept in the repository
+ember/music.wav
+ember/test.mp4
 helpers/test/video.test.mjs
 helpers/video/
 helpers/test/renderchild.test.mjs
@@ -63,3 +77,12 @@ eth-launch/bundle/
 
 .vercel
 web/deployments/*.test-*.json
+helpers/test/milestone.test.mjs
+helpers/test/setup-hidden.test.mjs
+helpers/helpers/biscotti.mjs
+helpers/test/biscotti.test.mjs
+helpers/helpers/crust.mjs
+helpers/test/crust.test.mjs
+helpers/test/sprinkle-recover.test.mjs
+helpers/test/sprinkle-sound.test.mjs
+helpers/test/sprinkle-own.test.mjs

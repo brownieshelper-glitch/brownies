@@ -1,31 +1,42 @@
 // The owner's control room. A small API on the helpers' own server (reached through the gateway's domain at
 // /admin/*) that the admin page of the site talks to. Nothing is readable without a session, and a session comes
 // from one of two proofs: a one-time code the bot sends to the owner's Telegram (/admin), or a signature from one
-// of the admin wallets. Every helper is shown, hidden ones too; the owner can run a job now, pause and resume a
+// of the admin wallets. When ADMIN_PIN is set (six digits only the owner knows) every login also needs that fixed
+// code, so a proof that was stolen (a code read off his Telegram, a signature got from his wallet on a fake page)
+// opens nothing by itself. Every helper is shown, hidden ones too; the owner can run a job now, pause and resume a
 // helper, change its daily cap, give it an instruction, decide a pending approval, and read the live log.
 //
+//   GET  /admin/info                       { pin, wallets }               whether the fixed code is asked for
 //   GET  /admin/nonce                      { nonce }                      for a wallet login
-//   POST /admin/login  { code } | { address, signature, nonce }   -> { token, expiresAt }
+//   POST /admin/login  { code, pin? } | { address, signature, nonce, pin? }   -> { token, expiresAt }
 //   GET  /admin/state                      everything the page shows (bearer token)
 //   POST /admin/command { helper, action, text?, id?, value? }     action: run | ask | off | on | cap | approve | reject | summary
 //   GET  /admin/log?n=200                  the last lines of the service log
 //   POST /admin/logout
 import { defang } from "./suggestions.mjs";
 import { clientIp } from "./net.mjs";
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { applyAction as jobAction, totalsView as jobTotals, STATE_LABEL as JOB_STATE } from "./moneyjobs.mjs";
 import { verifyMessage, getAddress, isAddress } from "ethers";
 import { cap } from "./facts.mjs";
 import { costsView } from "./costs.mjs";
+import { rosterView } from "./roster.mjs";
 
 const CODE_TTL = 10 * 60_000, SESSION_TTL = 24 * 3_600_000, NONCE_TTL = 10 * 60_000;
+const PIN_TRIES = 5, PIN_LOCK = 15 * 60_000;
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 const nowIso = (ms) => new Date(ms).toISOString();
 
 export class Admin {
   /// W: the built world (S, store, clock, scheduler, helpers, brain, telegram, alerts, config, hidden, off). ring: the log lines.
-  constructor({ W, ring = [], log = () => {}, wallets = [], origins = [], sendSummary = null }) {
+  constructor({ W, ring = [], log = () => {}, wallets = [], origins = [], sendSummary = null, pin = null }) {
     this.W = W; this.ring = ring; this.log = log;
+    // the fixed code, kept as a hash. A setting that is there but is not six digits lets nobody in: a typing
+    // mistake must not leave the door without its second lock.
+    const fixed = String(pin ?? W.S?.adminPin ?? "").trim();
+    this.pinHash = /^\d{6}$/.test(fixed) ? sha(`admin-pin:${fixed}`) : null;
+    this.pinBroken = Boolean(fixed) && !this.pinHash;
+    if (this.pinBroken) log("[admin] ADMIN_PIN is set but is not six digits: nobody can log in until it is");
     this.wallets = wallets.filter(isAddress).map((a) => getAddress(a));
     this.origins = origins;
     this.sendSummary = sendSummary;
@@ -62,7 +73,29 @@ export class Admin {
     list.push(now); this.attempts.set(ip, list);
     return list.length > 10;
   }
-  loginWithCode(code) {
+  /// The fixed code. It is looked at only after the other proof held: a stranger cannot lock the owner out, and a
+  /// wrong fixed code next to a right proof means somebody holds that proof, so five of those lock the login for a
+  /// quarter of an hour and the owner is told on Telegram. True, or what to answer.
+  pinCheck(pin) {
+    if (this.pinBroken) return { status: 503, error: "the fixed code on the server is not six digits (ADMIN_PIN): nobody can log in until it is", pin: "broken" };
+    if (!this.pinHash) return true;
+    const now = this.W.clock.now(), until = Number(this.W.store.getMeta("admin:pin:locked", 0));
+    if (until > now) return { status: 429, error: `too many wrong fixed codes; wait ${Math.ceil((until - now) / 60_000)} minutes`, pin: "locked" };
+    const given = String(pin ?? "").trim();
+    if (!given) return { status: 401, error: "the fixed code is needed too", pin: "needed" };
+    if (timingSafeEqual(Buffer.from(sha(`admin-pin:${given}`), "hex"), Buffer.from(this.pinHash, "hex"))) { this.W.store.setMeta("admin:pin:misses", 0); return true; }
+    const misses = Number(this.W.store.getMeta("admin:pin:misses", 0)) + 1;
+    if (misses >= PIN_TRIES) {
+      this.W.store.setMeta("admin:pin:misses", 0); this.W.store.setMeta("admin:pin:locked", now + PIN_LOCK);
+      this.log("[admin] five wrong fixed codes next to a valid proof: the login is locked for 15 minutes");
+      const chat = this.W.S?.telegram?.ownerChatId;
+      if (chat && this.W.telegram?.configured) this.W.telegram.sendMessage(chat, "Somebody passed the first step of the control room's login (the code from this chat, or an admin wallet's signature) and then typed the fixed code wrong five times. The login is locked for 15 minutes. If that was not you, somebody has your code or your wallet's signature: ask for a new code only when you are at the page yourself.").catch((e) => this.log(`[admin] could not tell the owner: ${e.message}`));
+      return { status: 429, error: "too many wrong fixed codes; wait 15 minutes", pin: "locked" };
+    }
+    this.W.store.setMeta("admin:pin:misses", misses);
+    return { status: 401, error: `wrong fixed code (${PIN_TRIES - misses} more ${PIN_TRIES - misses === 1 ? "try" : "tries"})`, pin: "wrong" };
+  }
+  loginWithCode(code, pin) {
     const raw = this.W.store.getMeta("admin:code");
     if (!raw) return null;
     const c = JSON.parse(raw);
@@ -74,17 +107,21 @@ export class Admin {
       if (misses >= 5) { this.W.store.setMeta("admin:code", null); this.log("[admin] the one-time code was burnt after five wrong tries"); }
       return null;
     }
+    const fixed = this.pinCheck(pin); // the code is right: now the fixed one. A slip there does not use the code up
+    if (fixed !== true) return fixed;
     this.W.store.setMeta("admin:code", null); // one use
     this.W.store.setMeta("admin:code:misses", 0);
     return this.session();
   }
-  loginWithWallet({ address, signature, nonce }) {
+  loginWithWallet({ address, signature, nonce, pin }) {
     if (!this.wallets.length || !isAddress(address || "")) return null;
     const exp = Number(this.W.store.getMeta(`admin:nonce:${nonce}`, 0));
     if (!exp || this.W.clock.now() > exp) return null;
     let who;
     try { who = getAddress(verifyMessage(adminMessage(nonce), signature)); } catch { return null; }
     if (who !== getAddress(address) || !this.wallets.includes(who)) return null;
+    const fixed = this.pinCheck(pin);
+    if (fixed !== true) return fixed;
     this.W.store.setMeta(`admin:nonce:${nonce}`, null);
     return this.session();
   }
@@ -118,6 +155,11 @@ export class Admin {
       openrouter, refill: this.refill(),
     });
   }
+  /// The roster (lib/roster.mjs): every brownie, what it does, hidden or public, and where it stands.
+  roster() {
+    const { helpers, config, store, clock, brain, alerts } = this.W;
+    return rosterView({ helpers, config, store, clock, brain, alerts, isPaused: (n) => this.isPaused(n), offByEnv: (n) => this.W.off.includes(n), log: this.log });
+  }
   async state() {
     const { S, store, clock, scheduler, helpers, brain, config } = this.W;
     const now = clock.now();
@@ -136,7 +178,10 @@ export class Admin {
         baked: h.spec?.baked ? { holder: h.spec.baked.wallet, telegram: Boolean(h.spec.baked.chatId), wallet: (() => { try { return brain.address(name); } catch { return null; } })() } : undefined,
       };
     });
+    let team = null;
+    try { team = await this.roster(); } catch (e) { this.log(`[admin] the roster failed: ${e.message}`); }
     return {
+      team,
       mode: S.mode, now: nowIso(now), timezone: config.timezone || "UTC", uptimeSeconds: Math.round((Date.now() - (this.W.startedAt || Date.now())) / 1000),
       helpers: list,
       approvals: store.pendingApprovals().map((a) => ({ id: a.id, helper: a.helper, title: a.title, url: a.url, at: nowIso(a.at) })),
@@ -259,11 +304,13 @@ export class Admin {
     const json = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
     if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
     try {
-      if (req.method === "GET" && url.pathname === "/admin/nonce") return json(200, { nonce: this.newNonce(), message: adminMessage("<nonce>"), wallets: this.wallets.length });
+      if (req.method === "GET" && url.pathname === "/admin/info") return json(200, { pin: Boolean(this.pinHash || this.pinBroken), wallets: this.wallets.length });
+      if (req.method === "GET" && url.pathname === "/admin/nonce") return json(200, { nonce: this.newNonce(), message: adminMessage("<nonce>"), wallets: this.wallets.length, pin: Boolean(this.pinHash || this.pinBroken) });
       if (req.method === "POST" && url.pathname === "/admin/login") {
         if (this.tooMany(clientIp(req))) return json(429, { error: "too many tries; wait ten minutes" });
         const body = await readJson(req);
-        const s = body.code != null ? this.loginWithCode(body.code) : this.loginWithWallet(body);
+        const s = body.code != null ? this.loginWithCode(body.code, body.pin) : this.loginWithWallet(body);
+        if (s && s.status) return json(s.status, { error: s.error, pin: s.pin });
         if (!s) return json(401, { error: body.code != null ? "wrong or expired code" : "the signature does not match an admin wallet" });
         this.log(`[admin] login (${body.code != null ? "code" : "wallet"})`);
         return json(200, s);

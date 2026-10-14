@@ -35,12 +35,18 @@
   function loginError(text) { const e = $("loginError"); e.textContent = text || ""; e.hidden = !text; }
 
   // ---- login ----
+  // the owner's fixed code: asked for when the server says it has one, sent with either kind of login
+  const askPin = () => { $("inPin").hidden = false; $("pinHint").hidden = false; };
+  const pinNow = () => ($("inPin").hidden ? undefined : $("inPin").value.trim());
+  const refused = (r) => { if (r.body?.pin) askPin(); loginError(r.body?.error ? r.body.error[0].toUpperCase() + r.body.error.slice(1) + "." : "Could not log in."); };
+  api("/info").then((i) => { if (i.ok && i.body?.pin) askPin(); });
   $("codeForm").onsubmit = async (ev) => {
     ev.preventDefault();
-    const code = $("inCode").value.trim();
+    const code = $("inCode").value.trim(), pin = pinNow();
     if (!/^\d{6}$/.test(code)) return loginError("The code is six digits.");
-    const r = await api("/login", { method: "POST", body: JSON.stringify({ code }) });
-    if (!r.ok) return loginError(r.body?.error || "Could not log in.");
+    if (pin !== undefined && !/^\d{6}$/.test(pin)) return loginError("Your fixed code is six digits.");
+    const r = await api("/login", { method: "POST", body: JSON.stringify({ code, pin }) });
+    if (!r.ok) return refused(r);
     enter(r.body.token);
   };
   $("btnWalletLogin").onclick = async () => {
@@ -51,12 +57,16 @@
     try {
       const message = n.body.message.replace("<nonce>", n.body.nonce);
       const signature = await Wt.state.signer.signMessage(message);
-      const r = await api("/login", { method: "POST", body: JSON.stringify({ address: Wt.state.account, signature, nonce: n.body.nonce }) });
-      if (!r.ok) return loginError(r.body?.error || "Could not log in.");
+      if (n.body.pin) askPin();
+      const pin = pinNow();
+      if (pin !== undefined && !/^\d{6}$/.test(pin)) return loginError("Type your fixed code of six digits first, then sign.");
+      const r = await api("/login", { method: "POST", body: JSON.stringify({ address: Wt.state.account, signature, nonce: n.body.nonce, pin }) });
+      if (!r.ok) return refused(r);
       enter(r.body.token);
     } catch (e) { loginError(explainError(e)); }
   };
   function enter(t) {
+    $("inPin").value = "";
     token = t; try { localStorage.setItem(KEY, t); } catch (_) {}
     loginError("");
     show(true);
@@ -79,6 +89,7 @@
     for (const [k, v] of [["Mode", s.mode], ["Up for", `${Math.floor(s.uptimeSeconds / 3600)} h ${Math.floor((s.uptimeSeconds % 3600) / 60)} min`], ["Reports", s.reports], ["AI calls", s.thoughts], ["Videos", s.videos], ["Group", s.group || "none yet"]]) {
       const d = el("div"); d.append(el("dt", null, k), el("dd", null, String(v))); stats.append(d);
     }
+    teamView(s.team);
     bill(s.costs);
     shopView(s.shop);
     const ap = $("approvals"); ap.replaceChildren();
@@ -127,6 +138,46 @@
   }
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+  // ---- the team: every brownie on one sheet, what it does, public or hidden, and where it stands ----
+  const TEAM_STATES = ["problem", "setup", "you", "stopped", "working", "planned"];
+  const TEAM_TAB = { all: "All", problem: "Problem", setup: "Needs setup", you: "Needs you", stopped: "Stopped", working: "Working", planned: "Not built" };
+  let teamShow = "all";
+  function teamView(t) {
+    const line = $("teamLine"), tabs = $("teamTabs"), sheet = $("teamSheet");
+    tabs.replaceChildren(); sheet.replaceChildren();
+    if (!t) { line.textContent = "The team sheet is not on this server yet."; return; }
+    line.textContent = `${plural(t.total, "brownie")}. ${t.public} public, ${t.hidden} hidden from the public. A name opens its card below.`;
+    if (teamShow !== "all" && !t.counts[teamShow]) teamShow = "all";
+    for (const k of ["all", ...TEAM_STATES]) {
+      const n = k === "all" ? t.rows.length : t.counts[k];
+      if (!n) continue;
+      const b = el("button", "team-tab", TEAM_TAB[k]); b.type = "button";
+      b.append(el("span", "n", String(n)));
+      b.setAttribute("aria-pressed", String(teamShow === k));
+      b.onclick = () => { teamShow = k; teamView(t); };
+      tabs.append(b);
+    }
+    for (const r of t.rows.filter((x) => teamShow === "all" || x.state === teamShow)) sheet.append(teamRow(r));
+  }
+  function teamRow(r) {
+    const row = el("div", "team-row " + r.state);
+    row.append(face(r.name, "face"));
+    const who = el("div", "who");
+    const name = el("div", "name");
+    if (r.state === "planned") name.append(el("b", null, r.title));
+    else { const a = el("a", null, r.title); a.href = "#card-" + r.name; name.append(a); }
+    name.append(el("span", "badge", r.state === "planned" ? "not built" : r.hidden ? "hidden" : "public"));
+    if (r.kind === "recruit") name.append(el("span", "badge", "recruit"));
+    if (r.kind === "baked") name.append(el("span", "badge", "baked"));
+    who.append(name, el("p", "does", r.does));
+    row.append(who);
+    const st = el("div", "stand");
+    st.append(el("span", "state " + r.state, r.label));
+    if (r.lines.length) { const ul = el("ul"); for (const l of r.lines) ul.append(el("li", "l-" + l.kind, l.text)); st.append(ul); }
+    if (r.state !== "planned") st.append(el("p", "last", r.last ? `Last job: ${r.last.job}${r.last.ok ? "" : " (failed)"}, ${when(new Date(r.last.at).toISOString())}` : "No job yet"));
+    row.append(st);
+    return row;
+  }
   // ---- the shop: open or not, the sales, the last orders ----
   function shopView(v) {
     const hint = $("shopHint"), list = $("shopOrders");
@@ -278,6 +329,7 @@
 
   function card(h) {
     const art = el("article", "admin-card" + (h.paused ? " paused" : "") + (h.hidden ? " hidden-helper" : ""));
+    art.id = "card-" + h.name;
     const head = el("div", "admin-card-head");
     const face = el("span", "face");
     const known = window.Mascot ? window.Mascot.team.find((m) => m.id === h.name) : null;
@@ -372,6 +424,19 @@
       openrouter: { boughtUsd: 60, usedUsd: 10.43, leftUsd: 49.57, usageDailyUsd: 2.39, limitUsd: 100, limitLeftUsd: 89.57 },
       higgsfield: { refillUsd: 100, refillAt: t0 - 2 * 86400e3, spentUsd: 32.34, leftUsd: 67.66, clips: 7 },
     };
+    const tr = (name, title, does, hidden, st, label, lines, last) => ({ name, title, kind: "team", does, hidden, state: st, label, lines, last });
+    const jobAt = (job, min, ok = true) => ({ at: t0 - min * 60e3, job, ok, note: "" });
+    state.team = { counts: { problem: 1, setup: 1, you: 2, stopped: 1, working: 3, planned: 1 }, total: 8, public: 4, hidden: 4, line: "8 brownies: 3 working, 1 has a problem, 1 needs setup, 2 need you, 1 stopped. 1 more is not built yet.", rows: [
+      tr("sprinkle", "Sprinkle", "Video. Makes the cartoon episodes, the trend clips and the memes, and puts them on YouTube, TikTok, Instagram, Facebook and X.", true, "problem", "Problem", [{ kind: "problem", text: "instagram failed, 11 Oct, 17:32: Instagram answered 400 (code 200): Cannot call API for app 1463112319041596 on behalf of user 122103730113499518" }, { kind: "note", text: "TikTok: every clip lands in your TikTok inbox as a draft and you post it by hand, until TikTok approves the app." }], jobAt("post", 190)),
+      tr("butterscotch", "Butterscotch", "Paid ads. Plans the ads on Meta, TikTok and X by its playbook, pauses the losers and reports every morning.", true, "setup", "Needs setup", [{ kind: "setup", text: "No ad account is connected yet. To open: Meta, TikTok, X. /butterscotch connect lists what each one asks for." }, { kind: "note", text: "It can plan before any account exists: /butterscotch plan stories <weekly usd>." }], jobAt("report", 300)),
+      tr("chip", "Chip", "Builder. Changes the code as pull requests. Small ones go in alone, bigger ones wait for your yes.", false, "you", "Needs you", [{ kind: "you", text: "1 card waits for your yes or no, under Waiting for you" }], jobAt("build", 50)),
+      tr("nougat", "Nougat", "Bounties. Keeps the board of paid tasks for holders and checks every claim before you approve it.", true, "you", "Needs you", [{ kind: "you", text: "The bounty board is closed. Set the budget with /nougat budget <usd>, then open it with /nougat on." }], null),
+      tr("fudge", "Fudge", "Marketing. Writes the posts for X three times a day, answers the mentions that ask something, and puts each post on the Facebook Page too.", false, "stopped", "Stopped", [{ kind: "stopped", text: "Paused from the control room. Switch it on from its card." }], jobAt("post", 400)),
+      tr("crumb", "Crumb", "Community. Answers people on Telegram, in the group and in private chats, and takes your commands.", false, "working", "Working", [], jobAt("reply", 25)),
+      tr("nib", "Nib", "Research. Writes the daily research note and measures how much the project is talked about.", false, "working", "Working", [], jobAt("research", 420)),
+      tr("glaze", "Glaze", "Business development. Prepares listings, applications and outreach in full, for you to send.", true, "working", "Working", [], jobAt("deal", 180)),
+      { name: "ciambella", title: "Ciambella", kind: "planned", does: "The Italian brownie. Posts and answers in Italian on an X account and a Telegram channel of its own.", hidden: true, state: "planned", label: "Not built", lines: [{ kind: "you", text: "Not built. It waits for an Italian X account and a Telegram bot from you." }], last: null },
+    ] };
     state.costs = costs;
     state.shop = { open: true, reason: "", payTo: "0x2c769cDE285eb0d3c7130F9F0f14932106384095", settler: "0x1111111111111111111111111111111111111111", gasEth: 0.00098, network: "eip155:8453", items: [{ id: "note", usd: 1 }, { id: "meme", usd: 0.5 }, { id: "clip", usd: 9 }], today: { n: 2, usd: 9.5, costUsd: 4.63 }, month: { n: 11, usd: 38.5, costUsd: 19.2 }, orders: [
       { id: 12, at: t0 - 9 * 60e3, item: "clip", state: "making", usd: 9, costUsd: 0, payer: "0xabcdef1234567890abcdef1234567890abcdef12", tx: "0x" + "1".repeat(64), url: null, note: null, prompt: "The four brownies land on the moon and plant a flag with a pancake on it." },

@@ -14,7 +14,7 @@ const settler = Wallet.createRandom(); // any address may submit; the simulation
 const seller = new Seller({ chainId: 8453, payTo: PAY_TO, settlerKey: settler.privateKey, provider, log: (l) => console.log("   ", l) });
 const buyer = Wallet.createRandom();
 const required = seller.requirement({ micro: 1_000_000, url: "https://api.feedthebrownies.com/shop/note", description: "A research note", maxTimeoutSeconds: 600 });
-const { payload } = await new X402Payer({ wallet: buyer, chainId: 8453 }).sign(required);
+const { payload } = await new X402Payer({ wallet: buyer, chainId: 8453, allowTo: [PAY_TO] }).sign(required);
 const a = payload.payload.authorization, sig = Signature.from(payload.payload.signature);
 const usdc = new Contract(USDC[8453], ["function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)", "function authorizationState(address, bytes32) view returns (bool)"], provider);
 console.log(`Base block ${await provider.getBlockNumber()}, buyer ${buyer.address} (empty), payTo ${PAY_TO}`);

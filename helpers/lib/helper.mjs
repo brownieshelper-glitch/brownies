@@ -19,6 +19,15 @@ export class Helper {
     Object.assign(this, { brain: deps.brain, gateway: deps.gateway, store: deps.store, clock: deps.clock, alerts: deps.alerts || null, facts: deps.facts || "", log: deps.log || (() => {}) });
   }
 
+  /// What this brownie still needs before it does its whole job, for the owner's roster (lib/roster.mjs). One plain
+  /// sentence each, written to the owner. missing: something to set up (an account, a key, a setting). waiting: built
+  /// and set up, held until the owner says a word. problems: something that worked and broke. notes: worth knowing,
+  /// nothing to do. May be async. A brownie with nothing to say keeps this one.
+  setup() { return { missing: [], waiting: [], problems: [], notes: [] }; }
+  /// The outside services this brownie posts through ("x", "youtube", "instagram" ...): a refused credential on one
+  /// of them is this brownie's trouble on the roster.
+  get services() { return []; }
+
   /// The system prompt: the voice, the facts, Nib's latest note and this helper's own rules.
   system(extra = "") { return systemPrompt({ name: this.Name, role: this.role, facts: this.facts, note: latestNoteText(this.store), feedback: latestCriticText(this.store, this.name), accepted: acceptedSuggestionsText(this.store), extra }); }
 
@@ -46,7 +55,7 @@ export class Helper {
   /// Runs a job body. Budget and credential errors are turned into an alert and a log line; others are rethrown
   /// to the scheduler, which logs them. The helper never crashes the process.
   async guard(job, fn) {
-    try { return await fn(); }
+    try { const out = await fn(); this.alerts?.resolved?.(this.name, job); return out; } // a job that works again is no trouble any more
     catch (e) {
       if (e instanceof BudgetError || e.budget) { this.log(`[${this.name}] ${e.message}`); return null; }
       if (e.credentials) { this.log(`[${this.name}] ${e.message}`); await this.alerts?.credentials(e.service, e.message); return null; }

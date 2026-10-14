@@ -60,6 +60,18 @@ export class Gateway {
   account(wallet) { return this.get(`/api/protocol/account/${wallet}`); }
   key(bearer, headers = {}) { return this.get("/v1/key", { authorization: `Bearer ${bearer}`, ...headers }); }
   health() { return this.get("/health"); }
+  /// A POST of JSON: { ok, status, body }, never a throw.
+  async post(path, body, headers = {}) {
+    try {
+      const r = await this.fetch(`${this.url}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+      return { ok: r.ok, status: r.status, body: await r.json().catch(() => null) };
+    } catch (e) {
+      return { ok: false, status: 0, body: null, error: e.message };
+    }
+  }
+  /// Signing in for a key (gateway/auth.mjs): the message the wallet has to sign, then the key for its signature.
+  signIn(wallet, days) { return this.post("/v1/auth/challenge", { wallet, days }); }
+  keyFor(nonce, signature) { return this.post("/v1/auth/key", { nonce, signature }); }
 
   /// A chat completion through the gateway, paid by the key's SUGAR balance. Returns { status, body }.
   async chat(bearer, body, headers = {}) {

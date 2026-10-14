@@ -2,18 +2,30 @@
 //
 //   MODE=prelaunch  the call goes to OpenRouter with OPENROUTER_API_KEY; the response's usage.cost (dollars) is the
 //                   price. Each helper has a daily dollar cap and stops when it is reached.
-//   MODE=live       the call goes to the gateway (POST /v1/chat/completions) with the helper's own key: its wallet
-//                   signs "Brownies API key, chain 1, epoch N" (gateway/auth.mjs). The helper stops when GET /v1/key
-//                   says its balance is under a few cents. The balance is SUGAR the vault fed it, and tips.
+//   MODE=live       the call goes to the gateway (POST /v1/chat/completions) with the helper's own key. A key is
+//                   made by signing in (gateway/auth.mjs): the gateway hands out a message that works once, the
+//                   helper's wallet signs it, the gateway answers with a key that lasts a day; a new one is made
+//                   before it runs out. The helper stops when GET /v1/key says its balance is under a few cents.
+//                   The balance is SUGAR the vault fed it, and tips.
 //                   A baked brownie (lib/bakery.mjs) has a wallet derived from HELPERS_MNEMONIC by its walletIndex and
 //                   pays from its holder's grant: every gateway call carries X-Brownies-Pay-From: <holder>.
 //
 // Both modes count every call in the store (spend per helper per day) and return cost_micro for the job's report.
 import { Wallet, HDNodeWallet } from "ethers";
 
-// the same two lines as gateway/auth.mjs and the site: the runtime is deployed alone, so they are repeated here
-export const keyMessage = (chainId, epoch) => `Brownies API key, chain ${chainId}, epoch ${epoch}`;
-export const keyFromSignature = (sig, epoch) => `sk-brownie-${epoch}-` + Buffer.from(sig.slice(2), "hex").toString("base64url");
+// A helper's wallet signs ONE kind of text: the gateway's sign-in message for that very wallet, laid out word for
+// word as gateway/auth.mjs writes it (the runtime is deployed alone, so the sentence is repeated here). Anything
+// else the gateway might hand over is refused: a wallet that signs what it is given can be made to sign in anywhere.
+export const SIGNIN_STATEMENT = "Sign in to get your Brownies API key. This moves no money. Sign it only on the site named in the first line.";
+export function isOurSignIn(message, { wallet, chainId, nonce }) {
+  const l = String(message || "").split("\n");
+  const m = /^([a-z0-9.-]+(?::\d+)?) wants you to sign in with your Ethereum account:$/.exec(l[0] || "");
+  if (l.length !== 11 || !m || !/^[0-9a-f]{32}$/.test(String(nonce || ""))) return false;
+  const stamp = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+  return l[1].toLowerCase() === String(wallet).toLowerCase() && l[2] === "" && l[3] === SIGNIN_STATEMENT && l[4] === "" &&
+    (l[5] === `URI: https://${m[1]}` || l[5] === `URI: http://${m[1]}`) && l[6] === "Version: 1" && l[7] === `Chain ID: ${chainId}` && l[8] === `Nonce: ${nonce}` &&
+    l[9].startsWith("Issued At: ") && stamp.test(l[9].slice(11)) && l[10].startsWith("Expiration Time: ") && stamp.test(l[10].slice(17));
+}
 
 export class BudgetError extends Error {
   constructor(helper, reason) { super(`${helper} is out of budget: ${reason}`); this.helper = helper; this.reason = reason; this.budget = true; }
@@ -22,6 +34,9 @@ export class BudgetError extends Error {
 const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
 export const REASONING_HEADROOM = 800; // tokens of thinking a Claude 5 model may spend before the answer (measured: about 250 on a research note)
 export const DEFAULT_REASONING = { effort: "low" }; // measured: zero thinking tokens on our jobs, the whole budget goes to the answer
+
+/// One part of a user message: { text } or { image: base64, mime }, in OpenRouter's shape.
+const toPart = (p) => (p && p.image ? { type: "image_url", image_url: { url: `data:${p.mime || "image/jpeg"};base64,${p.image}` } } : { type: "text", text: String(p?.text ?? "") });
 
 export class Brain {
   /// helpers: { fudge: { model, dailyCapUsd }, ... }   keys: { fudge: "0x...", ... } (live only)
@@ -33,6 +48,21 @@ export class Brain {
   }
 
   model(helper) { return this.helpers[helper]?.model || DEFAULT_MODEL; }
+  /// OpenRouter's public list of models, read once an hour: id -> { image: it takes pictures, maxOut: its longest answer }.
+  /// null when the list cannot be read.
+  async models() {
+    const now = this.clock.now();
+    if (!this._models || now - this._modelsAt > 3_600_000) {
+      try {
+        const r = await this.fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(15_000) });
+        const j = r?.ok ? await r.json() : null;
+        if (Array.isArray(j?.data) && j.data.length) { this._models = new Map(j.data.map((m) => [m.id, { image: (m.architecture?.input_modalities || []).includes("image"), maxOut: Number(m.top_provider?.max_completion_tokens) || 0 }])); this._modelsAt = now; }
+      } catch { /* the callers have a fallback */ }
+    }
+    return this._models || null;
+  }
+  /// Of the given model ids, those that take pictures; without the list, every id but the ones known to read text only.
+  async vision(ids) { const m = await this.models(); return (ids || []).filter((id) => (m?.has(id) ? m.get(id).image : !/deepseek/i.test(id))); }
   capMicro(helper) { return Math.round((this.helpers[helper]?.dailyCapUsd ?? 1) * 1e6); }
 
   wallet(helper) {
@@ -49,14 +79,19 @@ export class Brain {
   payFrom(helper) { return this.helpers[helper]?.payFrom || null; }
   payHeaders(helper) { const from = this.payFrom(helper); return from ? { "x-brownies-pay-from": from } : {}; }
 
-  /// The helper's gateway key for its current epoch. `fresh` re-reads the epoch (after a key_revoked answer).
+  /// The helper's gateway key: kept until five minutes before it runs out, then made again. `fresh` makes a new one
+  /// now (after the gateway refused the one we had: rotated, run out, or a gateway that started over).
   async key(helper, { fresh = false } = {}) {
-    if (!fresh && this.keyCache.has(helper)) return this.keyCache.get(helper);
+    const have = this.keyCache.get(helper);
+    if (!fresh && have && have.expiresAt - this.clock.now() > 5 * 60_000) return have;
     const w = this.wallet(helper);
-    const acc = await this.gateway.account(w.address);
-    const epoch = Number(acc.body?.epoch ?? 0);
-    const sig = await w.signMessage(keyMessage(this.chainId, epoch));
-    const k = { epoch, key: keyFromSignature(sig, epoch) };
+    const why = (r) => `${r.status}${r.body?.error?.code ? " " + r.body.error.code : ""}`;
+    const c = await this.gateway.signIn(w.address, 1);
+    if (!c.ok || !c.body?.message || !c.body?.nonce) throw new Error(`the gateway gave ${helper} no sign-in (${why(c)})`);
+    if (!isOurSignIn(c.body.message, { wallet: w.address, chainId: this.chainId, nonce: c.body.nonce })) throw new Error(`the gateway's sign-in message for ${helper} is not the one a helper signs: nothing was signed`);
+    const r = await this.gateway.keyFor(c.body.nonce, await w.signMessage(c.body.message));
+    if (!r.ok || !r.body?.key) throw new Error(`the gateway made ${helper} no key (${why(r)})`);
+    const k = { epoch: Number(r.body.epoch ?? 0), key: r.body.key, expiresAt: Date.parse(r.body.expires_at) || this.clock.now() + 86_400_000 };
     this.keyCache.set(helper, k);
     return k;
   }
@@ -99,7 +134,8 @@ export class Brain {
 
   /// One chat completion. Returns { text, costMicro, model, usage }. Throws BudgetError when the helper cannot pay.
   /// `job` is the name of the job this thought belongs to (the ledger line carries it; lib/costs.mjs groups by it).
-  async chat(helper, { system = "", messages = [], prompt = "", maxTokens = 600, temperature = 0.7, reasoning, plugins = null, job = null } = {}) {
+  /// `model` asks another model than the brownie's own for this one thought (a panel of reviewers); the cost is the brownie's all the same.
+  async chat(helper, { system = "", messages = [], prompt = "", parts = null, maxTokens = 600, temperature = 0.7, reasoning, plugins = null, job = null, model = null } = {}) {
     await this.budgetOrThrow(helper);
     const started = this.clock.now();
     // the effort: the call's own, else the brownie's config (a thinker like Chip gets medium with more headroom), else low
@@ -109,11 +145,13 @@ export class Brain {
     const list = [];
     if (system) list.push({ role: "system", content: system });
     list.push(...messages);
-    if (prompt) list.push({ role: "user", content: prompt });
+    if (Array.isArray(parts) && parts.length) list.push({ role: "user", content: parts.map(toPart) }); // text and pictures in one message, for a model that sees
+    else if (prompt) list.push({ role: "user", content: prompt });
     // Claude 5 models think before they answer and that thinking is counted inside max_tokens. OpenRouter refuses
     // to switch it off, but "effort: low" leaves it at zero tokens on these jobs (measured), so that is the default;
     // a call may ask for more. The headroom stays as a belt to the braces.
-    const body = { model: this.model(helper), messages: list, max_tokens: maxTokens + headroom, temperature, usage: { include: true } };
+    const body = { model: model || this.model(helper), messages: list, max_tokens: maxTokens + headroom, temperature, usage: { include: true } };
+    const most = this._models?.get(body.model)?.maxOut; if (most && body.max_tokens > most) body.max_tokens = most; // never more than the model can write (known once models() was read)
     if (reasoning) body.reasoning = reasoning;
     if (Array.isArray(plugins) && plugins.length) body.plugins = plugins; // OpenRouter plugins, e.g. [{ id: "web" }] for a web search before the answer
     const j = this.mode === "live" ? await this._viaGateway(helper, body) : await this._viaOpenRouter(helper, body);
@@ -130,7 +168,7 @@ export class Brain {
     if (spentNow >= capNow) await this.alerts?.budget(helper, `daily cap of ${(capNow / 1e6).toFixed(2)} USD reached`);
     else if (spentNow >= 0.8 * capNow) await this.alerts?.nearCap?.(helper, spentNow, capNow, now);
     if (this.mode === "live") this.balanceCache.delete(helper);
-    return { text: typeof text === "string" ? text : JSON.stringify(text), costMicro, model: body.model, usage };
+    return { text: typeof text === "string" ? text : JSON.stringify(text), costMicro, model: body.model, usage, cut: j?.choices?.[0]?.finish_reason === "length" }; // cut: the answer hit max_tokens and is not whole
   }
 
   /// A yes/no question to a model. Yes only when the first word of the answer is yes.
@@ -138,6 +176,13 @@ export class Brain {
     const r = await this.chat(helper, { ...opts, temperature: 0.2, maxTokens: opts.maxTokens || 200 });
     const t = r.text.trim();
     return { yes: /^\W*yes\b/i.test(t), text: t, costMicro: r.costMicro };
+  }
+
+  /// What a job may still spend at OpenRouter: the account's credits, or the key's own limit when that is the smaller
+  /// (a key with a limit of 100 dollars stops at 100 with credits still on the account). Null with no reading.
+  static roomUsd(a) {
+    if (!a || !Number.isFinite(Number(a.leftUsd))) return null;
+    return a.limitLeftUsd == null ? Number(a.leftUsd) : Math.max(0, Math.min(Number(a.leftUsd), Number(a.limitLeftUsd)));
   }
 
   /// The OpenRouter account behind the key: what was bought, what was used, what is left, and the key's usage
@@ -164,6 +209,8 @@ export class Brain {
       body: JSON.stringify(body),
     });
     const j = await r.json().catch(() => null);
+    // a key at its own spending limit answers 403 too: that is a budget to raise, not a key to replace
+    if (r.status === 403 && /limit/i.test(String(j?.error?.message || ""))) { this._orBalance = null; await this.alerts?.budget(helper, "the OpenRouter key reached its own spending limit (raise it at openrouter.ai, Settings, API Keys)"); throw new BudgetError(helper, "the OpenRouter key reached its own spending limit"); }
     if (r.status === 401 || r.status === 403) { await this.alerts?.credentials("openrouter", `OpenRouter answered ${r.status}`); throw new Error(`OpenRouter refused the key (${r.status})`); }
     if (r.status === 402) { await this.alerts?.budget(helper, "the OpenRouter balance is empty"); throw new BudgetError(helper, "the OpenRouter balance is empty"); }
     if (!r.ok) throw new Error(`OpenRouter answered ${r.status}: ${j?.error?.message || "no detail"}`.slice(0, 200));
@@ -174,7 +221,7 @@ export class Brain {
     let k = await this.key(helper);
     const H = this.payHeaders(helper);
     let r = await this.gateway.chat(k.key, body, H);
-    if (r.status === 401 && r.body?.error?.code === "key_revoked") { k = await this.key(helper, { fresh: true }); r = await this.gateway.chat(k.key, body, H); }
+    if (r.status === 401) { k = await this.key(helper, { fresh: true }); r = await this.gateway.chat(k.key, body, H); } // rotated, run out, or forgotten: sign in once more
     if (r.status === 403 && r.body?.error?.code === "no_grant") { this.balanceCache.delete(helper); await this.alerts?.budget(helper, "the holder's grant is missing"); throw new BudgetError(helper, "the holder's grant is missing"); }
     if (r.status === 401) { await this.alerts?.credentials("gateway", `the gateway refused ${helper}'s key`); throw new Error(`the gateway refused ${helper}'s key`); }
     if (r.status === 402) { this.balanceCache.delete(helper); await this.alerts?.budget(helper, "gateway balance too low"); throw new BudgetError(helper, "gateway balance too low"); }

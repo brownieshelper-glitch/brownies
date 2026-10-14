@@ -3,7 +3,7 @@
    gateway; nothing is shown that was not read. */
 (async () => {
   const E = window.ethers;
-  const { load, coin, coinHeld, sugar, usd, eth, dollars, parse, toast, tx, gw, keyMessage, keyFromSignature, beneficiary, explainError } = window.Brownies;
+  const { load, coin, coinHeld, sugar, usd, eth, dollars, parse, toast, tx, gw, day, signIn, beneficiary, explainError } = window.Brownies;
   const B = window.Brownies;
   const $ = (id) => document.getElementById(id);
   const S = await load();
@@ -109,7 +109,25 @@
     if (!S.gateway) { $("btnRotate").disabled = true; $("btnSend").disabled = true; }
   }
 
-  async function refresh() { gate(); await Promise.all([readProtocol(), readUser(), readHelpers(), readSkills()]); gate(); }
+  async function refresh() { gate(); await Promise.all([readProtocol(), readUser(), readHelpers(), readSkills(), readClips()]); gate(); }
+
+  /* ---------- the milestone clips the brownies drew for this wallet (Praline) ---------- */
+  async function readClips() {
+    const a = account(), panel = $("clipsPanel"), box = $("clips");
+    if (!a || !S.gateway) { panel.hidden = true; return; }
+    let clips = [];
+    try { const r = await fetch(S.gateway.replace(/\/$/, "") + "/praline/of/" + a); if (r.ok) clips = (await r.json()).clips || []; } catch (_) { clips = []; }
+    box.replaceChildren();
+    for (const c of clips) {
+      const fig = document.createElement("figure");
+      const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none"; v.src = c.url; if (c.poster) v.poster = c.poster;
+      const cap = document.createElement("figcaption");
+      const t = document.createElement("span"); t.textContent = c.title + ", " + new Date(c.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+      const dl = document.createElement("a"); dl.className = "link"; dl.href = c.url; dl.download = ""; dl.textContent = "Save";
+      cap.append(t, dl); fig.append(v, cap); box.append(fig);
+    }
+    panel.hidden = clips.length === 0;
+  }
 
   /* ---------- the brownies on the payroll, for tips ---------- */
   let helpers = [];
@@ -209,7 +227,15 @@
     const r = await tx(btn, () => signerOf(token).approve(spender, amountNeeded), `${name} approved. Now confirm the second step.`, EXP);
     return !!r;
   }
-  async function indexTx(hash) { await gw(S, "/api/protocol/index-tx", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tx: hash }) }); }
+  /* Tells the gateway about an activation, so the dollars show as soon as they may. The gateway credits a payment
+     once a few blocks stand on top of it (about a minute): until then it answers "pending" with the seconds left,
+     and it is asked again when they have passed. */
+  async function indexTx(hash, tries = 3) {
+    const r = await gw(S, "/api/protocol/index-tx", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tx: hash }) });
+    if (!(r.ok && r.body && r.body.pending) || tries <= 0) return;
+    const wait = Math.min(120, Math.max(5, Number(r.body.wait_seconds) || 60));
+    setTimeout(() => { indexTx(hash, tries - 1).then(refresh).catch(() => {}); }, (wait + 3) * 1000);
+  }
 
   /* ---------- stake ---------- */
   $("maxStake").onclick = () => { $("inStake").value = E.formatUnits(U.wallet > 0n ? U.wallet : U.staked, 18); };
@@ -242,14 +268,14 @@
   $("btnActivate").onclick = async () => {
     const v = need("inActivate", 6, "SUGAR"); if (v == null) return;
     if (v > U.sugar) return toast("Your wallet does not hold that much SUGAR.", "err");
-    const r = await tx($("btnActivate"), () => signerOf(S.sugar)["activate(uint256)"](v), "Activated. The dollars are on your key.", EXP);
+    const r = await tx($("btnActivate"), () => signerOf(S.sugar)["activate(uint256)"](v), "Activated. The dollars reach your key in about a minute.", EXP);
     if (r) { $("inActivate").value = ""; await indexTx(r.hash); refresh(); }
   };
 
   /* ---------- the key ---------- */
   async function makeKey() {
-    const sig = await Wt.state.signer.signMessage(keyMessage(S.cfg.chainId, U.epoch));
-    U.key = keyFromSignature(sig, U.epoch);
+    const k = await signIn(S, Wt.state.signer, account());
+    U.key = k.key; U.epoch = k.epoch; U.keyUntil = k.expiresAt;
     return U.key;
   }
   $("btnKey").onclick = async () => {
@@ -258,6 +284,7 @@
     try {
       await makeKey();
       set("keyBox", U.key); $("keyWrap").hidden = false;
+      if (U.keyUntil) toast("Key made. It works until " + day(U.keyUntil) + ". Keep it secret.");
     } catch (e) { toast(explainError(e), "err"); }
     finally { b.textContent = label; b.classList.remove("busy"); b.disabled = false; }
   };
@@ -269,10 +296,10 @@
       if (!U.key) await makeKey();
       const r = await gw(S, "/v1/key/rotate", { method: "POST", headers: { authorization: "Bearer " + U.key } });
       if (!r.ok) throw new Error("rotate");
-      U.epoch = Number(r.body.epoch);
+      U.key = null; // every key of this wallet is refused from now on, the one just used too
       await makeKey();
       set("keyBox", U.key); $("keyWrap").hidden = false;
-      toast("New key made. The old key no longer works.");
+      toast("New key made. Every older key of this wallet no longer works.");
     } catch (e) { toast(e?.message === "rotate" ? "The gateway did not answer. Try again." : explainError(e), "err"); }
     finally { b.textContent = label; b.classList.remove("busy"); b.disabled = false; }
   };
@@ -285,7 +312,7 @@
     if (!(await approveIfShort(btn, S.usdc, S.d.minter, v, "USDC"))) return;
     const m = signerOf(S.minter);
     const r = activate
-      ? await tx(btn, () => m.mintAndActivate(v, beneficiary(account())), "Bought and activated. The dollars are on your key.", EXP)
+      ? await tx(btn, () => m.mintAndActivate(v, beneficiary(account())), "Bought and activated. The dollars reach your key in about a minute.", EXP)
       : await tx(btn, () => m.mint(account(), v), "Bought. The SUGAR is in your wallet.", EXP);
     if (r) { $("inBuy").value = ""; if (activate) await indexTx(r.hash); refresh(); }
   }
@@ -318,7 +345,7 @@
       const out = $("reply");
       if (!r.ok) {
         const why = r.status === 402 ? "Your balance is too low for this request. Activate more SUGAR."
-          : r.status === 401 ? "The gateway refused the key. Press Show my key and try again."
+          : r.status === 401 ? "The gateway refused the key. Press Get my key and try again."
           : r.body?.error?.message ? String(r.body.error.message).slice(0, 200) : "The gateway did not answer. Try again.";
         toast(why, "err");
         return;

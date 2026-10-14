@@ -38,7 +38,7 @@ test("the 402 body: version 2, the resource, one exact requirement in USDC on Ba
 test("a payment the gateway's payer signs passes the checks; tampering, a short amount, an expiry or a stranger's signature do not", async () => {
   const wallet = Wallet.createRandom();
   let now = T0;
-  const payer = new X402Payer({ wallet, chainId: 8453, now: () => now, maxMicro: 10_000_000 });
+  const payer = new X402Payer({ wallet, chainId: 8453, now: () => now, maxMicro: 10_000_000, allowTo: [PAY_TO] });
   const required = requirement({ chainId: 8453, asset: USDC[8453], payTo: PAY_TO, micro: 1_000_000, url: "https://api.test/shop/note", maxTimeoutSeconds: 600 });
   const { payload } = await payer.sign(required);
   const ok = checkPayment(payload, required, { now });
@@ -67,7 +67,7 @@ test("a payment the gateway's payer signs passes the checks; tampering, a short 
 test("the seller asks the chain (nonce unused, balance there), settles by submitting the transfer, and is closed without a key or without gas", async () => {
   const wallet = Wallet.createRandom();
   const now = T0;
-  const payer = new X402Payer({ wallet, chainId: 8453, now: () => now });
+  const payer = new X402Payer({ wallet, chainId: 8453, now: () => now, allowTo: [PAY_TO] });
   const chain = fakeChain();
   const settler = Wallet.createRandom();
   const log = [];

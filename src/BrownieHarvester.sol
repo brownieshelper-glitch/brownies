@@ -11,13 +11,15 @@ pragma solidity ^0.8.26;
   whenever at least a few hundredths of an ETH have gathered. Each claim:
 
     1. wraps any plain ETH that arrived into WETH, and counts what is new;
-    2. while the program is ON, books 40% of the new WETH for the Brownies main wallet and 60% for the swap;
+    2. while the program is ON, books 35% of the new WETH for the Brownies main wallet (the team) and 65% for the
+       swap;
        while it is OFF, books all of it for the main wallet;
     3. when at least MIN_SWAP is waiting, swaps up to MAX_SWAP of it for USDC on the Uniswap v3 WETH/USDC pool,
        refusing any swap whose output is more than BAND_BPS under the pool's own 30-minute average price. The swap
        runs in its own call: if it fails, the WETH simply waits for the next claim and nothing else is blocked;
-    4. of that USDC, 35/65 (35% of the whole) funds the stakers' stream in BrownieStaking, and 30/65 (30% of the whole)
-       is minted as SUGAR at par into the TeamVault, the budget of the brownies;
+    4. of that USDC, 45/65 (45% of the whole) is minted as SUGAR at par into the TeamVault, the budget of the
+       brownies (their AI, their videos, their servers), and 20/65 (20% of the whole) funds the stakers' stream in
+       BrownieStaking (the owner's split of 2026-10-14: the brownies first);
     5. unwraps what the main wallet is owed and sends it as ETH.
 
   Both USDC legs end in the inference funding wallet: BrownieStaking.fund and SugarMinter.mint each pull the USDC
@@ -46,9 +48,9 @@ contract BrownieHarvester {
     //////////////////////////////////////////////////////////////*/
 
     uint256 public constant BPS = 10_000;
-    uint256 public constant MAIN_BPS = 3_500; // 35% of every claim, the protocol's cut
-    uint256 public constant STAKERS_BPS = 3_500; // 35%, streamed to BROWNIE stakers as SUGAR
-    uint256 public constant TEAM_BPS = 3_000; // 30%, SUGAR minted into the TeamVault for the brownies (the owner's choice: the agents are the product)
+    uint256 public constant MAIN_BPS = 3_500; // 35% of every claim, the team's (the main wallet)
+    uint256 public constant STAKERS_BPS = 2_000; // 20%, streamed to BROWNIE stakers as SUGAR
+    uint256 public constant TEAM_BPS = 4_500; // 45%, SUGAR minted into the TeamVault for the brownies (the owner's choice: the agents are the product)
     uint256 public constant MIN_SWAP = 0.03 ether; // below this the WETH waits, so dust is never sandwiched
     uint256 public constant MAX_SWAP = 20 ether; // one claim swaps at most this; the rest waits for the next one
     uint256 public constant BAND_BPS = 100; // the swap must land within 1% of the pool's 30-minute average

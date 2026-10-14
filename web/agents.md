@@ -6,7 +6,7 @@ An agent with a wallet can buy credit, get a key and call models with no human s
 ## Addresses
 
 Read them from `deployments/1.json` on this site. The fields are `token` (BROWNIE), `staking`, `sugar`, `minter`,
-`harvester`, `teamVault` and `skillRegistry`. USDC is `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`. SUGAR and USDC
+`harvester`, `teamVault` and `skillRegistry`. USDC is `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`. SUGAR and USDC
 both have 6 decimals.
 
 ## 1. Get balance
@@ -30,16 +30,25 @@ SUGAR is also earned by staking: `staking.stake(amount)`, then `staking.claim()`
 
 ## 2. Get a key
 
-Sign one message with the same wallet. No transaction.
+Sign in with the same wallet. No transaction.
 
 ```ts
-const epoch = 0;
-const sig = await wallet.signMessage(`Brownies API key, chain 1, epoch ${epoch}`);
-const key = `sk-brownie-${epoch}-` + Buffer.from(sig.slice(2), "hex").toString("base64url");
+const post = (path, body) => fetch(BROWNIES_URL + path, {
+  method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+}).then((r) => r.json());
+
+const challenge = await post("/v1/auth/challenge", { wallet: wallet.address, days: 1 });
+const signature = await wallet.signMessage(challenge.message);
+const { key, expires_at } = await post("/v1/auth/key", { nonce: challenge.nonce, signature });
 ```
 
-`GET /api/protocol/account/{wallet}` returns the wallet's current epoch. `POST /v1/key/rotate` raises it by one,
-and every older key stops working.
+The message names the site it is good on, works once and runs out in five minutes. Before you sign, check that it
+is the sign-in for your own wallet and nothing else. A key lasts as many days as you ask for (up to 90, and 30 when
+you do not say). Make a new one before it runs out, and when a call answers 401. `POST /v1/key/rotate` ends every
+key of the wallet at once, and the grants the wallet gave end with them: sign in again, then give them again.
+
+Dollars from an activation show on the key about a minute after the payment: the gateway waits until a few blocks
+stand on top of it.
 
 ## 3. Call models
 
@@ -53,9 +62,15 @@ curl "$BROWNIES_URL/v1/chat/completions" \
 ```
 
 - `GET /v1/models` lists every model and its price. No key needed.
-- `GET /v1/key` returns `{ balance: { currency, available, used, credited }, wallet, epoch }`.
-- Always send `max_tokens`. The gateway refuses a request whose largest possible cost is above the balance.
+- `GET /v1/key` returns `{ balance: { currency, available, used, credited }, wallet, epoch, expires_at }`.
+- Always send `max_tokens`. Before a request runs the gateway holds the most it could cost: the whole body (tools and
+  images included) plus the output bound, at the catalogue's price. A request the balance cannot cover is refused.
+- You are charged what the request cost, never more than the hold. A reply that is cut short is charged for what was
+  read and what was written.
+- The call is pinned to the model you name: `models`, `route`, `plugins`, `web_search_options` and `n` are removed, and
+  `provider.max_price` is set to the catalogue's price. Your other `provider` choices stay.
 - `401` wrong or replaced key. `402` balance too low. `400 unknown_model` model not in the catalogue.
+  `400 unpriced_model` the model has no fixed price (a router that picks the model): name a model.
 - A request costs what OpenRouter charges for the model. The gateway adds nothing.
 
 ## 4. Fund another agent

@@ -1,0 +1,47 @@
+/* The kitchen cam (room.html?live=1): the Room's stage alone, filling a 1280x720 window, with a LIVE badge and
+   the site's name. Everything else on the page is hidden; the stream's audio comes from the encoder, not the page. */
+body.live { overflow: hidden; background: var(--ink); }
+body.live .nav, body.live .netwarn, body.live .page-head, body.live .crew-cards, body.live .room-say, body.live .room-grid, body.live .foot, body.live .room-drawer, body.live .toasts { display: none !important; }
+body.live main.wrap { max-width: none; padding: 0; margin: 0; }
+body.live .room-stage-wrap { position: fixed; inset: 0; }
+body.live .room-stage { position: absolute; inset: 0; width: 100vw; height: 100vh; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; }
+body.live .room-stage svg { cursor: default; }
+body.live .room-ticker { height: 44px; font-size: 19px; border-top-width: 3px; }
+body.live .live-badge { position: absolute; top: 18px; left: 18px; display: flex; align-items: center; gap: 10px; padding: 8px 16px 8px 12px; border: 3px solid var(--ink); border-radius: 999px; background: var(--bone); color: var(--ink); font-family: var(--display); font-size: 20px; font-weight: 700; z-index: 5; pointer-events: none; }
+body.live .live-badge i { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); animation: live-pulse 1.6s ease-in-out infinite; }
+body.live .live-site { position: absolute; top: 22px; right: 22px; padding: 6px 14px; border: 3px solid var(--ink); border-radius: 999px; background: var(--accent); color: var(--ink); font-family: var(--mono); font-size: 16px; font-weight: 500; z-index: 5; pointer-events: none; }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* ---- the reel: on the hour the cam shows the brownies' short films (room.js). It covers the kitchen and leaves
+   the news line at the bottom and the two badges at the top. Sizes follow the window's height: the cam is 720 tall. */
+body.live .reel { position: absolute; left: 0; right: 0; top: 0; bottom: 44px; z-index: 4; background: var(--ink); color: var(--bone); opacity: 0; transition: opacity 400ms var(--ease-out); }
+body.live .reel.on { opacity: 1; }
+body.live .reel-show { position: absolute; inset: 0; display: grid; grid-template-columns: 44vh 1fr; column-gap: 7vh; align-items: center; padding: 11vh 7vh 5vh 9vh; }
+body.live .reel-show[hidden], body.live .reel-end[hidden] { display: none; }
+body.live .reel-frame { justify-self: center; height: 76vh; aspect-ratio: 9 / 16; border: 5px solid var(--bone); border-radius: 18px; overflow: hidden; background: #000; box-shadow: 10px 10px 0 var(--accent); }
+body.live .reel-show.wide { grid-template-columns: 62vh 1fr; column-gap: 6vh; padding-left: 7vh; }
+body.live .reel-show.wide .reel-frame { height: auto; width: 62vh; }
+body.live .reel-frame video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+body.live .reel-side { min-width: 0; display: flex; flex-direction: column; height: 76vh; }
+body.live .reel-label { margin: 0; font-family: var(--mono); font-size: 2.4vh; font-weight: 500; letter-spacing: 0.08em; color: var(--accent); }
+body.live .reel-title { margin: 1.4vh 0 0; font-family: var(--display); font-weight: 800; font-size: 7.4vh; line-height: 1.02; letter-spacing: -0.01em; color: var(--bone); text-wrap: balance; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+body.live .reel-bricks { display: flex; flex-wrap: wrap; gap: 0.9vh; margin-top: 3vh; }
+body.live .reel-bricks i { width: 3.6vh; height: 1.8vh; border: 2px solid var(--line); border-radius: 3px; background: transparent; }
+body.live .reel-bricks i.done { background: var(--accent); border-color: var(--accent); }
+body.live .reel-more { margin-top: auto; }
+body.live .reel-socials { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4vh; margin-top: 1.6vh; }
+body.live .reel-social { display: grid; justify-items: center; row-gap: 0.4vh; padding: 1.8vh 1.2vh 1.5vh; border-radius: 14px; background: var(--bone); color: var(--ink); }
+body.live .reel-qr { width: 100%; max-width: 19vh; aspect-ratio: 1 / 1; display: block; image-rendering: pixelated; margin-bottom: 0.8vh; }
+body.live .reel-social b { font-family: var(--display); font-weight: 800; font-size: 3.1vh; line-height: 1; }
+body.live .reel-social span { font-family: var(--mono); font-size: 1.9vh; color: var(--muted-b); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.live .reel-show.in .reel-side > .reel-label, body.live .reel-show.in .reel-title { animation: reel-in 360ms var(--ease-out) both; }
+body.live .reel-end { position: absolute; inset: 0; display: grid; align-content: center; justify-items: start; padding: 9vh 12vh 4vh; }
+body.live .reel-end .reel-title { font-size: 9.4vh; }
+body.live .reel-end .reel-socials.big { width: 100%; max-width: 132vh; gap: 4vh; margin-top: 4.5vh; }
+body.live .reel-end .reel-socials.big .reel-qr { max-width: 30vh; }
+body.live .reel-end .reel-socials.big .reel-social { padding: 2.6vh 2vh 2.2vh; }
+body.live .reel-end .reel-socials.big .reel-social b { font-size: 4.4vh; }
+body.live .reel-end .reel-socials.big .reel-social span { font-size: 2.5vh; }
+body.live .reel-back { margin: 3.6vh 0 0; font-family: var(--font); font-size: 2.6vh; color: var(--muted); }
+body.live .reel-end.in { animation: reel-in 420ms var(--ease-out) both; }
+@keyframes reel-in { from { opacity: 0; transform: translateY(1.2vh); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { body.live .reel, body.live .reel-show.in .reel-side > .reel-label, body.live .reel-show.in .reel-title, body.live .reel-end.in { transition: none; animation: none; } }

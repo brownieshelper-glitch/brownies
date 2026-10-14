@@ -14,8 +14,10 @@ export const NAMES = [
   "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "HF_CREDENTIALS",
   "INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET", "LINKEDIN_VERSION", "TRUFFLE_PRIVATE_KEY",
   "FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY", "GLAZE_PRIVATE_KEY", "SWIRL_PRIVATE_KEY", "SPRINKLE_PRIVATE_KEY", "HELPERS_MNEMONIC", "VIDEOS_DIR", "FFMPEG_PATH",
-  "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF", "ADMIN_WALLETS", "ADMIN_ORIGINS",
-  "SHOP_PAY_TO", "SHOP_SETTLER_PRIVATE_KEY", "BASE_RPC_URL", "SHOP_CHAIN_ID",
+  "SITE_URL", "DB_PATH", "RPC_URL", "DEPLOYMENT_JSON", "HELPERS_PORT", "HELPERS_CONFIG", "HELPERS_OFF", "ADMIN_WALLETS", "ADMIN_ORIGINS", "ADMIN_PIN",
+  "SHOP_PAY_TO", "SHOP_SETTLER_PRIVATE_KEY", "BASE_RPC_URL", "SHOP_CHAIN_ID", "EMBER_URL",
+  "META_ADS_TOKEN", "META_AD_ACCOUNT_ID", "TIKTOK_ADS_TOKEN", "TIKTOK_ADVERTISER_ID", "X_ADS_CONSUMER_KEY", "X_ADS_CONSUMER_SECRET", "X_ADS_ACCESS_TOKEN", "X_ADS_ACCESS_SECRET", "X_ADS_ACCOUNT_ID",
+  "SANDBOX_URL", "SANDBOX_TOKEN",
 ];
 
 /// The helpers switched off for now, from HELPERS_OFF="fudge,chip" (names, any case, spaces allowed). A helper
@@ -79,11 +81,17 @@ export function settings(env = process.env) {
     configFile: env.HELPERS_CONFIG || "", // another brownies.json, for example one kept outside the code folder
     adminWallets: String(env.ADMIN_WALLETS || "").split(/[\s,]+/).filter(Boolean), // wallets that may log into the control room with a signature
     adminOrigins: String(env.ADMIN_ORIGINS || "").split(/[\s,]+/).filter(Boolean), // extra page origins allowed to call /admin (the site's own is always allowed)
+    adminPin: String(env.ADMIN_PIN || "").trim(), // the owner's fixed six digits, asked for on top of the code or the signature (lib/admin.mjs)
   };
   // the shop's settings (lib/shop.mjs): the payout address (the first admin wallet unless SHOP_PAY_TO is set), the settler's key, the Base RPC, the chain id
   s.shop = { payTo: env.SHOP_PAY_TO || s.adminWallets[0] || "", settlerKey: env.SHOP_SETTLER_PRIVATE_KEY || "", rpcUrl: env.BASE_RPC_URL || "https://mainnet.base.org", chainId: Number(env.SHOP_CHAIN_ID || 8453) };
   if (mode === "prelaunch") need(env, "OPENROUTER_API_KEY");
   if (mode === "live") for (const k of ["FUDGE_PRIVATE_KEY", "CRUMB_PRIVATE_KEY", "NIB_PRIVATE_KEY", "CHIP_PRIVATE_KEY"]) need(env, k);
+  s.emberUrl = (env.EMBER_URL || "").replace(/\/$/, ""); // the kitchen cam server's status address (http://<ip>:8798), empty until it exists
+  // the ad platforms (Butterscotch, lib/ads/connectors.mjs): empty until the accounts and the API access exist
+  s.ads = { meta: { token: env.META_ADS_TOKEN || "", account: env.META_AD_ACCOUNT_ID || "" }, tiktok: { token: env.TIKTOK_ADS_TOKEN || "", advertiser: env.TIKTOK_ADVERTISER_ID || "" }, x: { consumerKey: env.X_ADS_CONSUMER_KEY || "", consumerSecret: env.X_ADS_CONSUMER_SECRET || "", accessToken: env.X_ADS_ACCESS_TOKEN || "", accessSecret: env.X_ADS_ACCESS_SECRET || "", account: env.X_ADS_ACCOUNT_ID || "" } };
+  s.sandbox = { url: (env.SANDBOX_URL || "").replace(/\/$/, ""), token: env.SANDBOX_TOKEN || "" }; // the box strangers' code runs in (sandbox/server.mjs), for the code reviews; empty until it is set up
+  s.emberUrl = (env.EMBER_URL || "").replace(/\/$/, ""); // the kitchen cam server's status address (http://<ip>:8798), empty until it exists
   if (s.github.repo && !/^[\w.-]+\/[\w.-]+$/.test(s.github.repo)) throw new Error("GITHUB_REPO must be owner/name.");
   return s;
 }

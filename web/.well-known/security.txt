@@ -1,0 +1,6 @@
+Contact: mailto:brownieshelper@gmail.com
+Contact: https://t.me/feedthebrownies
+Expires: 2027-10-12T00:00:00.000Z
+Preferred-Languages: en, it
+Canonical: https://feedthebrownies.com/.well-known/security.txt
+Policy: https://feedthebrownies.com/privacy.html

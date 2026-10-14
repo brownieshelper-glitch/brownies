@@ -26,6 +26,14 @@
   if (!stageEl || !svg) return;
   const params = new URLSearchParams(location.search);
   const demo = params.get("demo") === "1";
+  // ?live=1: the kitchen cam (Ember): the stage alone, full screen, a LIVE badge and the site's name; nothing to click
+  const live = params.get("live") === "1";
+  if (live) {
+    document.body.classList.add("live");
+    const badge = document.createElement("div"); badge.className = "live-badge"; badge.innerHTML = '<i></i><span>LIVE from the kitchen</span>';
+    const site = document.createElement("div"); site.className = "live-site"; site.textContent = "feedthebrownies.com";
+    stageEl.append(badge, site);
+  }
   const reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const S = await B.load();
 
@@ -92,7 +100,7 @@
   const screenRight = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 96, "", "screen-big", viewDays, { "text-anchor": "end" });
   const screenRightSub = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 124, "", "screen-text", viewDays, { "text-anchor": "end" });
   const screenFoot = text(SCREEN.x + 22, SCREEN.y + SCREEN.h - 18, "", "screen-label", viewDays);
-  const screenHint = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 34, "CLICK: NEXT VIEW", "screen-label", screenG, { "text-anchor": "end" });
+  const screenHint = text(SCREEN.x + SCREEN.w - 22, SCREEN.y + 34, live ? "THE SCREEN" : "CLICK: NEXT VIEW", "screen-label", screenG, { "text-anchor": "end" });
   const screenFlash = mk("rect", { x: SCREEN.x, y: SCREEN.y, width: SCREEN.w, height: SCREEN.h, rx: 14, fill: "#FF5A1F", opacity: 0, "pointer-events": "none" }, screenG);
   let screenMode = 0;
   const VIEWS = [viewDays, viewWeek, viewTower];
@@ -108,7 +116,7 @@
   mk("circle", { cx: 1330, cy: 118, r: 5, fill: "#2A1710" }, clockG);
   mk("rect", { class: "plate", x: 1276, y: 174, width: 108, height: 24, rx: 6 }, clockG);
   const clockLabel = text(1330, 191, "LOCAL TIME", "plate-text", clockG, { "text-anchor": "middle" });
-  let clockZone = "local";
+  let clockZone = live ? "kitchen" : "local"; // the cam shows the kitchen's time
   function tickClock() {
     const d = new Date();
     let hh = d.getHours(), mm = d.getMinutes();
@@ -126,7 +134,7 @@
   const rulesG = mk("g", {}, L.wall);
   mk("rect", { class: "rules-board", x: 1216, y: 226, width: 344, height: 250, rx: 10 }, rulesG);
   text(1236, 254, "THE RULES, FIXED IN CODE", "rules-head", rulesG);
-  ["2% tax on every trade", "35% to stakers, as SUGAR", "35% to the protocol", "30% to the brownies", "1 SUGAR pays for 1 dollar of AI", "1/30 of the vault a day", "3 days of voting on a skill"].forEach((s, i) => text(1236, 286 + i * 27, s, "rules-text", rulesG));
+  ["2% tax on every trade", "45% to the brownies", "35% to the team", "20% to stakers, as SUGAR", "1 SUGAR pays for 1 dollar of AI", "1/30 of the vault a day", "3 days of voting on a skill"].forEach((s, i) => text(1236, 286 + i * 27, s, "rules-text", rulesG));
 
   // ---------- the jobs board and the sugar jars ----------
   const boardG = mk("g", {}, L.wall);
@@ -161,7 +169,7 @@
     const hit = mk("rect", { class: "hit", x: x - 8, y: 344, width: 66, height: 82 }, L.hits);
     hit.addEventListener("click", () => { dropCube(x + 25 + rand(-10, 10), rand(580, 700), 420); beep(740, 0.05, "triangle", 0.03); });
   }
-  text(225, 452, "SUGAR  (CLICK A JAR)", "plate-text", shelfG, { "text-anchor": "middle", fill: "#C9B8A8" });
+  text(225, 452, live ? "SUGAR" : "SUGAR  (CLICK A JAR)", "plate-text", shelfG, { "text-anchor": "middle", fill: "#C9B8A8" });
 
   // ---------- the furniture on the floor ----------
   // a station: a desk with a monitor, a name plate, and a spot in front where its brownie stands
@@ -793,10 +801,102 @@
   $("lightsBtn").addEventListener("click", toggleLights);
   $("bellBtn").addEventListener("click", ringBell);
 
+  // ---------- the reel: on the hour the cam shows the brownies' short films, and where to find more ----------
+  // Live mode only. At every full hour the kitchen gives way to the videos the owner approved (the helpers list
+  // them at /clips/reel.json, each as a light copy without sound: the stream carries the kitchen's music), one
+  // after another, with the three accounts and a code to scan beside them; a closing card, then the kitchen is
+  // back. Six minutes at most: when there are more films than that, each hour starts one film further on, so all
+  // of them come round. Any trouble (no list, a film that will not play) only shortens the reel.
+  // ?reel=1 starts one a few seconds after the page loads, ?reel=end shows the closing card, for a look.
+  const SOCIALS = [
+    { id: "x", name: "X", handle: "@Feedthebrownies" },
+    { id: "instagram", name: "Instagram", handle: "@feedthebrownies" },
+    { id: "tiktok", name: "TikTok", handle: "@browniesbrownies82" },
+  ];
+  const REEL_SECONDS = 330, REEL_END_SECONDS = 15;
+  let reelOn = false, reelHour = "";
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  function socialTiles(big) {
+    const row = el("div", "reel-socials" + (big ? " big" : ""));
+    for (const s of SOCIALS) {
+      const t = el("div", "reel-social");
+      const q = el("img", "reel-qr"); q.src = `assets/qr-${s.id}.svg`; q.alt = "";
+      t.append(q, el("b", null, s.name), el("span", null, s.handle));
+      row.append(t);
+    }
+    return row;
+  }
+  async function reelList() {
+    const src = B.local && params.get("reelsrc") ? params.get("reelsrc") : S.gateway ? S.gateway.replace(/\/$/, "") + "/clips/reel.json" : "";
+    if (!src) return [];
+    try { const r = await fetch(src, { cache: "no-store" }); const j = r.ok ? await r.json() : null; return Array.isArray(j?.videos) ? j.videos.filter((v) => v && v.url) : []; } catch (_) { return []; }
+  }
+  /// The films of this hour: all of them when they fit, otherwise as many as fit, starting one further each hour.
+  function reelPick(all, hour) {
+    if (!all.length) return [];
+    const from = hour % all.length, out = []; let total = 0;
+    for (let i = 0; i < all.length; i++) { const v = all[(from + i) % all.length], s = Number(v.seconds) || 12; if (out.length && total + s > REEL_SECONDS) break; out.push(v); total += s; }
+    return out;
+  }
+  function playOne(video, v) {
+    return new Promise((done) => {
+      let over = false;
+      const end = () => { if (over) return; over = true; clearTimeout(guard); video.onended = video.onerror = null; done(); };
+      const guard = setTimeout(end, ((Number(v.seconds) || 15) + 12) * 1000); // a film that stalls is left behind
+      video.onended = end; video.onerror = end;
+      video.src = v.url; video.muted = true; video.playsInline = true;
+      const p = video.play(); if (p && p.catch) p.catch(end);
+    });
+  }
+  async function runReel(only) {
+    if (reelOn) return;
+    reelOn = true;
+    const wrap = el("div", "reel"); wrap.setAttribute("aria-hidden", "true");
+    try {
+      const films = only === "end" ? [] : reelPick(await reelList(), Math.floor(Date.now() / 3_600_000));
+      if (!films.length && only !== "end") return;
+      const show = el("div", "reel-show");
+      const frame = el("div", "reel-frame"), video = el("video"); frame.append(video);
+      const side = el("div", "reel-side"), label = el("p", "reel-label"), title = el("h2", "reel-title"), bricks = el("div", "reel-bricks");
+      films.forEach(() => bricks.append(el("i")));
+      const more = el("div", "reel-more"); more.append(el("p", "reel-label", "MORE OF US"), socialTiles(false));
+      side.append(label, title, bricks, more); show.append(frame, side);
+      const endCard = el("div", "reel-end"); endCard.append(el("p", "reel-label", "THAT WAS THE REEL"), el("h2", "reel-title", "Follow the brownies"), socialTiles(true), el("p", "reel-back", "Back to the kitchen in a moment."));
+      endCard.hidden = true;
+      wrap.append(show, endCard); stageEl.append(wrap);
+      requestAnimationFrame(() => wrap.classList.add("on"));
+      // the frame takes the film's own shape; a film that is wider than tall gets a wider place
+      video.addEventListener("loadedmetadata", () => { if (!video.videoWidth) return; frame.style.aspectRatio = video.videoWidth + " / " + video.videoHeight; show.classList.toggle("wide", video.videoWidth > video.videoHeight); });
+      for (let i = 0; i < films.length; i++) {
+        const v = films[i];
+        label.textContent = `THE REEL, ${i + 1} OF ${films.length}`;
+        title.textContent = v.title || "From the kitchen";
+        [...bricks.children].forEach((b, k) => b.classList.toggle("done", k <= i));
+        show.classList.remove("in"); void show.offsetWidth; show.classList.add("in");
+        await playOne(video, v);
+      }
+      show.hidden = true; endCard.hidden = false; endCard.classList.add("in");
+      await new Promise((r) => setTimeout(r, (only === "end" ? 600 : REEL_END_SECONDS) * 1000));
+      wrap.classList.remove("on");
+      await new Promise((r) => setTimeout(r, 500));
+    } catch (_) { /* the kitchen goes on */ }
+    finally { wrap.remove(); reelOn = false; }
+  }
+  function reelClock() {
+    const forced = params.get("reel");
+    if (forced) setTimeout(() => runReel(forced === "end" ? "end" : null), 2500);
+    setInterval(() => {
+      const d = new Date(), key = d.toISOString().slice(0, 13);
+      if (d.getMinutes() === 0 && key !== reelHour) { reelHour = key; runReel(); }
+    }, 15_000);
+  }
+
   // ---------- start ----------
   await Promise.all([summary(), loadActivity(true), extras()]);
   for (const a of actors) { if (!a.working) { a.mode = "wander"; const s = SPOTS[a.i % SPOTS.length]; a.x = s.x; a.y = s.y; } renderCard(a); }
   showView(0); renderKitchenCard(); renderTicker();
+  if (live) setInterval(() => { showView(screenMode + 1); screenFlash.setAttribute("opacity", 0.3); }, 60_000); // the cam turns the screen's page itself
+  if (live) reelClock();
   let last = 0;
   if (!reduce) requestAnimationFrame(function frame(now) { const dt = last ? Math.min((now - last) / 1000, 0.034) : 0.016; last = now; step(dt); requestAnimationFrame(frame); });
   else { for (const a of actors) pose(a, 0.016, 0, 0, depth(a.y)); }

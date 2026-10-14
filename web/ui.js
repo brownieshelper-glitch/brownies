@@ -39,7 +39,7 @@
 
   // cards come in as the page is scrolled to them; what is already on screen when the page opens stays as it is
   if (!reduce && "IntersectionObserver" in window) {
-    var picks = doc.querySelectorAll(".member, .facts li, .steps li, .splitkey > div, .splitbar, .bakery-how li, .studio-steps li, .studio-card, .board-totals div, .job-card, .baked-card, .crew div, .site, .city, .panel, .use-grid > *, .tbl, .foot-cols > div");
+    var picks = doc.querySelectorAll(".member, .facts li, .steps li, .splitkey > div, .splitbar, .taxflow, .bakery-how li, .studio-steps li, .studio-card, .board-totals div, .job-card, .baked-card, .crew div, .site, .city, .panel, .use-grid > *, .tbl, .foot-cols > div");
     var io = new IntersectionObserver(function (entries) {
       for (var i = 0; i < entries.length; i++) if (entries[i].isIntersecting) { entries[i].target.classList.add("in"); io.unobserve(entries[i].target); }
     }, { rootMargin: "0px 0px -6% 0px", threshold: 0.1 });

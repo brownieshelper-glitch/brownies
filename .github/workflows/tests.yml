@@ -17,9 +17,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: helpers/package-lock.json
+          cache-dependency-path: |
+            helpers/package-lock.json
+            gateway/package-lock.json
       - run: npm ci
         working-directory: helpers
+      # the shop's tests use the gateway's x402 code, whose packages (ethers) live in gateway/
+      - run: npm ci
+        working-directory: gateway
       - run: npm test
         working-directory: helpers
 
@@ -43,7 +48,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: foundry-rs/foundry-toolchain@v1
-      - run: forge install foundry-rs/forge-std transmissions11/solmate Uniswap/v4-core --no-git
-      - run: forge build
-      - run: forge test --no-match-path "test/Fork_*"
+        with:
+          fetch-depth: 0
+      # the contracts are built and tested when their own files change (src, test, script, lib, the Foundry files), so a
+      # change to the facts or to the helpers is not held up by them; a push with no earlier commit to compare runs them
+      - id: changed
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then echo "contracts=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$base" HEAD | grep -qE '^(src/|test/|script/|lib/|foundry\.toml$|remappings\.txt$)'; then echo "contracts=true" >> "$GITHUB_OUTPUT"; else echo "contracts=false" >> "$GITHUB_OUTPUT"; echo "no contract file changed: the contracts are not built"; fi
+      - if: steps.changed.outputs.contracts == 'true'
+        uses: foundry-rs/foundry-toolchain@v1
+      - if: steps.changed.outputs.contracts == 'true'
+        run: forge install foundry-rs/forge-std transmissions11/solmate Uniswap/v4-core --no-git
+      - if: steps.changed.outputs.contracts == 'true'
+        run: forge build
+      - if: steps.changed.outputs.contracts == 'true'
+        run: forge test --no-match-path "test/Fork_*"

@@ -15,6 +15,10 @@ export class Patch extends Helper {
     this.sleep = deps.sleep || ((ms) => this.clock.sleep(ms)); // the tests pass a sleep that moves their fake clock
   }
 
+  /// What Patch still needs, for the owner's roster.
+  setup() { return this.github?.configured ? {} : { missing: ["GitHub is not connected: without it there are no tests to wait for."] }; }
+  get services() { return ["github"]; }
+
   jobs() { return []; } // Patch works when Chip calls it, not on a clock
 
   /// The verdict on a pull request: { state: "passed" | "failed" | "none", checks: [{ name, conclusion }] }.

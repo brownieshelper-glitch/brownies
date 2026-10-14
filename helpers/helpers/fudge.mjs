@@ -17,6 +17,7 @@ import { tidy, problems } from "../lib/voice.mjs";
 import { cut, oneLine } from "../lib/text.mjs";
 import { xProblems, X_RULES, BIO_LINE, LINK, ADDRESS, bare, wantsOptOut, asksForLink, claimsStaff, isSensitive, staffLikeName, isBotBait } from "../lib/xrules.mjs";
 import { isSuggestion, flags as suggestionFlags, SUGGEST_LINE, noticeText } from "../lib/suggestions.mjs";
+import { ownXProblems } from "../lib/ownvideo.mjs";
 
 const DEFAULT_TOPICS = [
   "how a trade turns into SUGAR for stakers",
@@ -65,6 +66,15 @@ export class Fudge extends Helper {
     this.maxMedia = this.config.maxMediaPostsPerDay ?? 2; // clips and memes on X, counted apart from the text posts
     this.maxRepliesPerAuthor = this.config.maxRepliesPerAuthorPerDay ?? 2; // X: one answer per message, and no reply loops with one person
   }
+
+  /// What Fudge still needs, for the owner's roster.
+  setup() {
+    const missing = [], notes = [];
+    if (!this.x?.configured) missing.push("X is not connected: the X app's keys and the account's tokens go in the helpers settings on the server.");
+    if (this.page?.canPage?.()) notes.push("Every post also goes on the Facebook Page.");
+    return { missing, notes };
+  }
+  get services() { return ["x", "instagram"]; }
 
   jobs() {
     return [
@@ -168,15 +178,16 @@ export class Fudge extends Helper {
     return { id: posted?.id || null, url, text, place, facebook: fb?.url || null };
   }
 
-  /// The same words on the Facebook Page, when the owner allowed it. Never stops the post: a refusal is a log line.
+  /// The same words on the Facebook Page, when the owner allowed it. Never stops the post: a refusal is a log line and an alert to the owner (at most one an hour), kept as a trouble until a post goes through again.
   async toPage(text, what = "post", xId = null) {
     if (!this.page?.canPage?.()) return null;
     try {
       const fb = await this.page.pagePost({ message: text });
       if (xId) this.store.setMeta(`fudge:fb:${xId}`, fb.id); // so a delete on X takes the Page copy down too
       this.log(`[fudge] the ${what} is on the Facebook Page too: ${fb.url}`);
+      this.alerts?.resolved?.("fudge", "facebook");
       return fb;
-    } catch (e) { this.log(`[fudge] Facebook did not take the ${what}: ${cut(e.message, 120)}`); return null; }
+    } catch (e) { this.log(`[fudge] Facebook did not take the ${what}: ${cut(e.message, 120)}`); await this.alerts?.failure("fudge", "facebook", cut(e.message, 200)); return null; }
   }
 
   /// The owner takes a post down: on X, on the Facebook Page (the copy kept under fudge:fb:<id>), and off the site
@@ -268,6 +279,32 @@ export class Fudge extends Helper {
     if (!this.mediaOn) { this.log("[fudge] media posting is off: the file stays with the owner"); return null; }
     if (!this.x?.configured || !files.length) return null;
     return this.guard("post", () => this.post({ topic: String(topic || "").trim(), media: files, to }));
+  }
+
+  /// The owner's own words with his own video on X, exactly as he wrote them: he approved them on the video's card
+  /// (lib/ownvideo.mjs). No model writes anything. When the words are longer than a post on X, or carry what X
+  /// itself acts on, nothing is sent and { refused: [why] } comes back, so the caller can ask for a shorter post
+  /// written from them. The X client refuses the same things on its own. Returns { id, url, text, place } or null.
+  async postOwn({ text, files = [] }) {
+    if (!this.mediaOn) { this.log("[fudge] media posting is off: the file stays with the owner"); return null; }
+    if (!this.x?.configured || !files.length) return null;
+    const t = String(text || "").trim();
+    const refused = ownXProblems(t);
+    if (refused.length) { this.log(`[fudge] the owner's words cannot go on X as they are: ${refused.join("; ")}`); return { refused }; }
+    return this.guard("post", async () => {
+      const now = this.clock.now();
+      await this.status("Posting a video on X");
+      const mediaIds = [];
+      for (const f of files.slice(0, 4)) {
+        try { mediaIds.push((await this.x.uploadMedia(f)).mediaId); }
+        catch (e) { this.log(`[fudge] X did not take the file ${f}: ${cut(e.message, 100)}`); if (e.credentials) await this.alerts?.credentials("x", e.message); }
+      }
+      if (!mediaIds.length) { this.store.jobDone({ at: now, helper: "fudge", job: "post", ok: false, costMicro: 0, note: "media upload failed" }); return null; }
+      const posted = await this.x.post(t, { mediaIds });
+      this.store.addPost({ at: now, helper: "fudge", place: "x", kind: "media", text: t, externalId: posted.id, url: posted.url });
+      await this.report("post", cut(t, 160), { body: t.length > 160 ? t : null, url: posted.url, place: "x", cost_micro: 0 });
+      return { id: posted.id, url: posted.url, text: t, place: "x" };
+    });
   }
 
   /// What the brownies did today, from the gateway's team summary, as a block for the prompt ("" when unreachable).

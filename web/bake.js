@@ -4,7 +4,7 @@
    retires it. The Bakery token lives in this tab's session; the gateway key only in memory. */
 (async () => {
   const B = window.Brownies, K = window.Baked;
-  const { load, toast, gw, keyMessage, keyFromSignature, explainError } = B;
+  const { load, toast, gw, signIn, explainError } = B;
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const S = await load();
@@ -253,10 +253,7 @@
 
   async function ensureKey() {
     if (U.key) return U.key;
-    const r = await gw(S, `/api/protocol/account/${account()}`);
-    const epoch = Number(r.body?.epoch || 0);
-    const sig = await Wt.state.signer.signMessage(keyMessage(S.cfg.chainId, epoch));
-    U.key = keyFromSignature(sig, epoch);
+    U.key = (await signIn(S, Wt.state.signer, account())).key;
     return U.key;
   }
   async function readGrant(b) {

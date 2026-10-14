@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Wallet } from "ethers";
 import { X402Payer, b64, USDC } from "../x402.mjs";
-import { Ambient, foldSse } from "../ambient.mjs";
+import { Ambient, foldSse, AMBIENT_PAY_TO } from "../ambient.mjs";
 
 const CATALOGUE = { object: "list", data: [
   { id: "z-ai/glm-5.2", name: "GLM 5.2", is_ready: true, context_length: 202752, pricing: { input: 0.6, output: 2, prompt: "0.0000006", completion: "0.000002" } },
@@ -30,7 +30,7 @@ function world({ amount = "896" } = {}) {
     return new Response("nope", { status: 404 });
   };
   let t = 1_000_000;
-  const payer = new X402Payer({ wallet: Wallet.createRandom(), fetch });
+  const payer = new X402Payer({ wallet: Wallet.createRandom(), fetch, allowTo: [AMBIENT_PAY_TO] });
   const ambient = new Ambient({ payer, fetch, baseUrl: "https://jumpgate.test", catalogueUrl: "https://catalogue.test/v1/models", now: () => t });
   return { calls, payer, ambient, tick: (ms) => { t += ms; } };
 }
@@ -71,4 +71,16 @@ test("a chat: the quote's headers go on the paid request, the exact amount is pa
   assert.deepEqual(j.choices[0].message, { role: "assistant", content: "Hello there." }); assert.equal(j.choices[0].finish_reason, "stop");
   assert.deepEqual(j.usage, { prompt_tokens: 11, completion_tokens: 3 });
   assert.equal(foldSse("").choices[0].message.content, "");
+});
+
+test("a quote states its amounts or it is not a quote: a negative, a missing or an upside-down amount is refused; the known payee is an address", async () => {
+  const quoteWith = (j) => new Ambient({ payer: null, fetch: async () => Response.json(j) }).quote({});
+  await assert.rejects(() => quoteWith({ amount_micro_usdc: -1000000 }), /Ambient quote: no usable amounts/);
+  await assert.rejects(() => quoteWith({}), /Ambient quote: no usable amounts/);
+  await assert.rejects(() => quoteWith({ amount_micro_usdc: 900, max_amount_micro_usdc: 100 }), /Ambient quote: no usable amounts/);
+  await assert.rejects(() => quoteWith({ amount_micro_usdc: "abc" }), /Ambient quote: no usable amounts/);
+  const q = await quoteWith({ amount_micro_usdc: 896.2, max_amount_micro_usdc: 1200, headers: { "x402-a": "1" } });
+  assert.deepEqual([q.micro, q.maxMicro], [897, 1200]);
+  assert.equal((await quoteWith({ amount_micro_usdc: 0 })).maxMicro, 0, "free is a price");
+  assert.match(AMBIENT_PAY_TO, /^0x[0-9a-fA-F]{40}$/);
 });

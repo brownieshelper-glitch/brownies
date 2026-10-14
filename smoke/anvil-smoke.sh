@@ -65,7 +65,7 @@ mv "$J" web/deployments/4663.smoke.json
 step "3. the gateway, against anvil"
 mkdir -p gateway/data; rm -f gateway/data/smoke.sqlite*
 # exec, so the PID we record is node itself and the cleanup kills the real process, not a subshell around it
-( cd gateway && exec env PORT=$GPORT RPC_URL=$RPC CHAIN_ID=4663 SUGAR_ADDRESS=$SUGAR HARVESTER_ADDRESS=$HARVESTER START_BLOCK=$BLOCK DB_PATH=./data/smoke.sqlite OPENROUTER_API_KEY=$UPSTREAM_KEY node server.mjs >/tmp/brownies-gw.log 2>&1 ) &
+( cd gateway && exec env CONFIRMATIONS=0 SIGNIN_SITES=localhost PORT=$GPORT RPC_URL=$RPC CHAIN_ID=4663 SUGAR_ADDRESS=$SUGAR HARVESTER_ADDRESS=$HARVESTER START_BLOCK=$BLOCK DB_PATH=./data/smoke.sqlite OPENROUTER_API_KEY=$UPSTREAM_KEY node server.mjs >/tmp/brownies-gw.log 2>&1 ) &
 GW_PID=$!
 for i in $(seq 1 30); do curl -s "$GW/health" | grep -q '"ok":true' && break; sleep 1; done
 curl -s "$GW/health"; echo
@@ -82,13 +82,13 @@ echo "activation tx $TX"
 echo "funding wallet USDG: $("$F/cast" call $USDG "balanceOf(address)(uint256)" $A2 --rpc-url "$RPC")  (expect 5000000)"
 echo "SUGAR totalActivated: $("$F/cast" call $SUGAR "totalActivated()(uint256)" --rpc-url "$RPC")"
 
-step "5. the gateway credits it and the wallet's signature is the key"
+step "5. the gateway credits it and the wallet signs in for a key"
 curl -s -X POST "$GW/api/protocol/index-tx" -H 'content-type: application/json' -d "{\"tx\":\"$TX\"}"; echo
 KEY=$(cd gateway && node -e "
-import('ethers').then(async ({Wallet})=>{ const {keyMessage,keyFromSignature}=await import('./auth.mjs'); const w=new Wallet('$K1'); const sig=await w.signMessage(keyMessage(4663,0)); console.log(keyFromSignature(sig,0)); });")
+import('ethers').then(async ({Wallet})=>{ const w=new Wallet('$K1'); const post=(p,b)=>fetch('$GW'+p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then((r)=>r.json()); const c=await post('/v1/auth/challenge',{wallet:w.address}); const k=await post('/v1/auth/key',{nonce:c.nonce,signature:await w.signMessage(c.message)}); console.log(k.key); });")
 echo "key ${KEY:0:24}..."
 echo "GET /v1/key:"; curl -s -H "Authorization: Bearer $KEY" "$GW/v1/key"; echo
-echo "GET /v1/key with a bad key:"; curl -s -H "Authorization: Bearer sk-brownie-0-AAAA" "$GW/v1/key"; echo
+echo "GET /v1/key with a bad key:"; curl -s -H "Authorization: Bearer sk-brownie-k1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" "$GW/v1/key"; echo
 echo "GET /v1/models (first 160 chars):"; curl -s "$GW/v1/models" | head -c 160 || true; echo
 if [ -n "$UPSTREAM_KEY" ]; then
   echo "REAL chat through the gateway (upstream OpenRouter):"

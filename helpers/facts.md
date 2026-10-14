@@ -16,9 +16,12 @@ the contracts.
 
 - BROWNIE is a coin on Ethereum (chain id 1), launched through Programmable. Every buy and every sell pays a 2% tax.
   That tax is the only money in the system.
-- 35% of the tax pays for AI for the people who stake BROWNIE. They receive it as SUGAR. One SUGAR pays for one
+- 45% of the tax feeds the brownies: the AI helpers that work for the coin (their AI, their videos, their servers).
+  The agents are the product, so they get the biggest share. The team chose this on 2026-10-14: more for the
+  brownies means more agents and more growth.
+- 20% of the tax pays for AI for the people who stake BROWNIE. They receive it as SUGAR. One SUGAR pays for one
   dollar of AI on the Brownies gateway.
-- 30% of the tax feeds the brownies: the AI helpers that work for the coin. The agents are the product, so they get the bigger share.
+- 35% goes to the team, for servers and growth.
 - The gateway speaks the OpenAI API and serves every model on OpenRouter plus Ambient's models, paid per request
   (ids starting with ambient/). A wallet is the account, and a signature from it is the API key.
 
@@ -26,11 +29,12 @@ the contracts.
 
 - Fixed supply of 1,000,000,000 BROWNIE. It trades on a Uniswap pool against ETH from the first block, no bonding
   curve. The whole supply went into that pool at launch through Programmable's factory.
-- Tax: 2% on buys and 2% on sells, set at launch, nobody can change it. Programmable charges its own 0.30% on every
+- Tax: 2% on buys and 2% on sells. In the first 13 blocks after launch it is 25%, to keep the snipers away. The coin's
+  hook lets the team move the tax inside a fixed range, and it can never go above 3%. Programmable charges its own 0.30% on every
   trade on top.
-- Where the tax goes, fixed in the Harvester contract: 35% to stakers (swapped to USDC, paid as SUGAR over the next
-  hour), 35% to the protocol (ETH to the Brownies wallet, for servers and growth), 30% to the brownies (swapped to
-  USDC, minted as SUGAR into the team vault).
+- Where the tax goes, fixed in the Harvester contract: 45% to the brownies (swapped to USDC, minted as SUGAR into the
+  team vault), 35% to the team (ETH to the Brownies wallet, for servers and growth), 20% to stakers (swapped to USDC,
+  paid as SUGAR over the next hour).
 - The shares are fixed in the contract and cannot be changed by anyone.
 
 ## Staking
@@ -58,9 +62,11 @@ the contracts.
 ## The gateway and the key
 
 - Address: https://api.feedthebrownies.com. Any OpenAI SDK works with base URL <gateway>/v1 and the Brownies key.
-- The key: the wallet signs "Brownies API key, chain 1, epoch 0". The key is sk-brownie-0-<signature in base64url>.
-  Signing is free, no transaction. The app does it with "Show my key". Rotating raises the epoch by one; every
-  older key stops working, the balance stays.
+- The key: you sign in with your wallet and the gateway hands you a key. Signing is free, no transaction. The app
+  does it with "Get my key". The sign-in message names the site it is good on, works once and runs out in five
+  minutes: sign it only on our site. A key lasts 30 days, then you sign in again. Replacing ends every key of the
+  wallet at once; the balance stays.
+- After activating, the dollars show on the key about a minute later: the gateway waits for a few blocks first.
 - Routes: GET /v1/models (every model and its price, no key), POST /v1/chat/completions (streaming works),
   GET /v1/key (balance, spent, epoch), POST /v1/key/rotate, GET /api/protocol/account/{wallet},
   GET /api/protocol/stats. Every request needs max_tokens; without it the gateway assumes 1024.
@@ -81,7 +87,7 @@ the contracts.
 - Crumb looks after the community: answers people on Telegram.
 - Nib does research: watches the market and the competition, writes one note a day.
 - Chip builds: changes code in the public repository, github.com/brownieshelper-glitch/brownies.
-- Budget: the 30% of the tax arrives in the team vault as SUGAR. Once a day the vault releases one thirtieth of
+- Budget: the 45% of the tax arrives in the team vault as SUGAR. Once a day the vault releases one thirtieth of
   what it holds, split among the brownies by weight. Steady trading gives a steady budget; a quiet market shrinks it
   slowly, never to zero overnight. Anyone can raise it by sending SUGAR to the vault.
 - Tips: anyone can tip a brownie in SUGAR. A tip goes straight onto that brownie's key and is counted on the chain.

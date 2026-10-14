@@ -8,16 +8,16 @@ import { makeWorld } from "./mock.mjs";
 import { Scheduler } from "../lib/scheduler.mjs";
 import { Admin, adminMessage } from "../lib/admin.mjs";
 
-function room({ wallets = [] } = {}) {
+function room({ wallets = [], pin = null } = {}) {
   const W = makeWorld({ reply: () => "A plain sentence about SUGAR." });
   const ring = ["2026-10-06T00:00:00.000Z [helpers] running"];
   const scheduler = new Scheduler({ clock: W.clock, tz: "UTC", flags: W.store, log: (l) => ring.push(String(l)) });
   const helpers = { fudge: W.fudge, crumb: W.crumb, nib: W.nib, chip: W.chip };
   W.chip.hidden = false; W.nib.hidden = true; // pretend Nib is a hidden one for the test
   for (const h of Object.values(helpers)) for (const j of h.jobs()) scheduler.add(j);
-  const world = { S: { mode: "prelaunch", telegram: { groupChatId: "-100" }, siteUrl: "https://site.test" }, store: W.store, clock: W.clock, scheduler, helpers, brain: W.brain, telegram: W.telegram, alerts: W.alerts, gateway: W.gateway, config: { timezone: "UTC", helpers: W.helpersCfg }, hidden: ["nib"], off: [], startedAt: Date.now() };
+  const world = { S: { mode: "prelaunch", telegram: { groupChatId: "-100", ownerChatId: "999" }, siteUrl: "https://site.test" }, store: W.store, clock: W.clock, scheduler, helpers, brain: W.brain, telegram: W.telegram, alerts: W.alerts, gateway: W.gateway, config: { timezone: "UTC", helpers: W.helpersCfg }, hidden: ["nib"], off: [], startedAt: Date.now() };
   let summaries = 0;
-  const admin = new Admin({ W: world, ring, log: (l) => ring.push(String(l)), wallets, origins: ["https://site.test"], sendSummary: async () => { summaries++; } });
+  const admin = new Admin({ W: world, ring, log: (l) => ring.push(String(l)), wallets, pin, origins: ["https://site.test"], sendSummary: async () => { summaries++; } });
   scheduler.isOff = (n) => admin.isPaused(n);
   return { W, admin, scheduler, ring, summaries: () => summaries };
 }
@@ -205,5 +205,78 @@ test("the bill: every helper's AI and video spend against its caps, the balances
     assert.equal((await cmd({ helper: "fudge", action: "videocap", value: 0 })).note, "Fudge has no video cap.");
     const c3 = (await call("GET", "/admin/state", null, token)).body.costs;
     assert.equal(c3.higgsfield, null); assert.equal(c3.helpers[0].videoCapUsd, null); assert.equal(W.store.getMeta("admin:videocap:fudge"), null);
+  } finally { await close(); }
+});
+
+// ---- the fixed code (the owner, 2026-10-13: six digits he always types with the other proof) ----
+test("the fixed code: asked for on top of the Telegram code, a slip does not use the code up, and without a setting nothing changes", async () => {
+  const { admin } = room({ pin: "424242" });
+  const { call, close } = await serve(admin);
+  try {
+    assert.deepEqual((await call("GET", "/admin/info")).body, { pin: true, wallets: 0 });
+    const code = admin.newCode();
+    const none = await call("POST", "/admin/login", { code });
+    assert.equal(none.status, 401); assert.deepEqual(none.body, { error: "the fixed code is needed too", pin: "needed" });
+    const slip = await call("POST", "/admin/login", { code, pin: "424243" });
+    assert.equal(slip.status, 401); assert.deepEqual(slip.body, { error: "wrong fixed code (4 more tries)", pin: "wrong" });
+    const ok = await call("POST", "/admin/login", { code, pin: "424242" });
+    assert.equal(ok.status, 200, "the same code still works after the slip"); assert.match(ok.body.token, /^[0-9a-f]{64}$/);
+    assert.equal((await call("GET", "/admin/state", null, ok.body.token)).status, 200);
+    assert.equal((await call("POST", "/admin/login", { code, pin: "424242" })).status, 401, "and the code works once");
+    // the right fixed code with a wrong Telegram code opens nothing, and says nothing about the fixed code
+    admin.newCode();
+    const guess = await call("POST", "/admin/login", { code: "000000", pin: "424242" });
+    assert.equal(guess.status, 401); assert.deepEqual(guess.body, { error: "wrong or expired code" });
+    assert.equal(JSON.stringify(admin.W.store.getMeta("admin:pin")).includes("424242"), false);
+    assert.ok(!admin.pinHash.includes("424242"), "kept as a hash");
+  } finally { await close(); }
+  const plain = room();
+  const s = await serve(plain.admin);
+  try {
+    assert.deepEqual((await s.call("GET", "/admin/info")).body, { pin: false, wallets: 0 });
+    assert.equal((await s.call("POST", "/admin/login", { code: plain.admin.newCode() })).status, 200, "no fixed code set: the login is as it was");
+  } finally { await s.close(); }
+});
+
+test("the fixed code: a wallet's signature alone opens nothing, five wrong fixed codes next to a right proof lock the login and the owner is told", async () => {
+  const owner = Wallet.createRandom();
+  const { admin, W } = room({ wallets: [owner.address], pin: "135790" });
+  const { call, close } = await serve(admin);
+  const told = () => W.tg.sent.filter((m) => String(m.chat_id) === "999").map((m) => m.text);
+  try {
+    // what a fake page gets from the owner: a nonce's signature. It is not enough.
+    const n = await call("GET", "/admin/nonce");
+    assert.equal(n.body.pin, true);
+    const stolen = { address: owner.address, signature: await owner.signMessage(adminMessage(n.body.nonce)), nonce: n.body.nonce };
+    assert.deepEqual((await call("POST", "/admin/login", stolen)).body, { error: "the fixed code is needed too", pin: "needed" });
+    // a stranger without any proof cannot touch the count
+    for (let i = 0; i < 6; i++) await call("POST", "/admin/login", { address: Wallet.createRandom().address, signature: stolen.signature, nonce: n.body.nonce, pin: "000000" });
+    assert.equal(Number(admin.W.store.getMeta("admin:pin:misses", 0)), 0, "wrong fixed codes without a right proof are not even counted");
+    admin.attempts.clear();
+    // the thief guesses: four slips, the fifth locks
+    for (let i = 1; i <= 4; i++) assert.equal((await call("POST", "/admin/login", { ...stolen, pin: "00000" + i })).body.pin, "wrong");
+    const fifth = await call("POST", "/admin/login", { ...stolen, pin: "000005" });
+    assert.equal(fifth.status, 429); assert.equal(fifth.body.pin, "locked");
+    assert.equal(told().length, 1); assert.match(told()[0], /typed the fixed code wrong five times\. The login is locked for 15 minutes/);
+    // locked: even the owner, with everything right, waits
+    const mine = await call("POST", "/admin/login", { ...stolen, pin: "135790" });
+    assert.equal(mine.status, 429); assert.match(mine.body.error, /wait 15 minutes/);
+    W.clock.advance(15 * 60_000 + 1000);
+    admin.attempts.clear();
+    const n2 = await call("GET", "/admin/nonce");
+    const ok = await call("POST", "/admin/login", { address: owner.address, signature: await owner.signMessage(adminMessage(n2.body.nonce)), nonce: n2.body.nonce, pin: "135790" });
+    assert.equal(ok.status, 200, "a quarter of an hour later the owner is in");
+    assert.equal(told().length, 1, "told once");
+  } finally { await close(); }
+});
+
+test("the fixed code: a setting that is not six digits lets nobody in, and says why", async () => {
+  const { admin, ring } = room({ pin: "12345" });
+  const { call, close } = await serve(admin);
+  try {
+    assert.ok(ring.some((l) => /ADMIN_PIN is set but is not six digits/.test(l)));
+    assert.deepEqual((await call("GET", "/admin/info")).body, { pin: true, wallets: 0 });
+    const r = await call("POST", "/admin/login", { code: admin.newCode(), pin: "12345" });
+    assert.equal(r.status, 503); assert.equal(r.body.pin, "broken");
   } finally { await close(); }
 });

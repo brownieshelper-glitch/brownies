@@ -9,6 +9,10 @@ export const PREFIX = "ambient/";
 const ALIASES = new Set(["ambient/large", "ambient/mini"]);
 const MAX_OUTPUT = 32_000;
 
+/// The address JumpGate asks to be paid at on Base, as its 402 named it on 2026-10-07. The pantry pays this address and
+/// no other unless the owner names others in X402_PAY_TO.
+export const AMBIENT_PAY_TO = "0x6992c688c56BE442EfE1E1cE7D5c95212ED7d59B";
+
 export class Ambient {
   constructor({ payer, fetch = globalThis.fetch, baseUrl = JUMPGATE, catalogueUrl = CATALOGUE, now = () => Date.now(), log = () => {} }) {
     this.payer = payer; this.fetch = fetch; this.baseUrl = baseUrl.replace(/\/$/, ""); this.catalogueUrl = catalogueUrl;
@@ -55,8 +59,11 @@ export class Ambient {
     const r = await this.fetch(`${this.baseUrl}/paid/chat/v2/quote`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(upstreamBody), signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw new Error(`Ambient quote ${r.status}: ${(await r.text()).slice(0, 200)}`);
     const j = await r.json();
-    const micro = Number(j.amount_micro_usdc) || 0;
-    return { headers: j.headers || {}, micro, maxMicro: Number(j.max_amount_micro_usdc) || micro, inputTokens: Number(j.input_tokens) || 0, outputTokens: Number(j.output_tokens) || 0, tier: j.model_tier || null };
+    // a quote states its amounts as whole micro-dollars from zero up, the bound not under the amount; anything else is
+    // not a quote (a negative amount would become a negative hold, which reads as balance)
+    const micro = Number(j.amount_micro_usdc), max = j.max_amount_micro_usdc == null ? micro : Number(j.max_amount_micro_usdc);
+    if (!Number.isFinite(micro) || micro < 0 || !Number.isFinite(max) || max < micro) throw new Error(`Ambient quote: no usable amounts (${j.amount_micro_usdc}, ${j.max_amount_micro_usdc})`);
+    return { headers: j.headers || {}, micro: Math.ceil(micro), maxMicro: Math.ceil(max), inputTokens: Number(j.input_tokens) || 0, outputTokens: Number(j.output_tokens) || 0, tier: j.model_tier || null };
   }
 
   /// The paid request: quote, then the stream through the payer. Returns { response, paid, quote, upstreamModel }.
